@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { InvestorWithPortfolio, InvestorHoldingWithValue } from '../types/Investor';
+import { InvestorWithPortfolio } from '../types/Investor';
 
 interface PortfolioCardProps {
   investor: InvestorWithPortfolio;

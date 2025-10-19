@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Investor, InvestorHolding, InvestorHoldingWithValue } from '../types/Investor';
+import { Investor,  InvestorHoldingWithValue } from '../types/Investor';
 import { Founder } from '../types/Founder';
 import { calculateCurrentPrice } from '../lib/ammEngine';
 

@@ -9,7 +9,8 @@ const HomePage: React.FC = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const { user, isAdmin } = useAuth();
+  // const { user, isAdmin } = useAuth();
+  const { isAdmin } = useAuth();
   
   // Fetch events
   useEffect(() => {

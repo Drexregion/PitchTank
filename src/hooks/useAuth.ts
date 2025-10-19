@@ -50,7 +50,12 @@ export function useAuth(): AuthHookReturn {
       
       if (currentSession?.user) {
         // await fetchUserRoles(currentSession.user);
-        setUser(currentSession?.user);
+        setUser({
+        id: currentSession.user.id,
+        email: currentSession.user.email,
+        // Set empty roles or basic information that doesn't require DB queries
+        roles: [] // Can be populated on-demand when needed
+      });
       } else {
         setUser(null);
       }

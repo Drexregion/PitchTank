@@ -7,7 +7,6 @@ import { FounderStockCard } from './FounderStockCard';
 import { supabase } from '../lib/supabaseClient';
 import { Event } from '../types/Event';
 import { Investor, InvestorWithPortfolio } from '../types/Investor';
-import { calculateCurrentPrice, calculateMarketCap } from '../lib/ammEngine';
 
 interface DashboardProps {
   eventId: string;
@@ -29,7 +28,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
     founders, 
     isLoading: foundersLoading, 
     error: foundersError,
-    setFounders
   } = useRealtimePrices({ eventId });
   console.log("founders");
   console.log(founders)
@@ -42,8 +40,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
     portfolioValue,
     totalValue,
     roiPercent,
-    isLoading: portfolioLoading,
-    error: portfolioError
   } = usePortfolio({ investorId });
   
   // Load event details

@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Investor } from '../types/Investor';
-import { Founder } from '../types/Founder';
 import { calculateCurrentPrice, calculateMarketCap } from '../lib/ammEngine';
 
 interface LeaderboardProps {

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Link, Navigate, useSearchParams } from 'react-router-dom';
+import React, { useState} from 'react';
+import { Link, Navigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabaseClient';
+// import { Investor } from '../types/Investor';
 
 const SignupPage: React.FC = () => {
   const [name, setName] = useState('');
@@ -12,8 +13,8 @@ const SignupPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [searchParams] = useSearchParams();
-  const [investorId, setInvestorId] = useState<string | null>(null);  
+  // const [searchParams] = useSearchParams();
+  // const [investorId, setInvestorId] = useState<string | null>(null);  
   const { signUp, user } = useAuth();
   // const eventId = searchParams.get('event');
   const eventId = "4df0c0f1-307f-42fb-b319-a99de3b26aeb";
@@ -71,11 +72,12 @@ const SignupPage: React.FC = () => {
               user_id: newUser.id,
               initial_balance: 1000000,
               current_balance: 1000000
-            });
+            }).select().single();
           console.log("investor created: ", investor);
           console.log("investor id: ", investor?.id);
-          setInvestorId(investor?.id);
-          setEventId(eventId);
+          // Option 2: Just use type assertion
+          // setInvestorId((investor as any)?.id);
+          // setEventId(eventId);
             
           if (investorError) {
             console.error('Failed to create investor record:', investorError);
