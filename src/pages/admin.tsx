@@ -3,26 +3,29 @@ import { Link, Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { Navbar } from '../components/Navbar';
 import { EventSetupForm } from '../components/EventSetupForm';
+import { FounderInvitationManager } from '../components/FounderInvitationManager';
+import { DatabaseTest } from '../components/DatabaseTest';
 import { useAuth } from '../hooks/useAuth';
 import { Event } from '../types/Event';
 
 const AdminPage: React.FC = () => {
   const [events, setEvents] = useState<Event[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoadingEvents, setIsLoadingEvents] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<'list' | 'new'>('list');
-  const { user, isAdmin } = useAuth();
+  const [activeView, setActiveView] = useState<'list' | 'new' | 'invitations'>('list');
+  const { user, isAdmin, isLoading } = useAuth();
   
   // Fetch events managed by this admin
   useEffect(() => {
     if (!user || !isAdmin) {
-      setIsLoading(false);
+      setIsLoadingEvents(false);
       return;
     }
     
     const fetchEvents = async () => {
       try {
-        setIsLoading(true);
+        console.log('Fetching events...');
+        setIsLoadingEvents(true);
         setError(null);
         
         // Query events
@@ -31,13 +34,21 @@ const AdminPage: React.FC = () => {
           .select('*')
           .order('created_at', { ascending: false });
         
-        if (fetchError) throw fetchError;
+        console.log('Events query result:', { data, error: fetchError });
         
+        if (fetchError) {
+          console.error('Events fetch error:', fetchError);
+          throw fetchError;
+        }
+        
+        console.log('Events loaded successfully:', data);
         setEvents(data || []);
       } catch (err: any) {
+        console.error('Events fetch exception:', err);
         setError(err.message || 'Failed to fetch events');
       } finally {
-        setIsLoading(false);
+        console.log('Events fetch complete');
+        setIsLoadingEvents(false);
       }
     };
     
@@ -54,12 +65,31 @@ const AdminPage: React.FC = () => {
         fetchEvents();
       })
       .subscribe();
-      
+    
+    // Add timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      console.log('Events fetch timeout reached');
+      setIsLoadingEvents(false);
+    }, 10000); // 10 second timeout
+    
     return () => {
+      clearTimeout(timeout);
       supabase.removeChannel(eventsSubscription);
     };
   }, [user, isAdmin]);
   
+  // Show loading while auth is being checked
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Checking admin access...</p>
+        </div>
+      </div>
+    );
+  }
+
   // If not admin, redirect to home
   if (!isAdmin) {
     return <Navigate to="/" replace />;
@@ -101,15 +131,24 @@ const AdminPage: React.FC = () => {
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-          <div>
-            {activeView === 'list' ? (
+          <div className="flex space-x-4">
+            {activeView === 'list' && (
               <button
                 onClick={() => setActiveView('new')}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
               >
                 Create New Event
               </button>
-            ) : (
+            )}
+            {activeView === 'new' && (
+              <button
+                onClick={() => setActiveView('list')}
+                className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg"
+              >
+                Back to Events
+              </button>
+            )}
+            {activeView === 'invitations' && (
               <button
                 onClick={() => setActiveView('list')}
                 className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg"
@@ -119,12 +158,55 @@ const AdminPage: React.FC = () => {
             )}
           </div>
         </div>
+
+        {/* Navigation Tabs */}
+        <div className="mb-6">
+          <nav className="flex space-x-8">
+            <button
+              onClick={() => setActiveView('list')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeView === 'list'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Events
+            </button>
+            <button
+              onClick={() => setActiveView('invitations')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeView === 'invitations'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Founder Invitations
+            </button>
+          </nav>
+        </div>
         
+        {/* Tab Content */}
         {activeView === 'new' ? (
           <EventSetupForm onEventCreated={handleEventCreated} />
+                ) : activeView === 'invitations' ? (
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                      <h2 className="text-xl font-semibold">Send Founder Invitations</h2>
+                    </div>
+                    
+                    {/* Database Test Component - Remove this after debugging */}
+                    <DatabaseTest />
+                    
+                    <FounderInvitationManager
+                      events={events}
+                      onInvitationsSent={() => {
+                        // Could add refresh logic here if needed
+                      }}
+                    />
+                  </div>
         ) : (
           <>
-            {isLoading ? (
+            {isLoadingEvents ? (
               <div className="flex justify-center py-12">
                 <div className="text-lg text-gray-600">Loading events...</div>
               </div>
