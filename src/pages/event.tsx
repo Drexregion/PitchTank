@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { TradeModal } from "../components/TradeModal";
 import { Leaderboard } from "../components/Leaderboard";
 import { QRShareModal } from "../components/QRShareModal";
+import { FounderPriceChart } from "../components/FounderPriceChart";
 import { useAuth } from "../hooks/useAuth";
 import { usePortfolio } from "../hooks/usePortfolio";
 import { Event } from "../types/Event";
@@ -26,12 +27,37 @@ const EventPage: React.FC = () => {
 	const [investorId, setInvestorId] = useState<string | null>(null);
 	const [sortBy, setSortBy] = useState<"price" | "alphabetical">("price");
 	const [showSortOptions, setShowSortOptions] = useState(false);
+	const [expandedFounderId, setExpandedFounderId] = useState<string | null>(
+		null
+	);
+	const [showPortfolioDropdown, setShowPortfolioDropdown] = useState(false);
+	const portfolioDropdownRef = useRef<HTMLDivElement>(null);
 	const { user } = useAuth();
 
 	// Get investor portfolio if logged in
 	const { investor, holdings, totalValue, roiPercent } = usePortfolio({
 		investorId: investorId || undefined,
 	});
+
+	// Close portfolio dropdown when clicking outside
+	useEffect(() => {
+		const handleClickOutside = (event: MouseEvent) => {
+			if (
+				portfolioDropdownRef.current &&
+				!portfolioDropdownRef.current.contains(event.target as Node)
+			) {
+				setShowPortfolioDropdown(false);
+			}
+		};
+
+		if (showPortfolioDropdown) {
+			document.addEventListener("mousedown", handleClickOutside);
+		}
+
+		return () => {
+			document.removeEventListener("mousedown", handleClickOutside);
+		};
+	}, [showPortfolioDropdown]);
 
 	useEffect(() => {
 		const fetchEventDetails = async () => {
@@ -321,7 +347,7 @@ const EventPage: React.FC = () => {
 					</div>
 				)}
 
-				<div className="px-1 py-6 max-w-7xl mx-auto">
+				<div className="px-4 md:px-8 py-6 max-w-[1600px] mx-auto">
 					{isLoading ? (
 						<div className="flex justify-center py-12">
 							<div className="text-lg text-white">Loading event details...</div>
@@ -341,9 +367,18 @@ const EventPage: React.FC = () => {
 								<>
 									{/* Compact Portfolio Display - Mobile */}
 									{user && investor && (
-										<div className="mb-4 md:mb-6">
+										<div
+											className="mb-4 md:mb-6 relative"
+											ref={portfolioDropdownRef}
+										>
 											{/* Mobile: Compact horizontal layout */}
-											<div className="card-dark border border-accent-cyan/30 md:hidden">
+											<div
+												className="card-dark border border-accent-cyan/30 md:hidden cursor-pointer hover:bg-dark-800/50 transition-all hover:border-accent-cyan/50 hover:shadow-glow"
+												onClick={() =>
+													setShowPortfolioDropdown(!showPortfolioDropdown)
+												}
+												title="Click to view portfolio holdings"
+											>
 												<div className="flex items-center justify-between gap-2 text-center">
 													<div className="flex-1 border-r border-dark-700">
 														<p className="text-xs text-dark-400 mb-1">Liquid</p>
@@ -372,16 +407,181 @@ const EventPage: React.FC = () => {
 															{roiPercent.toFixed(1)}%
 														</p>
 													</div>
+													<div className="flex-shrink-0 pl-2">
+														<svg
+															className={`w-4 h-4 text-dark-400 transition-transform ${
+																showPortfolioDropdown ? "rotate-180" : ""
+															}`}
+															fill="none"
+															stroke="currentColor"
+															viewBox="0 0 24 24"
+														>
+															<path
+																strokeLinecap="round"
+																strokeLinejoin="round"
+																strokeWidth={2}
+																d="M19 9l-7 7-7-7"
+															/>
+														</svg>
+													</div>
 												</div>
 											</div>
 
 											{/* Desktop: Full layout */}
-											<div className="card-dark border border-accent-cyan/30 shadow-glow hidden md:block">
-												<div className="flex items-center justify-between gap-6">
-													<div className="flex items-center gap-3">
-														<div className="w-12 h-12 bg-gradient-to-br from-accent-cyan to-primary-500 rounded-full flex items-center justify-center">
+											<div
+												className="card-dark border border-accent-cyan/30 shadow-glow hidden md:block overflow-hidden cursor-pointer hover:bg-dark-800/30 transition-all hover:border-accent-cyan/50 hover:shadow-xl relative group"
+												onClick={() =>
+													setShowPortfolioDropdown(!showPortfolioDropdown)
+												}
+												title="Click to view portfolio holdings"
+											>
+												{/* Click hint that appears on hover */}
+												<div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+													<div className="bg-accent-cyan/90 text-dark-950 text-xs font-medium px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5">
+														<svg
+															className={`w-3.5 h-3.5 transition-transform ${
+																showPortfolioDropdown ? "rotate-180" : ""
+															}`}
+															fill="none"
+															stroke="currentColor"
+															viewBox="0 0 24 24"
+														>
+															<path
+																strokeLinecap="round"
+																strokeLinejoin="round"
+																strokeWidth={2}
+																d="M19 9l-7 7-7-7"
+															/>
+														</svg>
+														{showPortfolioDropdown ? "Hide" : "View"} Holdings
+													</div>
+												</div>
+												<div className="grid grid-cols-3 divide-x divide-dark-700">
+													{/* Liquid Capital */}
+													<div className="p-6 bg-gradient-to-br from-accent-cyan/5 to-transparent">
+														<div className="flex items-start gap-4">
+															<div className="w-14 h-14 bg-gradient-to-br from-accent-cyan to-primary-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
+																<svg
+																	className="w-7 h-7 text-white"
+																	fill="none"
+																	stroke="currentColor"
+																	viewBox="0 0 24 24"
+																>
+																	<path
+																		strokeLinecap="round"
+																		strokeLinejoin="round"
+																		strokeWidth={2}
+																		d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+																	/>
+																</svg>
+															</div>
+															<div className="flex-1 min-w-0">
+																<p className="text-xs font-medium text-dark-400 uppercase tracking-wide mb-2">
+																	Liquid Capital
+																</p>
+																<p className="text-3xl font-bold text-accent-cyan truncate">
+																	{formatCurrency(investor.current_balance)}
+																</p>
+															</div>
+														</div>
+													</div>
+
+													{/* Net Worth */}
+													<div className="p-6 bg-gradient-to-br from-primary-500/5 to-transparent">
+														<div className="flex items-start gap-4">
+															<div className="w-14 h-14 bg-gradient-to-br from-primary-600 to-primary-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
+																<svg
+																	className="w-7 h-7 text-white"
+																	fill="none"
+																	stroke="currentColor"
+																	viewBox="0 0 24 24"
+																>
+																	<path
+																		strokeLinecap="round"
+																		strokeLinejoin="round"
+																		strokeWidth={2}
+																		d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+																	/>
+																</svg>
+															</div>
+															<div className="flex-1 min-w-0">
+																<p className="text-xs font-medium text-dark-400 uppercase tracking-wide mb-2">
+																	Net Worth
+																</p>
+																<p className="text-3xl font-bold text-white truncate">
+																	{formatCurrency(totalValue)}
+																</p>
+															</div>
+														</div>
+													</div>
+
+													{/* ROI */}
+													<div
+														className={`p-6 bg-gradient-to-br ${
+															roiPercent >= 0
+																? "from-green-500/5"
+																: "from-red-500/5"
+														} to-transparent`}
+													>
+														<div className="flex items-start gap-4">
+															<div
+																className={`w-14 h-14 bg-gradient-to-br ${
+																	roiPercent >= 0
+																		? "from-green-600 to-green-500"
+																		: "from-red-600 to-red-500"
+																} rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg`}
+															>
+																<svg
+																	className="w-7 h-7 text-white"
+																	fill="none"
+																	stroke="currentColor"
+																	viewBox="0 0 24 24"
+																>
+																	<path
+																		strokeLinecap="round"
+																		strokeLinejoin="round"
+																		strokeWidth={2}
+																		d={
+																			roiPercent >= 0
+																				? "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+																				: "M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"
+																		}
+																	/>
+																</svg>
+															</div>
+															<div className="flex-1 min-w-0">
+																<p className="text-xs font-medium text-dark-400 uppercase tracking-wide mb-2">
+																	Return on Investment
+																</p>
+																<p
+																	className={`text-3xl font-bold truncate ${
+																		roiPercent >= 0
+																			? "text-green-400"
+																			: "text-red-400"
+																	}`}
+																>
+																	{roiPercent >= 0 ? "+" : ""}
+																	{roiPercent.toFixed(2)}%
+																</p>
+															</div>
+														</div>
+													</div>
+												</div>
+											</div>
+
+											{/* Portfolio Holdings Dropdown */}
+											{showPortfolioDropdown && (
+												<div className="mt-3 card-dark border border-accent-cyan/30 shadow-xl animate-in fade-in slide-in-from-top-2 duration-200">
+													<div className="p-4 border-b border-dark-700 flex items-center justify-between">
+														<h3 className="text-lg font-bold text-white">
+															Your Holdings
+														</h3>
+														<button
+															onClick={() => setShowPortfolioDropdown(false)}
+															className="p-1 hover:bg-dark-800 rounded transition-colors"
+														>
 															<svg
-																className="w-6 h-6 text-white"
+																className="w-5 h-5 text-dark-400"
 																fill="none"
 																stroke="currentColor"
 																viewBox="0 0 24 24"
@@ -390,47 +590,155 @@ const EventPage: React.FC = () => {
 																	strokeLinecap="round"
 																	strokeLinejoin="round"
 																	strokeWidth={2}
-																	d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+																	d="M6 18L18 6M6 6l12 12"
 																/>
 															</svg>
-														</div>
-														<div>
-															<p className="text-sm text-dark-400">
-																Liquid Capital
-															</p>
-															<p className="text-2xl font-bold text-accent-cyan">
-																{formatCurrency(investor.current_balance)}
-															</p>
-														</div>
+														</button>
 													</div>
-													<div className="text-right">
-														<p className="text-sm text-dark-400">Net Worth</p>
-														<p className="text-2xl font-bold text-white">
-															{formatCurrency(totalValue)}
-														</p>
-													</div>
-													<div className="text-right">
-														<p className="text-sm text-dark-400">ROI</p>
-														<p
-															className={`text-2xl font-bold ${
-																roiPercent >= 0
-																	? "text-green-400"
-																	: "text-red-400"
-															}`}
-														>
-															{roiPercent >= 0 ? "+" : ""}
-															{roiPercent.toFixed(2)}%
-														</p>
+													<div className="max-h-96 overflow-y-auto">
+														{holdings.length === 0 ? (
+															<div className="p-8 text-center">
+																<div className="w-16 h-16 bg-dark-800 rounded-full flex items-center justify-center mx-auto mb-3">
+																	<svg
+																		className="w-8 h-8 text-dark-500"
+																		fill="none"
+																		stroke="currentColor"
+																		viewBox="0 0 24 24"
+																	>
+																		<path
+																			strokeLinecap="round"
+																			strokeLinejoin="round"
+																			strokeWidth={2}
+																			d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
+																		/>
+																	</svg>
+																</div>
+																<p className="text-dark-400 text-sm">
+																	No holdings yet. Start trading to build your
+																	portfolio!
+																</p>
+															</div>
+														) : (
+															<div className="divide-y divide-dark-700">
+																{holdings.map((holding) => {
+																	const founder = founders.find(
+																		(f) => f.id === holding.founder_id
+																	);
+																	if (!founder) return null;
+
+																	const currentValue =
+																		holding.shares * founder.current_price;
+																	const totalInvested =
+																		holding.shares * holding.cost_basis;
+																	const profitLoss =
+																		currentValue - totalInvested;
+																	const profitLossPercent =
+																		totalInvested > 0
+																			? (profitLoss / totalInvested) * 100
+																			: 0;
+
+																	return (
+																		<div
+																			key={holding.id}
+																			className="p-4 hover:bg-dark-800/30 transition-colors"
+																		>
+																			<div className="flex items-start justify-between gap-4">
+																				<div className="flex-1 min-w-0">
+																					<div className="flex items-center gap-2 mb-2">
+																						<div className="w-8 h-8 bg-gradient-to-br from-accent-cyan/20 to-primary-500/20 rounded-lg flex items-center justify-center border border-accent-cyan/30 flex-shrink-0">
+																							<span className="text-sm font-bold text-accent-cyan">
+																								{founder.name.charAt(0)}
+																							</span>
+																						</div>
+																						<h4 className="font-semibold text-white truncate">
+																							{founder.name}
+																						</h4>
+																					</div>
+																					<div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+																						<div>
+																							<span className="text-dark-400">
+																								Shares:
+																							</span>
+																							<span className="text-white font-medium ml-1">
+																								{holding.shares.toLocaleString()}
+																							</span>
+																						</div>
+																						<div>
+																							<span className="text-dark-400">
+																								Avg Price:
+																							</span>
+																							<span className="text-white font-medium ml-1">
+																								${holding.cost_basis.toFixed(2)}
+																							</span>
+																						</div>
+																						<div>
+																							<span className="text-dark-400">
+																								Current:
+																							</span>
+																							<span className="text-white font-medium ml-1">
+																								$
+																								{founder.current_price.toFixed(
+																									2
+																								)}
+																							</span>
+																						</div>
+																						<div>
+																							<span className="text-dark-400">
+																								Value:
+																							</span>
+																							<span className="text-accent-cyan font-medium ml-1">
+																								{formatCurrency(currentValue)}
+																							</span>
+																						</div>
+																					</div>
+																				</div>
+																				<div className="text-right flex-shrink-0">
+																					<div
+																						className={`text-sm font-bold ${
+																							profitLoss >= 0
+																								? "text-green-400"
+																								: "text-red-400"
+																						}`}
+																					>
+																						{profitLoss >= 0 ? "+" : ""}
+																						{formatCurrency(profitLoss)}
+																					</div>
+																					<div
+																						className={`text-xs font-medium ${
+																							profitLoss >= 0
+																								? "text-green-400"
+																								: "text-red-400"
+																						}`}
+																					>
+																						{profitLoss >= 0 ? "+" : ""}
+																						{profitLossPercent.toFixed(1)}%
+																					</div>
+																				</div>
+																			</div>
+																		</div>
+																	);
+																})}
+															</div>
+														)}
 													</div>
 												</div>
-											</div>
+											)}
 										</div>
 									)}
 
 									{/* Sort/Filter Options */}
-									<div className="mb-4 flex justify-end gap-2">
+									<div className="mb-6 flex justify-between items-center">
+										<div className="hidden md:block">
+											<h2 className="text-2xl font-bold text-white">
+												Trading Market
+											</h2>
+											<p className="text-sm text-dark-400 mt-1">
+												Buy and sell founder shares in real-time
+											</p>
+										</div>
+
 										{/* Mobile: Dropdown button */}
-										<div className="relative md:hidden">
+										<div className="relative md:hidden ml-auto">
 											<button
 												onClick={() => setShowSortOptions(!showSortOptions)}
 												className="px-4 py-2 bg-dark-800 border border-dark-700 text-white rounded-lg text-sm font-medium transition-all flex items-center gap-2"
@@ -485,32 +793,65 @@ const EventPage: React.FC = () => {
 										</div>
 
 										{/* Desktop: Full buttons */}
-										<div className="hidden md:flex gap-2">
+										<div className="hidden md:flex items-center gap-3">
+											<span className="text-sm text-dark-400 mr-2">
+												Sort by:
+											</span>
 											<button
 												onClick={() => setSortBy("price")}
-												className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+												className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
 													sortBy === "price"
-														? "bg-primary-600 text-white shadow-glow-sm"
-														: "bg-dark-800 text-dark-400 hover:text-white border border-dark-700"
+														? "bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-lg shadow-primary-500/30"
+														: "bg-dark-800 text-dark-300 hover:text-white hover:bg-dark-700 border border-dark-700"
 												}`}
 											>
-												Highest Price
+												<div className="flex items-center gap-2">
+													<svg
+														className="w-4 h-4"
+														fill="none"
+														stroke="currentColor"
+														viewBox="0 0 24 24"
+													>
+														<path
+															strokeLinecap="round"
+															strokeLinejoin="round"
+															strokeWidth={2}
+															d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+														/>
+													</svg>
+													Highest Price
+												</div>
 											</button>
 											<button
 												onClick={() => setSortBy("alphabetical")}
-												className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+												className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
 													sortBy === "alphabetical"
-														? "bg-primary-600 text-white shadow-glow-sm"
-														: "bg-dark-800 text-dark-400 hover:text-white border border-dark-700"
+														? "bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-lg shadow-primary-500/30"
+														: "bg-dark-800 text-dark-300 hover:text-white hover:bg-dark-700 border border-dark-700"
 												}`}
 											>
-												A-Z
+												<div className="flex items-center gap-2">
+													<svg
+														className="w-4 h-4"
+														fill="none"
+														stroke="currentColor"
+														viewBox="0 0 24 24"
+													>
+														<path
+															strokeLinecap="round"
+															strokeLinejoin="round"
+															strokeWidth={2}
+															d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"
+														/>
+													</svg>
+													A-Z
+												</div>
 											</button>
 										</div>
 									</div>
 
 									{/* Founders Trading Table - Mobile & Desktop */}
-									<div className="card-dark overflow-hidden shadow-glow border border-primary-500/20">
+									<div className="card-dark overflow-hidden shadow-glow border border-primary-500/20 md:border-2 md:rounded-2xl">
 										{sortedFounders.length === 0 ? (
 											<div className="p-8 text-center">
 												<p className="text-dark-400">
@@ -526,12 +867,40 @@ const EventPage: React.FC = () => {
 															{sortedFounders.map((founder, index) => (
 																<React.Fragment key={founder.id}>
 																	{/* Founder Name Row - Full Width */}
-																	<tr className="bg-dark-800/30">
+																	<tr
+																		className="bg-dark-800/30 cursor-pointer hover:bg-dark-800/50 transition-colors"
+																		onClick={() =>
+																			setExpandedFounderId(
+																				expandedFounderId === founder.id
+																					? null
+																					: founder.id
+																			)
+																		}
+																	>
 																		<td colSpan={4} className="py-2 px-4">
 																			<div className="flex items-center justify-between">
-																				<h3 className="text-base font-bold text-white">
-																					{founder.name}
-																				</h3>
+																				<div className="flex items-center gap-2">
+																					<svg
+																						className={`w-4 h-4 text-dark-400 transition-transform ${
+																							expandedFounderId === founder.id
+																								? "rotate-180"
+																								: ""
+																						}`}
+																						fill="none"
+																						stroke="currentColor"
+																						viewBox="0 0 24 24"
+																					>
+																						<path
+																							strokeLinecap="round"
+																							strokeLinejoin="round"
+																							strokeWidth={2}
+																							d="M19 9l-7 7-7-7"
+																						/>
+																					</svg>
+																					<h3 className="text-base font-bold text-white">
+																						{founder.name}
+																					</h3>
+																				</div>
 																				<span className="text-xs text-dark-400">
 																					Cap:{" "}
 																					{formatCurrency(founder.market_cap)}
@@ -609,6 +978,24 @@ const EventPage: React.FC = () => {
 																			</div>
 																		</td>
 																	</tr>
+																	{/* Price Chart Row - Expandable */}
+																	{expandedFounderId === founder.id && (
+																		<tr>
+																			<td
+																				colSpan={4}
+																				className="py-4 px-4 bg-dark-800/20"
+																			>
+																				<div className="text-xs text-dark-400 mb-2 font-medium">
+																					Price History
+																				</div>
+																				<FounderPriceChart
+																					founderId={founder.id}
+																					height={200}
+																					maxPoints={50}
+																				/>
+																			</td>
+																		</tr>
+																	)}
 																</React.Fragment>
 															))}
 														</tbody>
@@ -619,100 +1006,209 @@ const EventPage: React.FC = () => {
 												<div className="hidden md:block overflow-x-auto">
 													<table className="w-full">
 														<thead>
-															<tr className="border-b border-dark-700 text-left text-sm text-dark-400">
-																<th className="py-3 px-4">Rank</th>
-																<th className="py-3 px-4">Founder</th>
-																<th className="py-3 px-4 text-right">Price</th>
-																<th className="py-3 px-4 text-right">
-																	Market Cap
+															<tr className="bg-dark-800/50 border-b-2 border-primary-500/30">
+																<th className="py-4 px-6 text-left">
+																	<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+																		Rank
+																	</span>
 																</th>
-																<th className="py-3 px-4 text-right">
-																	Shares Owned
+																<th className="py-4 px-6 text-left">
+																	<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+																		Founder
+																	</span>
 																</th>
-																<th className="py-3 px-4 text-right">Value</th>
-																<th className="py-3 px-4 text-center">
-																	Actions
+																<th className="py-4 px-6 text-right">
+																	<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+																		Price
+																	</span>
+																</th>
+																<th className="py-4 px-6 text-right">
+																	<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+																		Market Cap
+																	</span>
+																</th>
+																<th className="py-4 px-6 text-right">
+																	<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+																		Your Shares
+																	</span>
+																</th>
+																<th className="py-4 px-6 text-right">
+																	<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+																		Value
+																	</span>
+																</th>
+																<th className="py-4 px-6 text-center">
+																	<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+																		Actions
+																	</span>
 																</th>
 															</tr>
 														</thead>
-														<tbody className="divide-y divide-dark-700">
+														<tbody className="divide-y divide-dark-700/50">
 															{sortedFounders.map((founder, index) => {
 																const ownedShares = getOwnedShares(founder.id);
 																const ownedValue =
 																	ownedShares * founder.current_price;
 
 																return (
-																	<tr
-																		key={founder.id}
-																		className="hover:bg-dark-800/50 transition-colors"
-																	>
-																		{/* Rank */}
-																		<td className="py-4 px-4">
-																			<div className="w-10 h-10 bg-gradient-to-br from-primary-600 to-accent-cyan rounded-full flex items-center justify-center text-white font-bold">
-																				{index + 1}
-																			</div>
-																		</td>
-																		{/* Founder Name */}
-																		<td className="py-4 px-4">
-																			<h3 className="text-white font-semibold text-lg">
-																				{founder.name}
-																			</h3>
-																		</td>
-																		{/* Price */}
-																		<td className="py-4 px-4 text-right">
-																			<span className="text-xl font-bold text-accent-cyan">
-																				${founder.current_price.toFixed(2)}
-																			</span>
-																		</td>
-																		{/* Market Cap */}
-																		<td className="py-4 px-4 text-right">
-																			<span className="text-white font-medium">
-																				{formatCurrency(founder.market_cap)}
-																			</span>
-																		</td>
-																		{/* Shares Owned */}
-																		<td className="py-4 px-4 text-right">
-																			<span className="text-white font-medium text-lg">
-																				{user
-																					? ownedShares.toLocaleString()
-																					: "-"}
-																			</span>
-																		</td>
-																		{/* Value of Owned Shares */}
-																		<td className="py-4 px-4 text-right">
-																			<span className="text-green-400 font-semibold">
-																				{user && ownedShares > 0
-																					? formatCurrency(ownedValue)
-																					: "-"}
-																			</span>
-																		</td>
-																		{/* Actions */}
-																		<td className="py-4 px-4">
-																			<div className="flex gap-2 justify-center">
-																				<button
-																					onClick={() =>
-																						handleBuyClick(founder)
-																					}
-																					className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-glow-sm"
-																				>
-																					Buy
-																				</button>
-																				<button
-																					onClick={() =>
-																						handleSellClick(founder)
-																					}
-																					disabled={!user || ownedShares === 0}
-																					className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-																						!user || ownedShares === 0
-																							? "bg-dark-700 text-dark-500 cursor-not-allowed"
-																							: "bg-red-600 hover:bg-red-700 text-white shadow-md hover:shadow-glow-sm"
+																	<React.Fragment key={founder.id}>
+																		<tr
+																			className="group hover:bg-gradient-to-r hover:from-dark-800/70 hover:to-dark-800/30 transition-all duration-200 cursor-pointer"
+																			onClick={() =>
+																				setExpandedFounderId(
+																					expandedFounderId === founder.id
+																						? null
+																						: founder.id
+																				)
+																			}
+																		>
+																			{/* Rank */}
+																			<td className="py-5 px-6">
+																				<div className="relative">
+																					<div className="w-12 h-12 bg-gradient-to-br from-primary-600 via-primary-500 to-accent-cyan rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg group-hover:shadow-primary-500/50 transition-shadow">
+																						{index + 1}
+																					</div>
+																					{index < 3 && (
+																						<div className="absolute -top-1 -right-1">
+																							<svg
+																								className="w-5 h-5 text-yellow-400"
+																								fill="currentColor"
+																								viewBox="0 0 20 20"
+																							>
+																								<path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+																							</svg>
+																						</div>
+																					)}
+																				</div>
+																			</td>
+																			{/* Founder Name */}
+																			<td className="py-5 px-6">
+																				<div className="flex items-center gap-3">
+																					<svg
+																						className={`w-5 h-5 text-dark-400 transition-transform flex-shrink-0 ${
+																							expandedFounderId === founder.id
+																								? "rotate-180"
+																								: ""
+																						}`}
+																						fill="none"
+																						stroke="currentColor"
+																						viewBox="0 0 24 24"
+																					>
+																						<path
+																							strokeLinecap="round"
+																							strokeLinejoin="round"
+																							strokeWidth={2}
+																							d="M19 9l-7 7-7-7"
+																						/>
+																					</svg>
+																					<div className="w-10 h-10 bg-gradient-to-br from-accent-cyan/20 to-primary-500/20 rounded-lg flex items-center justify-center border border-accent-cyan/30">
+																						<span className="text-lg font-bold text-accent-cyan">
+																							{founder.name.charAt(0)}
+																						</span>
+																					</div>
+																					<h3 className="text-white font-semibold text-lg group-hover:text-accent-cyan transition-colors">
+																						{founder.name}
+																					</h3>
+																				</div>
+																			</td>
+																			{/* Price */}
+																			<td className="py-5 px-6 text-right">
+																				<div className="inline-flex flex-col items-end">
+																					<span className="text-2xl font-bold text-accent-cyan">
+																						${founder.current_price.toFixed(2)}
+																					</span>
+																					<span className="text-xs text-dark-400">
+																						per share
+																					</span>
+																				</div>
+																			</td>
+																			{/* Market Cap */}
+																			<td className="py-5 px-6 text-right">
+																				<span className="text-white font-medium text-lg">
+																					{formatCurrency(founder.market_cap)}
+																				</span>
+																			</td>
+																			{/* Shares Owned */}
+																			<td className="py-5 px-6 text-right">
+																				<div className="inline-flex flex-col items-end">
+																					<span className="text-xl font-bold text-white">
+																						{user
+																							? ownedShares.toLocaleString()
+																							: "-"}
+																					</span>
+																					{user && ownedShares > 0 && (
+																						<span className="text-xs text-dark-400">
+																							shares
+																						</span>
+																					)}
+																				</div>
+																			</td>
+																			{/* Value of Owned Shares */}
+																			<td className="py-5 px-6 text-right">
+																				<span
+																					className={`text-lg font-bold ${
+																						user && ownedShares > 0
+																							? "text-green-400"
+																							: "text-dark-500"
 																					}`}
 																				>
-																					Sell
-																				</button>
-																			</div>
-																		</td>
-																	</tr>
+																					{user && ownedShares > 0
+																						? formatCurrency(ownedValue)
+																						: "-"}
+																				</span>
+																			</td>
+																			{/* Actions */}
+																			<td className="py-5 px-6">
+																				<div className="flex gap-3 justify-center">
+																					<button
+																						onClick={(e) => {
+																							e.stopPropagation();
+																							handleBuyClick(founder);
+																						}}
+																						className="px-6 py-2.5 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white rounded-lg text-sm font-semibold transition-all shadow-lg hover:shadow-green-500/50 hover:scale-105 active:scale-95"
+																					>
+																						Buy
+																					</button>
+																					<button
+																						onClick={(e) => {
+																							e.stopPropagation();
+																							handleSellClick(founder);
+																						}}
+																						disabled={
+																							!user || ownedShares === 0
+																						}
+																						className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-lg ${
+																							!user || ownedShares === 0
+																								? "bg-dark-700 text-dark-500 cursor-not-allowed opacity-50"
+																								: "bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-white hover:shadow-red-500/50 hover:scale-105 active:scale-95"
+																						}`}
+																					>
+																						Sell
+																					</button>
+																				</div>
+																			</td>
+																		</tr>
+																		{/* Price Chart Row - Expandable */}
+																		{expandedFounderId === founder.id && (
+																			<tr>
+																				<td
+																					colSpan={7}
+																					className="py-6 px-6 bg-dark-800/30"
+																				>
+																					<div className="max-w-4xl mx-auto">
+																						<div className="text-sm text-dark-400 mb-3 font-medium">
+																							Price History - {founder.name}
+																						</div>
+																						<FounderPriceChart
+																							founderId={founder.id}
+																							height={300}
+																							maxPoints={100}
+																						/>
+																					</div>
+																				</td>
+																			</tr>
+																		)}
+																	</React.Fragment>
 																);
 															})}
 														</tbody>
@@ -724,8 +1220,18 @@ const EventPage: React.FC = () => {
 								</>
 							) : (
 								/* Leaderboard Tab */
-								<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-									<Leaderboard eventId={eventId || ""} />
+								<div className="space-y-6">
+									<div className="hidden md:block">
+										<h2 className="text-2xl font-bold text-white">
+											Event Leaderboard
+										</h2>
+										<p className="text-sm text-dark-400 mt-1">
+											Top performers ranked by portfolio value
+										</p>
+									</div>
+									<div className="w-full max-w-4xl mx-auto">
+										<Leaderboard eventId={eventId || ""} className="w-full" />
+									</div>
 								</div>
 							)}
 						</>
@@ -871,17 +1377,6 @@ const EventPage: React.FC = () => {
 									</svg>
 									Share Event
 								</button>
-								{user && (
-									<button
-										onClick={() => {
-											setShowEventInfoModal(false);
-											navigate(`/dashboard/${eventId}`);
-										}}
-										className="flex-1 px-4 py-3 bg-dark-700 hover:bg-dark-600 border border-primary-500/30 text-white rounded-lg font-medium transition-all"
-									>
-										View Dashboard
-									</button>
-								)}
 							</div>
 						</div>
 					</div>
