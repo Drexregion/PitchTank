@@ -43,7 +43,7 @@ export const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
 							Events
 						</Link>
 
-						{user && (
+						{/* {user && (
 							<Link
 								to="/dashboard"
 								className={`px-3 py-2 rounded-md text-sm font-medium ${
@@ -54,7 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
 							>
 								Dashboard
 							</Link>
-						)}
+						)} */}
 
 						{isAdmin && (
 							<Link
@@ -184,7 +184,7 @@ export const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
 							Events
 						</Link>
 
-						{user && (
+						{/* {user && (
 							<Link
 								to="/dashboard"
 								className={`block px-3 py-2 rounded-md text-base font-medium ${
@@ -196,7 +196,7 @@ export const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
 							>
 								Dashboard
 							</Link>
-						)}
+						)} */}
 
 						{isAdmin && (
 							<Link
