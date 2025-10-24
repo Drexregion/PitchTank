@@ -347,7 +347,7 @@ const EventPage: React.FC = () => {
 					</div>
 				)}
 
-				<div className="px-4 md:px-8 py-6 max-w-[1600px] mx-auto">
+				<div className=" md:px-8 py-5  max-w-[1600px] mx-auto">
 					{isLoading ? (
 						<div className="flex justify-center py-12">
 							<div className="text-lg text-white">Loading event details...</div>
@@ -373,7 +373,7 @@ const EventPage: React.FC = () => {
 										>
 											{/* Mobile: Compact horizontal layout */}
 											<div
-												className="card-dark border border-accent-cyan/30 md:hidden cursor-pointer hover:bg-dark-800/50 transition-all hover:border-accent-cyan/50 hover:shadow-glow"
+												className="card-dark  border border-accent-cyan/30 md:hidden cursor-pointer hover:bg-dark-800/50 transition-all hover:border-accent-cyan/50 hover:shadow-glow"
 												onClick={() =>
 													setShowPortfolioDropdown(!showPortfolioDropdown)
 												}
@@ -851,7 +851,7 @@ const EventPage: React.FC = () => {
 									</div>
 
 									{/* Founders Trading Table - Mobile & Desktop */}
-									<div className="card-dark overflow-hidden shadow-glow border border-primary-500/20 md:border-2 md:rounded-2xl">
+									<div className="card-dark mx-1 overflow-hidden shadow-glow border border-primary-500/20 md:border-2 md:rounded-2xl">
 										{sortedFounders.length === 0 ? (
 											<div className="p-8 text-center">
 												<p className="text-dark-400">
