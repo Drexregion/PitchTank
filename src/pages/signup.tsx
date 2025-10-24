@@ -61,7 +61,7 @@ const SignupPage: React.FC = () => {
 			if (eventId && newUser?.id) {
 				try {
 					// Create investor record for this event
-					const { data: investor, error: investorError } = await supabase
+					const { error: investorError } = await supabase
 						.from("investors")
 						.insert({
 							event_id: eventId,
