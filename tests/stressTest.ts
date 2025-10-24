@@ -44,6 +44,8 @@ function createInitialFounder(): FounderState {
 		id: "test-founder-1",
 		name: "Test Founder",
 		event_id: "test-event-1",
+		bio: "Test bio for stress testing",
+		logo_url: null,
 		pitch_summary: "Test pitch",
 		shares_in_pool: INITIAL_SHARES_IN_POOL,
 		cash_in_pool: INITIAL_CASH_IN_POOL,
@@ -429,9 +431,6 @@ async function runStressTest(): Promise<void> {
 }
 
 // Run the stress test
-if (require.main === module) {
-	runStressTest().catch(console.error);
-}
+runStressTest().catch(console.error);
 
 export { runStressTest };
-
