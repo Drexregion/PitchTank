@@ -26,6 +26,6 @@ export interface CreateFounderUserRequest {
 export interface UpdateFounderUserRequest {
   first_name?: string;
   last_name?: string;
-  profile_picture_url?: string;
-  bio?: string;
+  profile_picture_url?: string | null;
+  bio?: string | null;
 }

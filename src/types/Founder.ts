@@ -44,9 +44,9 @@ export interface CreateFounderProjectRequest {
 }
 
 export interface UpdateFounderProjectRequest {
-  name?: string;
-  bio?: string;
-  logo_url?: string;
-  pitch_summary?: string;
-  pitch_url?: string;
+  name?: string | null;
+  bio?: string | null;
+  logo_url?: string | null;
+  pitch_summary?: string | null;
+  pitch_url?: string | null;
 }

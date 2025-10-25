@@ -7,7 +7,7 @@ import { FounderProjectManager } from '../components/FounderProjectManager';
 import { useAuth } from '../hooks/useAuth';
 import { useFounderUser } from '../hooks/useFounderUser';
 import { Event } from '../types/Event';
-import { Founder } from '../types/Founder';
+// import { Founder } from '../types/Founder';
 
 const FounderDashboardPage: React.FC = () => {
   const { user, isFounder, founderUser, isLoading: authLoading } = useAuth();
@@ -70,7 +70,7 @@ const FounderDashboardPage: React.FC = () => {
     return <Navigate to="/founder-login" replace />;
   }
 
-  if (founderLoading) {
+  if (founderLoading || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -80,6 +80,7 @@ const FounderDashboardPage: React.FC = () => {
       </div>
     );
   }
+
 
   if (founderError) {
     return (

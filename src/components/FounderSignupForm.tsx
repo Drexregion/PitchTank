@@ -82,8 +82,15 @@ export const FounderSignupForm: React.FC = () => {
         .eq('email', formData.email)
         .maybeSingle();
 
-      if (existingFounder) {
-        setError('This email is already registered as a founder. Please sign in instead.');
+      
+      if (existingFounder || founderCheckError) {
+        let errorMessage : string | null = null;
+        if (existingFounder) {
+          errorMessage = 'This email is already registered as a founder. Please sign in instead.';
+        } else if (founderCheckError) {
+          errorMessage = founderCheckError.message;
+        }
+        setError(errorMessage);
         return;
       }
 
