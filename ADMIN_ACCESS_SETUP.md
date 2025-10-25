@@ -35,7 +35,7 @@ To add your own email as admin:
 1. **Edit the admin emails list** in `src/hooks/useAuth.ts`:
    ```typescript
    const adminEmails = [
-     'admin@pitchtank.com',
+     'admin@pitchtank.ca',
      'daeso@example.com',
      'admin@example.com',
      'test@admin.com',
