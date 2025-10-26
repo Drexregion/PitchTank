@@ -18,7 +18,7 @@ export const QRShareModal: React.FC<QRShareModalProps> = ({
 
 	if (!isOpen) return null;
 
-	const eventUrl = `${window.location.origin}/event/${eventId}`;
+	const eventUrl = `${window.location.origin}/events/${eventId}`;
 
 	const handleCopyLink = () => {
 		navigator.clipboard.writeText(eventUrl);

@@ -27,6 +27,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 }) => {
 	const [tradeType, setTradeType] = useState<"buy" | "sell">("buy");
 	const [shares, setShares] = useState<number>(10);
+	const [note, setNote] = useState<string>("");
 	const [estimatedCost, setEstimatedCost] = useState<number>(0);
 	const [resultingPrice, setResultingPrice] = useState<number>(0);
 	const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -41,6 +42,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 	useEffect(() => {
 		setTradeType("buy");
 		setShares(10);
+		setNote("");
 		setError(null);
 		setSuccessMessage(null);
 		setCurrentFounder(founder);
@@ -231,6 +233,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 					shares,
 					type: tradeType,
 					event_id: founder.event_id,
+					note: note.trim() || undefined,
 				}),
 			});
 
@@ -360,6 +363,25 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 							</button>
 						)}
 					</div>
+				</div>
+
+				{/* Note Input */}
+				<div className="mb-4">
+					<label className="block text-white mb-2 text-sm md:text-base">
+						Note (Optional)
+					</label>
+					<textarea
+						value={note}
+						onChange={(e) => setNote(e.target.value)}
+						placeholder={`Why are you ${
+							tradeType === "buy" ? "buying" : "selling"
+						}? (e.g., "Strong pitch presentation", "Concerned about market fit")`}
+						className="input-dark w-full min-h-[80px] resize-y"
+						maxLength={500}
+					/>
+					<p className="text-xs text-dark-400 mt-1">
+						{note.length}/500 characters
+					</p>
 				</div>
 
 				{/* Trade Summary */}

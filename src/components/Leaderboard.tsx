@@ -74,6 +74,8 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
 					.select("*")
 					.eq("event_id", eventId);
 
+				console.log(founders);
+
 				if (foundersError) {
 					throw new Error(foundersError.message);
 				}

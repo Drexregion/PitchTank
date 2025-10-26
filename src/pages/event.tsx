@@ -35,7 +35,7 @@ const EventPage: React.FC = () => {
 	const { user } = useAuth();
 
 	// Get investor portfolio if logged in
-	const { investor, holdings, totalValue, roiPercent } = usePortfolio({
+	const { investor, holdings, roiPercent } = usePortfolio({
 		investorId: investorId || undefined,
 	});
 
@@ -89,6 +89,8 @@ const EventPage: React.FC = () => {
 						.eq("user_id", user.id)
 						.eq("event_id", eventId)
 						.single();
+
+					console.log(investorData);
 
 					if (investorData) {
 						setInvestorId(investorData.id);
@@ -167,10 +169,25 @@ const EventPage: React.FC = () => {
 	}, [eventId, user]);
 
 	const handleSignIn = () => {
-		navigate(`/login?redirect=/event/${eventId}`);
+		navigate(`/login?redirect=/events/${eventId}`);
 		setShowSignInNotification(false);
 	};
 
+	(async () => {
+		const { data: foundersWithUser } = await supabase
+			.from("founders")
+			.select(
+				"id, name, founder_user_id, founder_users:founder_user_id (email)"
+			)
+			.eq("event_id", eventId);
+
+		console.table(
+			(foundersWithUser ?? []).map((f) => ({
+				founder: f.name,
+				email: (f as any).founder_users?.email ?? "—",
+			}))
+		);
+	})();
 	// Format date for display
 	const formatEventDate = (dateString: string) => {
 		const date = new Date(dateString);
@@ -386,14 +403,7 @@ const EventPage: React.FC = () => {
 															{formatCurrency(investor.current_balance)}
 														</p>
 													</div>
-													<div className="flex-1 border-r border-dark-700">
-														<p className="text-xs text-dark-400 mb-1">
-															Net Worth
-														</p>
-														<p className="text-sm font-bold text-white">
-															{formatCurrency(totalValue)}
-														</p>
-													</div>
+
 													<div className="flex-1">
 														<p className="text-xs text-dark-400 mb-1">ROI</p>
 														<p
@@ -456,7 +466,7 @@ const EventPage: React.FC = () => {
 														{showPortfolioDropdown ? "Hide" : "View"} Holdings
 													</div>
 												</div>
-												<div className="grid grid-cols-3 divide-x divide-dark-700">
+												<div className="grid grid-cols-2 divide-x divide-dark-700">
 													{/* Liquid Capital */}
 													<div className="p-6 bg-gradient-to-br from-accent-cyan/5 to-transparent">
 														<div className="flex items-start gap-4">
@@ -481,35 +491,6 @@ const EventPage: React.FC = () => {
 																</p>
 																<p className="text-3xl font-bold text-accent-cyan truncate">
 																	{formatCurrency(investor.current_balance)}
-																</p>
-															</div>
-														</div>
-													</div>
-
-													{/* Net Worth */}
-													<div className="p-6 bg-gradient-to-br from-primary-500/5 to-transparent">
-														<div className="flex items-start gap-4">
-															<div className="w-14 h-14 bg-gradient-to-br from-primary-600 to-primary-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
-																<svg
-																	className="w-7 h-7 text-white"
-																	fill="none"
-																	stroke="currentColor"
-																	viewBox="0 0 24 24"
-																>
-																	<path
-																		strokeLinecap="round"
-																		strokeLinejoin="round"
-																		strokeWidth={2}
-																		d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-																	/>
-																</svg>
-															</div>
-															<div className="flex-1 min-w-0">
-																<p className="text-xs font-medium text-dark-400 uppercase tracking-wide mb-2">
-																	Net Worth
-																</p>
-																<p className="text-3xl font-bold text-white truncate">
-																	{formatCurrency(totalValue)}
 																</p>
 															</div>
 														</div>
@@ -723,6 +704,66 @@ const EventPage: React.FC = () => {
 													</div>
 												</div>
 											)}
+										</div>
+									)}
+
+									{/* If not signed in, show CTA instead of portfolio */}
+									{!user && (
+										<div className="mb-4 md:mb-6">
+											<div className="card-dark border border-accent-cyan/30 shadow-glow overflow-hidden">
+												<div className="p-5 md:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+													<div className="flex items-start gap-3">
+														<div className="w-10 h-10 rounded-lg bg-gradient-to-br from-accent-cyan/30 to-primary-500/30 flex items-center justify-center flex-shrink-0 border border-accent-cyan/40">
+															<svg
+																className="w-6 h-6 text-accent-cyan"
+																fill="none"
+																stroke="currentColor"
+																viewBox="0 0 24 24"
+															>
+																<path
+																	strokeLinecap="round"
+																	strokeLinejoin="round"
+																	strokeWidth={2}
+																	d="M12 11c0 1.657-1.79 3-4 3s-4-1.343-4-3 1.79-3 4-3 4 1.343 4 3z"
+																/>
+																<path
+																	strokeLinecap="round"
+																	strokeLinejoin="round"
+																	strokeWidth={2}
+																	d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"
+																/>
+															</svg>
+														</div>
+														<div>
+															<h3 className="text-white font-semibold">
+																Sign in to start trading
+															</h3>
+															<p className="text-sm text-dark-300 mt-1">
+																Create an account or sign in to start trading
+																founders in this event.
+															</p>
+														</div>
+													</div>
+													<div className="flex gap-3">
+														<button
+															onClick={() =>
+																navigate(`/login?redirect=/events/${eventId}`)
+															}
+															className="px-5 py-2.5 rounded-lg bg-dark-800 border border-dark-700 text-white hover:bg-dark-700 transition-all"
+														>
+															Sign In
+														</button>
+														<button
+															onClick={() =>
+																navigate(`/signup?redirect=/events/${eventId}`)
+															}
+															className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-accent-cyan to-primary-500 text-white hover:from-accent-cyan/90 hover:to-primary-600 transition-all shadow-lg"
+														>
+															Create Account
+														</button>
+													</div>
+												</div>
+											</div>
 										</div>
 									)}
 

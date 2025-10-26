@@ -16,19 +16,18 @@ const SignupPage: React.FC = () => {
 	const { signUp, user } = useAuth();
 	const [searchParams] = useSearchParams();
 
-	// Get redirect path and extract eventId if it's an event path
+	// Get redirect path and extract eventId if it's an event path (supports /event/ and /events/)
 	const redirectPath = searchParams.get("redirect");
-	const eventIdMatch = redirectPath?.match(/\/event\/([^\/]+)/);
-	const eventId = eventIdMatch
-		? eventIdMatch[1]
-		: "4df0c0f1-307f-42fb-b319-a99de3b26aeb"; // Default event ID
+	const eventIdMatch = redirectPath?.match(/\/events?\/([^/]+)/);
+	const eventId = eventIdMatch ? eventIdMatch[1] : undefined;
+	const redirectMissing = !redirectPath;
 
 	// If already logged in, redirect to intended destination
 	if (user) {
 		if (redirectPath) {
 			return <Navigate to={redirectPath} replace />;
 		}
-		return <Navigate to={`/dashboard/${eventId}`} replace />;
+		return <Navigate to={`/events`} replace />;
 	}
 
 	const handleSubmit = async (e: React.FormEvent) => {
@@ -38,6 +37,10 @@ const SignupPage: React.FC = () => {
 		setIsSubmitting(true);
 
 		try {
+			// Enforce presence of redirect
+			if (!redirectPath) {
+				throw new Error("Registration requires a redirect destination.");
+			}
 			// Validate inputs
 			if (!name || !email || !password || !confirmPassword) {
 				throw new Error("Please fill in all fields");
@@ -123,6 +126,34 @@ const SignupPage: React.FC = () => {
 						<h1 className="text-3xl font-bold mb-6 text-center bg-gradient-to-r from-accent-cyan to-primary-400 bg-clip-text text-transparent">
 							Create an Account
 						</h1>
+
+						{redirectMissing && (
+							<div className="bg-yellow-500/20 border border-yellow-500/50 p-4 mb-6 rounded-lg">
+								<div className="flex">
+									<div className="flex-shrink-0">
+										<svg
+											className="h-5 w-5 text-yellow-300"
+											xmlns="http://www.w3.org/2000/svg"
+											viewBox="0 0 20 20"
+											fill="currentColor"
+										>
+											<path
+												fillRule="evenodd"
+												d="M8.257 3.099c.366-.73 1.42-.73 1.786 0l6.518 13.002A1 1 0 0115.66 18H4.34a1 1 0 01-.9-1.45L9.957 3.1zM11 14a1 1 0 10-2 0 1 1 0 002 0zm-1-2a1 1 0 01-1-1V8a1 1 0 112 0v3a1 1 0 01-1 1z"
+												clipRule="evenodd"
+											/>
+										</svg>
+									</div>
+									<div className="ml-3">
+										<p className="text-sm text-yellow-200">
+											Registration must originate from an event so we can set up
+											your investor profile. Please start from an event and
+											choose Sign Up.
+										</p>
+									</div>
+								</div>
+							</div>
+						)}
 
 						{error && (
 							<div className="bg-red-500/20 border border-red-500/50 p-4 mb-6 rounded-lg">
@@ -251,14 +282,18 @@ const SignupPage: React.FC = () => {
 
 							<button
 								type="submit"
-								disabled={isSubmitting}
+								disabled={isSubmitting || redirectMissing}
 								className={`w-full py-3 px-4 bg-gradient-to-r from-accent-cyan to-primary-500 hover:from-accent-cyan/90 hover:to-primary-600 text-white font-medium rounded-lg transition-all shadow-lg ${
-									isSubmitting
+									isSubmitting || redirectMissing
 										? "opacity-70 cursor-not-allowed"
 										: "hover:shadow-accent-cyan/50"
 								}`}
 							>
-								{isSubmitting ? "Creating Account..." : "Create Account"}
+								{redirectMissing
+									? "Start from an event to sign up"
+									: isSubmitting
+									? "Creating Account..."
+									: "Create Account"}
 							</button>
 						</form>
 
