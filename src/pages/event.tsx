@@ -9,21 +9,30 @@ import { useAuth } from "../hooks/useAuth";
 import { usePortfolio } from "../hooks/usePortfolio";
 import { Event } from "../types/Event";
 import { FounderWithPrice } from "../types/Founder";
+import { FounderUser } from "../types/FounderUser";
 import { calculateCurrentPrice, calculateMarketCap } from "../lib/ammEngine";
+
+// Extended interface to include founder user details
+interface FounderWithPriceAndUser extends FounderWithPrice {
+	founder_user: FounderUser | null;
+}
 
 const EventPage: React.FC = () => {
 	const { eventId } = useParams<{ eventId: string }>();
 	const navigate = useNavigate();
 	const [event, setEvent] = useState<Event | null>(null);
-	const [founders, setFounders] = useState<FounderWithPrice[]>([]);
+	const [founders, setFounders] = useState<FounderWithPriceAndUser[]>([]);
 	const [isLoading, setIsLoading] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
 	const [activeTab, setActiveTab] = useState<"trade" | "leaderboard">("trade");
 	const [showQRModal, setShowQRModal] = useState(false);
 	const [showEventInfoModal, setShowEventInfoModal] = useState(false);
 	const [showSignInNotification, setShowSignInNotification] = useState(false);
+	const [showFounderModal, setShowFounderModal] = useState(false);
+	const [selectedFounderForModal, setSelectedFounderForModal] =
+		useState<FounderWithPriceAndUser | null>(null);
 	const [selectedFounder, setSelectedFounder] =
-		useState<FounderWithPrice | null>(null);
+		useState<FounderWithPriceAndUser | null>(null);
 	const [investorId, setInvestorId] = useState<string | null>(null);
 	const [sortBy, setSortBy] = useState<"price" | "alphabetical">("price");
 	const [showSortOptions, setShowSortOptions] = useState(false);
@@ -97,18 +106,34 @@ const EventPage: React.FC = () => {
 					}
 				}
 
-				// Fetch founders for this event
+				// Fetch founders for this event with founder_users data
 				const { data: foundersData, error: foundersError } = await supabase
 					.from("founders")
-					.select("*")
+					.select(
+						`
+						*,
+						founder_users:founder_user_id (
+							id,
+							auth_user_id,
+							email,
+							first_name,
+							last_name,
+							profile_picture_url,
+							bio,
+							created_at,
+							updated_at
+						)
+					`
+					)
 					.eq("event_id", eventId);
 
 				if (foundersError) throw foundersError;
 
 				// Calculate current price and market cap for each founder
-				const foundersWithPrice: FounderWithPrice[] = foundersData.map(
-					(founder) => ({
+				const foundersWithPrice: FounderWithPriceAndUser[] = foundersData.map(
+					(founder: any) => ({
 						...founder,
+						founder_user: founder.founder_users || null,
 						current_price: calculateCurrentPrice(founder),
 						market_cap: calculateMarketCap(founder),
 					})
@@ -143,15 +168,33 @@ const EventPage: React.FC = () => {
 						// Refetch founders when there's an update
 						const { data: foundersData } = await supabase
 							.from("founders")
-							.select("*")
+							.select(
+								`
+								*,
+								founder_users:founder_user_id (
+									id,
+									auth_user_id,
+									email,
+									first_name,
+									last_name,
+									profile_picture_url,
+									bio,
+									created_at,
+									updated_at
+								)
+							`
+							)
 							.eq("event_id", eventId);
 
 						if (foundersData) {
-							const updated = foundersData.map((founder) => ({
-								...founder,
-								current_price: calculateCurrentPrice(founder),
-								market_cap: calculateMarketCap(founder),
-							}));
+							const updated: FounderWithPriceAndUser[] = foundersData.map(
+								(founder: any) => ({
+									...founder,
+									founder_user: founder.founder_users || null,
+									current_price: calculateCurrentPrice(founder),
+									market_cap: calculateMarketCap(founder),
+								})
+							);
 
 							// Sort by market cap (highest first)
 							updated.sort((a, b) => b.market_cap - a.market_cap);
@@ -200,6 +243,44 @@ const EventPage: React.FC = () => {
 		});
 	};
 
+	// Format date for badge (shorter version)
+	const formatEventDateShort = (dateString: string) => {
+		const date = new Date(dateString);
+		const now = new Date();
+		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+		const eventDate = new Date(
+			date.getFullYear(),
+			date.getMonth(),
+			date.getDate()
+		);
+
+		// If today, just show time
+		if (eventDate.getTime() === today.getTime()) {
+			return `Today ${date.toLocaleTimeString(undefined, {
+				hour: "2-digit",
+				minute: "2-digit",
+			})}`;
+		}
+
+		// If tomorrow
+		const tomorrow = new Date(today);
+		tomorrow.setDate(tomorrow.getDate() + 1);
+		if (eventDate.getTime() === tomorrow.getTime()) {
+			return `Tomorrow ${date.toLocaleTimeString(undefined, {
+				hour: "2-digit",
+				minute: "2-digit",
+			})}`;
+		}
+
+		// Otherwise show month and day
+		return date.toLocaleDateString(undefined, {
+			month: "short",
+			day: "numeric",
+			hour: "2-digit",
+			minute: "2-digit",
+		});
+	};
+
 	// Check if event is currently active
 	const isEventActive = (event: Event) => {
 		const now = new Date();
@@ -208,7 +289,14 @@ const EventPage: React.FC = () => {
 		return now >= startTime && now <= endTime && event.status === "active";
 	};
 
-	const handleBuyClick = (founder: FounderWithPrice) => {
+	// Check if event hasn't started yet
+	const isEventNotStarted = (event: Event) => {
+		const now = new Date();
+		const startTime = new Date(event.start_time);
+		return now < startTime;
+	};
+
+	const handleBuyClick = (founder: FounderWithPriceAndUser) => {
 		if (!user) {
 			setShowSignInNotification(true);
 			return;
@@ -216,12 +304,21 @@ const EventPage: React.FC = () => {
 		setSelectedFounder(founder);
 	};
 
-	const handleSellClick = (founder: FounderWithPrice) => {
+	const handleSellClick = (founder: FounderWithPriceAndUser) => {
 		if (!user) {
 			setShowSignInNotification(true);
 			return;
 		}
 		setSelectedFounder(founder);
+	};
+
+	const handleFounderProfileClick = (
+		founder: FounderWithPriceAndUser,
+		e: React.MouseEvent
+	) => {
+		e.stopPropagation();
+		setSelectedFounderForModal(founder);
+		setShowFounderModal(true);
 	};
 
 	// Get owned shares for a founder
@@ -299,6 +396,8 @@ const EventPage: React.FC = () => {
 										className={`px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
 											event.status === "active" && isEventActive(event)
 												? "bg-green-500/20 text-green-300 border border-green-500/50"
+												: isEventNotStarted(event)
+												? "bg-blue-500/20 text-blue-300 border border-blue-500/50"
 												: event.status === "completed" ||
 												  (event.status === "active" && !isEventActive(event))
 												? "bg-red-500/20 text-red-300 border border-red-500/50"
@@ -307,6 +406,8 @@ const EventPage: React.FC = () => {
 									>
 										{event.status === "active" && isEventActive(event)
 											? "Active"
+											: isEventNotStarted(event)
+											? `Starts ${formatEventDateShort(event.start_time)}`
 											: event.status === "active" && !isEventActive(event)
 											? "Ended"
 											: event.status === "completed"
@@ -905,7 +1006,7 @@ const EventPage: React.FC = () => {
 												<div className="overflow-x-auto md:hidden">
 													<table className="w-full">
 														<tbody className="divide-y divide-dark-700">
-															{sortedFounders.map((founder, index) => (
+															{sortedFounders.map((founder) => (
 																<React.Fragment key={founder.id}>
 																	{/* Founder Name Row - Full Width */}
 																	<tr
@@ -951,14 +1052,36 @@ const EventPage: React.FC = () => {
 																	</tr>
 																	{/* Founder Details Row */}
 																	<tr className="hover:bg-dark-800/50 transition-colors">
-																		{/* Profile Picture/Rank */}
+																		{/* Profile Picture */}
 																		<td className="py-3 px-4 w-1/4">
 																			<div className="flex flex-col items-center">
-																				<div className="w-12 h-12 bg-gradient-to-br from-primary-600 to-accent-cyan rounded-full flex items-center justify-center text-white font-bold text-lg mb-1">
-																					{index + 1}
-																				</div>
+																				<button
+																					onClick={(e) =>
+																						handleFounderProfileClick(
+																							founder,
+																							e
+																						)
+																					}
+																					className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center border-2 border-accent-cyan/30 hover:border-accent-cyan transition-all mb-1"
+																				>
+																					{founder.founder_user
+																						?.profile_picture_url ? (
+																						<img
+																							src={
+																								founder.founder_user
+																									.profile_picture_url
+																							}
+																							alt={founder.name}
+																							className="w-full h-full object-cover"
+																						/>
+																					) : (
+																						<div className="w-full h-full bg-gradient-to-br from-primary-600 to-accent-cyan flex items-center justify-center text-white font-bold text-lg">
+																							{founder.name.charAt(0)}
+																						</div>
+																					)}
+																				</button>
 																				<p className="text-xs text-dark-400">
-																					Rank
+																					Profile
 																				</p>
 																			</div>
 																		</td>
@@ -1050,7 +1173,7 @@ const EventPage: React.FC = () => {
 															<tr className="bg-dark-800/50 border-b-2 border-primary-500/30">
 																<th className="py-4 px-6 text-left">
 																	<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
-																		Rank
+																		Profile
 																	</span>
 																</th>
 																<th className="py-4 px-6 text-left">
@@ -1086,7 +1209,7 @@ const EventPage: React.FC = () => {
 															</tr>
 														</thead>
 														<tbody className="divide-y divide-dark-700/50">
-															{sortedFounders.map((founder, index) => {
+															{sortedFounders.map((founder) => {
 																const ownedShares = getOwnedShares(founder.id);
 																const ownedValue =
 																	ownedShares * founder.current_price;
@@ -1103,24 +1226,33 @@ const EventPage: React.FC = () => {
 																				)
 																			}
 																		>
-																			{/* Rank */}
+																			{/* Profile Picture */}
 																			<td className="py-5 px-6">
-																				<div className="relative">
-																					<div className="w-12 h-12 bg-gradient-to-br from-primary-600 via-primary-500 to-accent-cyan rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg group-hover:shadow-primary-500/50 transition-shadow">
-																						{index + 1}
-																					</div>
-																					{index < 3 && (
-																						<div className="absolute -top-1 -right-1">
-																							<svg
-																								className="w-5 h-5 text-yellow-400"
-																								fill="currentColor"
-																								viewBox="0 0 20 20"
-																							>
-																								<path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-																							</svg>
+																				<button
+																					onClick={(e) =>
+																						handleFounderProfileClick(
+																							founder,
+																							e
+																						)
+																					}
+																					className="w-14 h-14 rounded-full overflow-hidden flex items-center justify-center border-2 border-accent-cyan/30 hover:border-accent-cyan transition-all shadow-lg group-hover:shadow-primary-500/50"
+																				>
+																					{founder.founder_user
+																						?.profile_picture_url ? (
+																						<img
+																							src={
+																								founder.founder_user
+																									.profile_picture_url
+																							}
+																							alt={founder.name}
+																							className="w-full h-full object-cover"
+																						/>
+																					) : (
+																						<div className="w-full h-full bg-gradient-to-br from-primary-600 to-accent-cyan flex items-center justify-center text-white font-bold text-xl">
+																							{founder.name.charAt(0)}
 																						</div>
 																					)}
-																				</div>
+																				</button>
 																			</td>
 																			{/* Founder Name */}
 																			<td className="py-5 px-6">
@@ -1359,6 +1491,8 @@ const EventPage: React.FC = () => {
 									className={`inline-block px-4 py-2 rounded-full text-sm font-medium ${
 										event.status === "active" && isEventActive(event)
 											? "bg-green-500/20 text-green-300 border border-green-500/50"
+											: isEventNotStarted(event)
+											? "bg-blue-500/20 text-blue-300 border border-blue-500/50"
 											: event.status === "completed" ||
 											  (event.status === "active" && !isEventActive(event))
 											? "bg-red-500/20 text-red-300 border border-red-500/50"
@@ -1369,6 +1503,8 @@ const EventPage: React.FC = () => {
 								>
 									{event.status === "active" && isEventActive(event)
 										? "Active"
+										: isEventNotStarted(event)
+										? `Starts on ${formatEventDate(event.start_time)}`
 										: event.status === "active" && !isEventActive(event)
 										? "Ended"
 										: event.status === "completed"
@@ -1418,6 +1554,179 @@ const EventPage: React.FC = () => {
 									</svg>
 									Share Event
 								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Founder Details Modal */}
+			{showFounderModal && selectedFounderForModal && (
+				<div
+					className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+					onClick={() => setShowFounderModal(false)}
+				>
+					<div
+						className="bg-dark-900 rounded-xl border border-primary-500/30 max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+						onClick={(e) => e.stopPropagation()}
+					>
+						{/* Modal Header */}
+						<div className="sticky top-0 bg-dark-900 border-b border-dark-700 p-6">
+							<div className="flex items-center justify-between">
+								<h2 className="text-2xl font-bold text-white">
+									Founder Profile
+								</h2>
+								<button
+									onClick={() => setShowFounderModal(false)}
+									className="p-2 hover:bg-dark-800 rounded-lg transition-colors"
+								>
+									<svg
+										className="w-6 h-6 text-dark-400"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
+										<path
+											strokeLinecap="round"
+											strokeLinejoin="round"
+											strokeWidth={2}
+											d="M6 18L18 6M6 6l12 12"
+										/>
+									</svg>
+								</button>
+							</div>
+						</div>
+
+						{/* Modal Content */}
+						<div className="p-6 space-y-6">
+							{/* Profile Picture and Name */}
+							<div className="flex items-start gap-6">
+								<div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center border-2 border-accent-cyan/30 flex-shrink-0">
+									{selectedFounderForModal.founder_user?.profile_picture_url ? (
+										<img
+											src={
+												selectedFounderForModal.founder_user.profile_picture_url
+											}
+											alt={selectedFounderForModal.name}
+											className="w-full h-full object-cover"
+										/>
+									) : (
+										<div className="w-full h-full bg-gradient-to-br from-primary-600 to-accent-cyan flex items-center justify-center text-white font-bold text-3xl">
+											{selectedFounderForModal.name.charAt(0)}
+										</div>
+									)}
+								</div>
+								<div className="flex-1">
+									<h3 className="text-2xl font-bold text-white mb-2">
+										{selectedFounderForModal.name}
+									</h3>
+									{selectedFounderForModal.founder_user && (
+										<p className="text-dark-300">
+											{selectedFounderForModal.founder_user.first_name}{" "}
+											{selectedFounderForModal.founder_user.last_name}
+										</p>
+									)}
+								</div>
+							</div>
+
+							{/* Project Logo */}
+							{selectedFounderForModal.logo_url && (
+								<div>
+									<p className="text-sm text-dark-400 mb-2">Project Logo</p>
+									<div className="w-32 h-32 rounded-lg overflow-hidden border border-dark-700">
+										<img
+											src={selectedFounderForModal.logo_url}
+											alt={`${selectedFounderForModal.name} logo`}
+											className="w-full h-full object-cover"
+										/>
+									</div>
+								</div>
+							)}
+
+							{/* Bio */}
+							{selectedFounderForModal.founder_user?.bio && (
+								<div>
+									<p className="text-sm text-dark-400 mb-2">Bio</p>
+									<p className="text-white leading-relaxed">
+										{selectedFounderForModal.founder_user.bio}
+									</p>
+								</div>
+							)}
+
+							{/* Pitch Summary */}
+							{selectedFounderForModal.pitch_summary && (
+								<div>
+									<p className="text-sm text-dark-400 mb-2">Pitch Summary</p>
+									<p className="text-white leading-relaxed">
+										{selectedFounderForModal.pitch_summary}
+									</p>
+								</div>
+							)}
+
+							{/* Market Stats */}
+							<div className="grid grid-cols-2 gap-4 pt-4 border-t border-dark-700">
+								<div className="bg-dark-800/50 p-4 rounded-lg">
+									<p className="text-xs text-dark-400 mb-1">Current Price</p>
+									<p className="text-xl font-bold text-accent-cyan">
+										${selectedFounderForModal.current_price.toFixed(2)}
+									</p>
+								</div>
+								<div className="bg-dark-800/50 p-4 rounded-lg">
+									<p className="text-xs text-dark-400 mb-1">Market Cap</p>
+									<p className="text-xl font-bold text-white">
+										{formatCurrency(selectedFounderForModal.market_cap)}
+									</p>
+								</div>
+							</div>
+
+							{/* Action Buttons */}
+							<div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-dark-700">
+								<button
+									onClick={() => {
+										setShowFounderModal(false);
+										handleBuyClick(selectedFounderForModal);
+									}}
+									className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white rounded-lg font-medium transition-all shadow-lg hover:shadow-green-500/50 flex items-center justify-center gap-2"
+								>
+									<svg
+										className="w-5 h-5"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
+										<path
+											strokeLinecap="round"
+											strokeLinejoin="round"
+											strokeWidth={2}
+											d="M12 4v16m8-8H4"
+										/>
+									</svg>
+									Buy Shares
+								</button>
+								{user && getOwnedShares(selectedFounderForModal.id) > 0 && (
+									<button
+										onClick={() => {
+											setShowFounderModal(false);
+											handleSellClick(selectedFounderForModal);
+										}}
+										className="flex-1 px-4 py-3 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-white rounded-lg font-medium transition-all shadow-lg hover:shadow-red-500/50 flex items-center justify-center gap-2"
+									>
+										<svg
+											className="w-5 h-5"
+											fill="none"
+											stroke="currentColor"
+											viewBox="0 0 24 24"
+										>
+											<path
+												strokeLinecap="round"
+												strokeLinejoin="round"
+												strokeWidth={2}
+												d="M20 12H4"
+											/>
+										</svg>
+										Sell Shares
+									</button>
+								)}
 							</div>
 						</div>
 					</div>
