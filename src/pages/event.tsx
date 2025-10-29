@@ -42,6 +42,8 @@ const EventPage: React.FC = () => {
 	const [showPortfolioDropdown, setShowPortfolioDropdown] = useState(false);
 	const portfolioDropdownRef = useRef<HTMLDivElement>(null);
 	const { user } = useAuth();
+	const [showTradingClosedNotification, setShowTradingClosedNotification] =
+		useState(false);
 
 	// Get investor portfolio if logged in
 	const { investor, holdings, roiPercent } = usePortfolio({
@@ -296,17 +298,40 @@ const EventPage: React.FC = () => {
 		return now < startTime;
 	};
 
-	const handleBuyClick = (founder: FounderWithPriceAndUser) => {
+	// Verify with backend that the event is still active before allowing trades
+	const verifyEventIsActiveLatest = async (): Promise<boolean> => {
+		if (!eventId) return false;
+		const { data: latest, error: latestError } = await supabase
+			.from("events")
+			.select("*")
+			.eq("id", eventId)
+			.single();
+		if (latestError || !latest) return false;
+		setEvent(latest);
+		return isEventActive(latest);
+	};
+
+	const handleBuyClick = async (founder: FounderWithPriceAndUser) => {
 		if (!user) {
 			setShowSignInNotification(true);
+			return;
+		}
+		const canTradeNow = await verifyEventIsActiveLatest();
+		if (!canTradeNow) {
+			setShowTradingClosedNotification(true);
 			return;
 		}
 		setSelectedFounder(founder);
 	};
 
-	const handleSellClick = (founder: FounderWithPriceAndUser) => {
+	const handleSellClick = async (founder: FounderWithPriceAndUser) => {
 		if (!user) {
 			setShowSignInNotification(true);
+			return;
+		}
+		const canTradeNow = await verifyEventIsActiveLatest();
+		if (!canTradeNow) {
+			setShowTradingClosedNotification(true);
 			return;
 		}
 		setSelectedFounder(founder);
@@ -346,6 +371,8 @@ const EventPage: React.FC = () => {
 			return b.current_price - a.current_price;
 		}
 	});
+
+	const canTrade = event ? isEventActive(event) : false;
 
 	return (
 		<div className="min-h-screen relative overflow-hidden">
@@ -868,6 +895,17 @@ const EventPage: React.FC = () => {
 										</div>
 									)}
 
+									{/* Trading status banner */}
+									{event &&
+										(event.status === "completed" ||
+											(event.status === "active" && !isEventActive(event))) && (
+											<div className="mb-4">
+												<div className="bg-red-500/20 border border-red-500/50 text-red-300 p-4 rounded-lg">
+													Trading has closed for this event.
+												</div>
+											</div>
+										)}
+
 									{/* Sort/Filter Options */}
 									<div className="mb-6 flex justify-between items-center">
 										<div className="hidden md:block">
@@ -1118,7 +1156,12 @@ const EventPage: React.FC = () => {
 																					onClick={() =>
 																						handleBuyClick(founder)
 																					}
-																					className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium transition-all shadow-md hover:shadow-glow-sm w-full"
+																					disabled={!canTrade}
+																					className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shadow-md w-full ${
+																						!canTrade
+																							? "bg-dark-700 text-dark-500 cursor-not-allowed"
+																							: "bg-green-600 hover:bg-green-700 text-white hover:shadow-glow-sm"
+																					}`}
 																				>
 																					Buy
 																				</button>
@@ -1127,10 +1170,12 @@ const EventPage: React.FC = () => {
 																						handleSellClick(founder)
 																					}
 																					disabled={
+																						!canTrade ||
 																						!user ||
 																						getOwnedShares(founder.id) === 0
 																					}
 																					className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all w-full ${
+																						!canTrade ||
 																						!user ||
 																						getOwnedShares(founder.id) === 0
 																							? "bg-dark-700 text-dark-500 cursor-not-allowed"
@@ -1338,7 +1383,12 @@ const EventPage: React.FC = () => {
 																							e.stopPropagation();
 																							handleBuyClick(founder);
 																						}}
-																						className="px-6 py-2.5 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white rounded-lg text-sm font-semibold transition-all shadow-lg hover:shadow-green-500/50 hover:scale-105 active:scale-95"
+																						disabled={!canTrade}
+																						className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-lg ${
+																							!canTrade
+																								? "bg-dark-700 text-dark-500 cursor-not-allowed opacity-50"
+																								: "bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white hover:shadow-green-500/50 hover:scale-105 active:scale-95"
+																						}`}
 																					>
 																						Buy
 																					</button>
@@ -1348,10 +1398,14 @@ const EventPage: React.FC = () => {
 																							handleSellClick(founder);
 																						}}
 																						disabled={
-																							!user || ownedShares === 0
+																							!canTrade ||
+																							!user ||
+																							ownedShares === 0
 																						}
 																						className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-lg ${
-																							!user || ownedShares === 0
+																							!canTrade ||
+																							!user ||
+																							ownedShares === 0
 																								? "bg-dark-700 text-dark-500 cursor-not-allowed opacity-50"
 																								: "bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-white hover:shadow-red-500/50 hover:scale-105 active:scale-95"
 																						}`}
@@ -1433,6 +1487,31 @@ const EventPage: React.FC = () => {
 							/>
 						</svg>
 						<p className="font-medium">Please sign in to start trading</p>
+					</div>
+				</div>
+			)}
+
+			{/* Floating notification for trading closed */}
+			{!isLoading && event && showTradingClosedNotification && (
+				<div
+					className="fixed bottom-6 right-6 z-50"
+					onClick={() => setShowTradingClosedNotification(false)}
+				>
+					<div className="bg-yellow-400 text-dark-950 px-6 py-4 rounded-lg shadow-2xl flex items-center gap-3 max-w-sm">
+						<svg
+							className="w-6 h-6 flex-shrink-0"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								strokeLinecap="round"
+								strokeLinejoin="round"
+								strokeWidth={2}
+								d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+							/>
+						</svg>
+						<p className="font-medium">Trading has closed for this event</p>
 					</div>
 				</div>
 			)}
@@ -1686,7 +1765,12 @@ const EventPage: React.FC = () => {
 										setShowFounderModal(false);
 										handleBuyClick(selectedFounderForModal);
 									}}
-									className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white rounded-lg font-medium transition-all shadow-lg hover:shadow-green-500/50 flex items-center justify-center gap-2"
+									disabled={!canTrade}
+									className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all shadow-lg flex items-center justify-center gap-2 ${
+										!canTrade
+											? "bg-dark-700 text-dark-500 cursor-not-allowed opacity-50"
+											: "bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white hover:shadow-green-500/50"
+									}`}
 								>
 									<svg
 										className="w-5 h-5"
@@ -1709,7 +1793,12 @@ const EventPage: React.FC = () => {
 											setShowFounderModal(false);
 											handleSellClick(selectedFounderForModal);
 										}}
-										className="flex-1 px-4 py-3 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-white rounded-lg font-medium transition-all shadow-lg hover:shadow-red-500/50 flex items-center justify-center gap-2"
+										disabled={!canTrade}
+										className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all shadow-lg flex items-center justify-center gap-2 ${
+											!canTrade
+												? "bg-dark-700 text-dark-500 cursor-not-allowed opacity-50"
+												: "bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-white hover:shadow-red-500/50"
+										}`}
 									>
 										<svg
 											className="w-5 h-5"
