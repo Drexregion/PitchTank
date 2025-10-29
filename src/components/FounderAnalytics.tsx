@@ -299,6 +299,8 @@ export const FounderAnalytics: React.FC<FounderAnalyticsProps> = ({
 										stroke="white"
 										strokeWidth="2"
 										className="cursor-pointer transition-all"
+										onMouseEnter={() => setHoveredTrade(trade)}
+										onMouseLeave={() => setHoveredTrade(null)}
 										onClick={() => setSelectedTrade(trade)}
 									/>
 
@@ -384,13 +386,13 @@ export const FounderAnalytics: React.FC<FounderAnalyticsProps> = ({
 			</div>
 
 			{/* Selected/Hovered Trade Details */}
-			{(selectedTrade || hoveredTrade) && (
+			{selectedTrade && (
 				<div className="bg-dark-900/95 backdrop-blur-sm border border-accent-cyan/30 rounded-2xl shadow-glow p-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
 					<div className="flex items-start justify-between mb-4">
 						<div className="flex items-center gap-3">
 							<div
 								className={`w-12 h-12 rounded-full flex items-center justify-center ${
-									(selectedTrade || hoveredTrade)!.type === "buy"
+									selectedTrade!.type === "buy"
 										? "bg-green-500/20 border border-green-500/50"
 										: "bg-red-500/20 border border-red-500/50"
 								}`}
@@ -401,7 +403,7 @@ export const FounderAnalytics: React.FC<FounderAnalyticsProps> = ({
 									stroke="currentColor"
 									viewBox="0 0 24 24"
 								>
-									{(selectedTrade || hoveredTrade)!.type === "buy" ? (
+									{selectedTrade!.type === "buy" ? (
 										<path
 											strokeLinecap="round"
 											strokeLinejoin="round"
@@ -420,10 +422,10 @@ export const FounderAnalytics: React.FC<FounderAnalyticsProps> = ({
 							</div>
 							<div>
 								<h3 className="text-xl font-bold text-white capitalize">
-									{(selectedTrade || hoveredTrade)!.type} Trade
+									{selectedTrade!.type} Trade
 								</h3>
 								<p className="text-sm text-dark-400">
-									{formatDate((selectedTrade || hoveredTrade)!.timestamp)}
+									{formatDate(selectedTrade!.timestamp)}
 								</p>
 							</div>
 						</div>
@@ -453,40 +455,36 @@ export const FounderAnalytics: React.FC<FounderAnalyticsProps> = ({
 						<div className="bg-dark-800/50 rounded-lg p-4">
 							<p className="text-xs text-dark-400 mb-1">Shares</p>
 							<p className="text-lg font-bold text-white">
-								{(selectedTrade || hoveredTrade)!.shares.toLocaleString()}
+								{selectedTrade!.shares.toLocaleString()}
 							</p>
 						</div>
 						<div className="bg-dark-800/50 rounded-lg p-4">
 							<p className="text-xs text-dark-400 mb-1">Price per Share</p>
 							<p className="text-lg font-bold text-accent-cyan">
-								{formatCurrency(
-									(selectedTrade || hoveredTrade)!.price_per_share
-								)}
+								{formatCurrency(selectedTrade!.price_per_share)}
 							</p>
 						</div>
 						<div className="bg-dark-800/50 rounded-lg p-4">
 							<p className="text-xs text-dark-400 mb-1">Total Amount</p>
 							<p className="text-lg font-bold text-white">
-								{formatCurrency(
-									Math.abs((selectedTrade || hoveredTrade)!.amount)
-								)}
+								{formatCurrency(Math.abs(selectedTrade!.amount))}
 							</p>
 						</div>
 						<div className="bg-dark-800/50 rounded-lg p-4">
 							<p className="text-xs text-dark-400 mb-1">Price at Time</p>
 							<p className="text-lg font-bold text-white">
-								{formatCurrency((selectedTrade || hoveredTrade)!.priceAtTime)}
+								{formatCurrency(selectedTrade!.priceAtTime)}
 							</p>
 						</div>
 					</div>
 
-					{(selectedTrade || hoveredTrade)!.note && (
+					{selectedTrade!.note && (
 						<div className="bg-dark-800/50 rounded-lg p-4">
 							<p className="text-xs text-dark-400 mb-2 font-medium">
 								Investor's Note:
 							</p>
 							<p className="text-white leading-relaxed">
-								"{(selectedTrade || hoveredTrade)!.note}"
+								"{selectedTrade!.note}"
 							</p>
 						</div>
 					)}
