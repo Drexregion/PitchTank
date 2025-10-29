@@ -408,7 +408,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 							min="1"
 							max={tradeType === "sell" ? investorShares : undefined}
 							value={shares}
-							onChange={(e) => setShares(parseInt(e.target.value) || 0)}
+							onChange={(e) => setShares(parseInt(e.target.value))}
 							className="input-dark flex-1"
 						/>
 						{tradeType === "buy" ? (
