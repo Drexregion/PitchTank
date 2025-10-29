@@ -299,8 +299,6 @@ export const FounderAnalytics: React.FC<FounderAnalyticsProps> = ({
 										stroke="white"
 										strokeWidth="2"
 										className="cursor-pointer transition-all"
-										onMouseEnter={() => setHoveredTrade(trade)}
-										onMouseLeave={() => setHoveredTrade(null)}
 										onClick={() => setSelectedTrade(trade)}
 									/>
 

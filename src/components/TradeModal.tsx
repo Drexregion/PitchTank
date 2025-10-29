@@ -240,6 +240,13 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 			return;
 		}
 
+		// Require a note explaining the trade
+		const trimmedNote = note.trim();
+		if (!trimmedNote) {
+			setError("Please add a brief note explaining your trade");
+			return;
+		}
+
 		// Server-verify event status right before executing trade
 		const canTradeNow = await verifyEventIsActiveLatest();
 		if (!canTradeNow) {
@@ -264,12 +271,19 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 		setSuccessMessage(null);
 
 		try {
+			// Use the authenticated user's access token when available
+			const {
+				data: { session },
+			} = await supabase.auth.getSession();
+			const accessToken =
+				session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY;
+
 			// Call executeTrade edge function
 			const response = await fetch(`${supabaseUrl}/functions/v1/executeTrade`, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
-					Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+					Authorization: `Bearer ${accessToken}`,
 				},
 				body: JSON.stringify({
 					investor_id: investorId,
@@ -277,7 +291,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 					shares,
 					type: tradeType,
 					event_id: founder.event_id,
-					note: note.trim() || undefined,
+					note: trimmedNote,
 				}),
 			});
 
@@ -419,7 +433,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 				{/* Note Input */}
 				<div className="mb-4">
 					<label className="block text-white mb-2 text-sm md:text-base">
-						Note (Optional)
+						Note (Required)
 					</label>
 					<textarea
 						value={note}
@@ -428,11 +442,17 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 							tradeType === "buy" ? "buying" : "selling"
 						}? (e.g., "Strong pitch presentation", "Concerned about market fit")`}
 						className="input-dark w-full min-h-[80px] resize-y"
+						required
 						maxLength={500}
 					/>
 					<p className="text-xs text-dark-400 mt-1">
 						{note.length}/500 characters
 					</p>
+					{note.trim().length === 0 && (
+						<p className="text-xs text-red-400 mt-1">
+							A brief note is required
+						</p>
+					)}
 				</div>
 
 				{/* Trade Summary */}
@@ -493,7 +513,8 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 							(tradeType === "buy" && estimatedCost > investorBalance) ||
 							(tradeType === "sell" && shares > investorShares) ||
 							isEventActiveServer === false ||
-							checkingStatus
+							checkingStatus ||
+							note.trim().length === 0
 						}
 						className={`px-4 py-2 rounded-lg font-medium transition-all text-sm md:text-base ${
 							isLoading ||
@@ -501,7 +522,8 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 							(tradeType === "buy" && estimatedCost > investorBalance) ||
 							(tradeType === "sell" && shares > investorShares) ||
 							isEventActiveServer === false ||
-							checkingStatus
+							checkingStatus ||
+							note.trim().length === 0
 								? "bg-dark-600 text-dark-400 cursor-not-allowed"
 								: tradeType === "buy"
 								? "bg-green-600 text-white hover:bg-green-700 shadow-md hover:shadow-glow"
