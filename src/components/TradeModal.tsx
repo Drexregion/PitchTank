@@ -37,6 +37,10 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 	// Track real-time founder updates
 	const [currentFounder, setCurrentFounder] =
 		useState<FounderWithPrice>(founder);
+	const [isEventActiveServer, setIsEventActiveServer] = useState<
+		boolean | null
+	>(null);
+	const [checkingStatus, setCheckingStatus] = useState<boolean>(false);
 
 	// Reset state when founder changes
 	useEffect(() => {
@@ -91,6 +95,43 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 			supabase.removeChannel(subscription);
 		};
 	}, [founder.id, isOpen]);
+
+	// Determine active status from latest event record
+	const computeIsActive = (evt: any) => {
+		if (!evt) return false;
+		const now = new Date();
+		const start = new Date(evt.start_time);
+		const end = new Date(evt.end_time);
+		return evt.status === "active" && now >= start && now <= end;
+	};
+
+	// Verify with backend that the event is still active
+	const verifyEventIsActiveLatest = async (): Promise<boolean> => {
+		try {
+			setCheckingStatus(true);
+			const { data, error } = await supabase
+				.from("events")
+				.select("*")
+				.eq("id", currentFounder.event_id)
+				.single();
+			if (error || !data) {
+				setIsEventActiveServer(false);
+				return false;
+			}
+			const active = computeIsActive(data);
+			setIsEventActiveServer(active);
+			return active;
+		} finally {
+			setCheckingStatus(false);
+		}
+	};
+
+	// Check status when modal opens or founder changes
+	useEffect(() => {
+		if (!isOpen) return;
+		verifyEventIsActiveLatest();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [isOpen, currentFounder.event_id]);
 
 	// Fetch how many shares the investor owns of this founder
 	const fetchInvestorShares = async () => {
@@ -203,6 +244,13 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 			return;
 		}
 
+		// Server-verify event status right before executing trade
+		const canTradeNow = await verifyEventIsActiveLatest();
+		if (!canTradeNow) {
+			setError("Trading has closed for this event");
+			return;
+		}
+
 		// For buy trades, check if investor has enough balance
 		if (tradeType === "buy" && estimatedCost > investorBalance) {
 			setError("Insufficient balance to complete this trade");
@@ -276,6 +324,13 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 				<h2 className="text-xl md:text-2xl font-bold mb-4 text-white">
 					{tradeType === "buy" ? "Buy" : "Sell"} {currentFounder.name} Shares
 				</h2>
+
+				{/* Status banner */}
+				{isEventActiveServer === false && (
+					<div className="mb-4 p-3 bg-red-500/20 text-red-400 rounded-lg border border-red-500/50 text-sm">
+						Trading has closed for this event
+					</div>
+				)}
 
 				{/* Info Cards */}
 				<div className="grid grid-cols-2 gap-3 mb-4">
@@ -440,20 +495,24 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 							isLoading ||
 							shares <= 0 ||
 							(tradeType === "buy" && estimatedCost > investorBalance) ||
-							(tradeType === "sell" && shares > investorShares)
+							(tradeType === "sell" && shares > investorShares) ||
+							isEventActiveServer === false ||
+							checkingStatus
 						}
 						className={`px-4 py-2 rounded-lg font-medium transition-all text-sm md:text-base ${
 							isLoading ||
 							shares <= 0 ||
 							(tradeType === "buy" && estimatedCost > investorBalance) ||
-							(tradeType === "sell" && shares > investorShares)
+							(tradeType === "sell" && shares > investorShares) ||
+							isEventActiveServer === false ||
+							checkingStatus
 								? "bg-dark-600 text-dark-400 cursor-not-allowed"
 								: tradeType === "buy"
 								? "bg-green-600 text-white hover:bg-green-700 shadow-md hover:shadow-glow"
 								: "bg-red-600 text-white hover:bg-red-700 shadow-md hover:shadow-glow"
 						}`}
 					>
-						{isLoading ? "Processing..." : "Confirm Trade"}
+						{isLoading || checkingStatus ? "Processing..." : "Confirm Trade"}
 					</button>
 				</div>
 			</div>
