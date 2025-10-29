@@ -98,11 +98,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 
 	// Determine active status from latest event record
 	const computeIsActive = (evt: any) => {
-		if (!evt) return false;
-		const now = new Date();
-		const start = new Date(evt.start_time);
-		const end = new Date(evt.end_time);
-		return evt.status === "active" && now >= start && now <= end;
+		return evt.status === "active";
 	};
 
 	// Verify with backend that the event is still active

@@ -285,10 +285,7 @@ const EventPage: React.FC = () => {
 
 	// Check if event is currently active
 	const isEventActive = (event: Event) => {
-		const now = new Date();
-		const startTime = new Date(event.start_time);
-		const endTime = new Date(event.end_time);
-		return now >= startTime && now <= endTime && event.status === "active";
+		return event.status === "active";
 	};
 
 	// Check if event hasn't started yet

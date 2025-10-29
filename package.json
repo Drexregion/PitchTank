@@ -2,15 +2,17 @@
 	"name": "pitch-tank",
 	"private": true,
 	"version": "0.1.0",
-	"type": "module",
+	"type": "commonjs",
 	"scripts": {
 		"dev": "vite",
 		"build": "tsc && vite build",
 		"lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
 		"preview": "vite preview",
-		"test": "ts-node --project tsconfig.test.json tests/runAllTests.ts",
-		"test:stress": "ts-node --project tsconfig.test.json tests/stressTest.ts",
-		"test:edge": "ts-node --project tsconfig.test.json tests/edgeCaseTests.ts"
+		"test": "node tests/launch-all.cjs",
+		"test:stress": "node tests/launch-stress.cjs",
+		"test:edge": "node tests/launch-edge.cjs",
+		"test:integration": "ts-node --project tsconfig.test.json tests/integration/supabaseStressTest.ts",
+		"test:cleanup": "ts-node --project tsconfig.test.json tests/integration/cleanupArtifacts.ts"
 	},
 	"dependencies": {
 		"@supabase/supabase-js": "^2.32.0",
@@ -29,6 +31,7 @@
 		"@typescript-eslint/parser": "^6.0.0",
 		"@vitejs/plugin-react": "^4.0.3",
 		"autoprefixer": "^10.4.15",
+		"dotenv": "^16.4.5",
 		"eslint": "^8.45.0",
 		"eslint-plugin-react-hooks": "^4.6.0",
 		"eslint-plugin-react-refresh": "^0.4.3",
