@@ -41,6 +41,19 @@ coverage/
 supabase/.temp
 .supabase
 
+# Generated reports (from reports:generate script)
+internal/reports/
+
+# Data files (exported/generated, may contain sensitive data)
+trades.csv
+trades_feedback.csv
+
+# IDE / Editor
+.windsurf/
+
+# Vercel deployment
+.vercel/
+
 # Misc
 .cache/
 tmp/
