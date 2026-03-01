@@ -27,6 +27,10 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 		{ name: "", bio: "", pitch_summary: "", logo_url: "" },
 	]);
 
+	// Leaderboard & Pricing settings
+	const [hideLeaderboardAndPrices, setHideLeaderboardAndPrices] =
+		useState<boolean>(false);
+
 	// Form status
 	const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 	const [error, setError] = useState<string | null>(null);
@@ -106,6 +110,7 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 					event_id: eventData.id,
 					snapshot_interval_seconds: 60,
 					max_price_history_points: 10000,
+					hide_leaderboard_and_prices: hideLeaderboardAndPrices,
 				});
 
 			if (settingsError) throw settingsError;
@@ -139,6 +144,7 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 			setStartTime("");
 			setEndTime("");
 			setFounders([{ name: "", bio: "", pitch_summary: "", logo_url: "" }]);
+			setHideLeaderboardAndPrices(false);
 
 			// Call the callback
 			if (onEventCreated) {
@@ -323,7 +329,111 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 						))}
 					</div>
 
-					<div className="flex justify-end">
+					{/* Leaderboard & Pricing */}
+				<div className="mb-8">
+						<h3 className="text-lg font-semibold mb-4">
+							Leaderboard &amp; Pricing
+						</h3>
+
+						<div className="border rounded-lg p-4">
+							<div className="flex items-start justify-between gap-4">
+								<div className="flex-1">
+									<div className="flex items-center gap-2 mb-1">
+										<span className="font-medium text-gray-800">
+											Simple Commitment Mode
+										</span>
+										{/* Tooltip */}
+										<div className="relative group">
+											<svg
+												className="w-4 h-4 text-gray-400 cursor-help flex-shrink-0"
+												fill="none"
+												stroke="currentColor"
+												viewBox="0 0 24 24"
+											>
+												<path
+													strokeLinecap="round"
+													strokeLinejoin="round"
+													strokeWidth={2}
+													d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+												/>
+											</svg>
+											<div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 bg-gray-900 text-white text-xs rounded-lg p-3 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10 shadow-lg">
+												<p className="font-semibold mb-1">
+													Simple Commitment Mode
+												</p>
+												<ul className="list-disc ml-4 space-y-1 text-gray-300">
+													<li>
+														Hides the leaderboard tab from
+														participants
+													</li>
+													<li>
+														Investors commit a dollar amount
+														instead of picking share quantities
+														— shares and any unspent remainder
+														are automatically returned
+													</li>
+													<li>
+														Hides share prices and market cap
+														from participants
+													</li>
+													<li>
+														Admins get a private analytics tab
+														with full market cap history and
+														peak caps per founder
+													</li>
+												</ul>
+												<div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900" />
+											</div>
+										</div>
+									</div>
+									<p className="text-sm text-gray-500">
+										{hideLeaderboardAndPrices
+											? "Participants commit a dollar amount. Share prices and leaderboard are hidden. Admins have a private analytics view."
+											: "Standard mode: participants see live share prices, market caps, and the leaderboard."}
+									</p>
+								</div>
+
+								{/* Toggle switch */}
+								<button
+									type="button"
+									onClick={() =>
+										setHideLeaderboardAndPrices((v) => !v)
+									}
+									className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+										hideLeaderboardAndPrices
+											? "bg-blue-600"
+											: "bg-gray-200"
+									}`}
+									role="switch"
+									aria-checked={hideLeaderboardAndPrices}
+								>
+									<span
+										className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+											hideLeaderboardAndPrices
+												? "translate-x-5"
+												: "translate-x-0"
+										}`}
+									/>
+								</button>
+							</div>
+
+							{hideLeaderboardAndPrices && (
+								<div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+									<p className="font-medium mb-1">
+										Simple Commitment Mode is ON
+									</p>
+									<p>
+										Investors will enter a dollar amount to commit.
+										The system automatically calculates shares based
+										on current AMM pricing, returning any unused
+										remainder.
+									</p>
+								</div>
+							)}
+						</div>
+					</div>
+
+				<div className="flex justify-end">
 						<button
 							type="submit"
 							className={`px-5 py-2 rounded-lg ${

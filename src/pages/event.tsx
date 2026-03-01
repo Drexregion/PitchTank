@@ -5,9 +5,10 @@ import { TradeModal } from "../components/TradeModal";
 import { Leaderboard } from "../components/Leaderboard";
 import { QRShareModal } from "../components/QRShareModal";
 import { FounderPriceChart } from "../components/FounderPriceChart";
+import { FounderMarketCapChart } from "../components/FounderMarketCapChart";
 import { useAuth } from "../hooks/useAuth";
 import { usePortfolio } from "../hooks/usePortfolio";
-import { Event } from "../types/Event";
+import { Event, EventSettings } from "../types/Event";
 import { FounderWithPrice } from "../types/Founder";
 import { FounderUser } from "../types/FounderUser";
 import { calculateCurrentPrice, calculateMarketCap } from "../lib/ammEngine";
@@ -24,7 +25,12 @@ const EventPage: React.FC = () => {
 	const [founders, setFounders] = useState<FounderWithPriceAndUser[]>([]);
 	const [isLoading, setIsLoading] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
-	const [activeTab, setActiveTab] = useState<"trade" | "leaderboard">("trade");
+	const [activeTab, setActiveTab] = useState<
+		"trade" | "leaderboard" | "admin-analytics"
+	>("trade");
+	const [eventSettings, setEventSettings] = useState<EventSettings | null>(
+		null
+	);
 	const [showQRModal, setShowQRModal] = useState(false);
 	const [showEventInfoModal, setShowEventInfoModal] = useState(false);
 	const [showSignInNotification, setShowSignInNotification] = useState(false);
@@ -41,7 +47,7 @@ const EventPage: React.FC = () => {
 	);
 	const [showPortfolioDropdown, setShowPortfolioDropdown] = useState(false);
 	const portfolioDropdownRef = useRef<HTMLDivElement>(null);
-	const { user } = useAuth();
+	const { user, isAdmin } = useAuth();
 	const [showTradingClosedNotification, setShowTradingClosedNotification] =
 		useState(false);
 
@@ -89,8 +95,16 @@ const EventPage: React.FC = () => {
 					.eq("id", eventId)
 					.single();
 
-				if (eventError) throw eventError;
-				setEvent(eventData);
+			if (eventError) throw eventError;
+			setEvent(eventData);
+
+			// Fetch event settings (simple mode toggle etc.)
+			const { data: settingsData } = await supabase
+				.from("event_settings")
+				.select("*")
+				.eq("event_id", eventId)
+				.single();
+			if (settingsData) setEventSettings(settingsData);
 
 				// If user is logged in, get their investor record
 				if (user) {
@@ -370,6 +384,19 @@ const EventPage: React.FC = () => {
 	});
 
 	const canTrade = event ? isEventActive(event) : false;
+	const simpleMode = eventSettings?.hide_leaderboard_and_prices ?? false;
+
+	// Tabs available in current mode
+	const availableTabs: Array<{
+		id: "trade" | "leaderboard" | "admin-analytics";
+		label: string;
+	}> = [
+		{ id: "trade", label: "Trade" },
+		...(!simpleMode ? [{ id: "leaderboard" as const, label: "Leaderboard" }] : []),
+		...(simpleMode && isAdmin
+			? [{ id: "admin-analytics" as const, label: "Analytics" }]
+			: []),
+	];
 
 	return (
 		<div className="min-h-screen relative overflow-hidden">
@@ -463,29 +490,29 @@ const EventPage: React.FC = () => {
 							</div>
 						</div>
 
-						{/* Tabs - Full Width with Padding */}
+					{/* Tabs - only render bar when there are multiple tabs */}
+					{availableTabs.length > 1 && (
 						<div className="px-4 pb-2 flex gap-2">
-							<button
-								onClick={() => setActiveTab("trade")}
-								className={`flex-1 py-3 rounded-lg font-medium transition-all ${
-									activeTab === "trade"
-										? "bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-glow"
-										: "bg-dark-800 text-dark-400 hover:text-white border border-dark-700"
-								}`}
-							>
-								Trade
-							</button>
-							<button
-								onClick={() => setActiveTab("leaderboard")}
-								className={`flex-1 py-3 rounded-lg font-medium transition-all ${
-									activeTab === "leaderboard"
-										? "bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-glow"
-										: "bg-dark-800 text-dark-400 hover:text-white border border-dark-700"
-								}`}
-							>
-								Leaderboard
-							</button>
+							{availableTabs.map((tab) => (
+								<button
+									key={tab.id}
+									onClick={() => setActiveTab(tab.id)}
+									className={`flex-1 py-3 rounded-lg font-medium transition-all ${
+										activeTab === tab.id
+											? "bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-glow"
+											: "bg-dark-800 text-dark-400 hover:text-white border border-dark-700"
+									} ${tab.id === "admin-analytics" ? "relative" : ""}`}
+								>
+									{tab.label}
+									{tab.id === "admin-analytics" && (
+										<span className="ml-1.5 text-xs bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30 rounded px-1 py-0.5">
+											Admin
+										</span>
+									)}
+								</button>
+							))}
 						</div>
+					)}
 					</div>
 				)}
 
@@ -504,8 +531,8 @@ const EventPage: React.FC = () => {
 						</div>
 					) : (
 						<>
-							{/* Tab Content */}
-							{activeTab === "trade" ? (
+						{/* Tab Content */}
+						{activeTab === "trade" ? (
 								<>
 									{/* Compact Portfolio Display - Mobile */}
 									{user && investor && (
@@ -1045,43 +1072,52 @@ const EventPage: React.FC = () => {
 																<React.Fragment key={founder.id}>
 																	{/* Founder Name Row - Full Width */}
 																	<tr
-																		className="bg-dark-800/30 cursor-pointer hover:bg-dark-800/50 transition-colors"
-																		onClick={() =>
-																			setExpandedFounderId(
-																				expandedFounderId === founder.id
-																					? null
-																					: founder.id
-																			)
-																		}
+																		className={`bg-dark-800/30 transition-colors ${
+																			simpleMode
+																				? ""
+																				: "cursor-pointer hover:bg-dark-800/50"
+																		}`}
+																		onClick={() => {
+																			if (!simpleMode)
+																				setExpandedFounderId(
+																					expandedFounderId === founder.id
+																						? null
+																						: founder.id
+																				);
+																		}}
 																	>
 																		<td colSpan={4} className="py-2 px-4">
 																			<div className="flex items-center justify-between">
 																				<div className="flex items-center gap-2">
-																					<svg
-																						className={`w-4 h-4 text-dark-400 transition-transform ${
-																							expandedFounderId === founder.id
-																								? "rotate-180"
-																								: ""
-																						}`}
-																						fill="none"
-																						stroke="currentColor"
-																						viewBox="0 0 24 24"
-																					>
-																						<path
-																							strokeLinecap="round"
-																							strokeLinejoin="round"
-																							strokeWidth={2}
-																							d="M19 9l-7 7-7-7"
-																						/>
-																					</svg>
+																					{!simpleMode && (
+																						<svg
+																							className={`w-4 h-4 text-dark-400 transition-transform ${
+																								expandedFounderId === founder.id
+																									? "rotate-180"
+																									: ""
+																							}`}
+																							fill="none"
+																							stroke="currentColor"
+																							viewBox="0 0 24 24"
+																						>
+																							<path
+																								strokeLinecap="round"
+																								strokeLinejoin="round"
+																								strokeWidth={2}
+																								d="M19 9l-7 7-7-7"
+																							/>
+																						</svg>
+																					)}
 																					<h3 className="text-base font-bold text-white">
 																						{founder.name}
 																					</h3>
 																				</div>
-																				<span className="text-xs text-dark-400">
-																					Cap:{" "}
-																					{formatCurrency(founder.market_cap)}
-																				</span>
+																				{!simpleMode && (
+																					<span className="text-xs text-dark-400">
+																						Cap:{" "}
+																						{formatCurrency(founder.market_cap)}
+																					</span>
+																				)}
 																			</div>
 																		</td>
 																	</tr>
@@ -1120,17 +1156,19 @@ const EventPage: React.FC = () => {
 																				</p>
 																			</div>
 																		</td>
-																		{/* Current Price */}
-																		<td className="py-3 px-4 w-1/4">
-																			<div className="flex flex-col items-center">
-																				<span className="text-lg font-bold text-accent-cyan mb-1">
-																					${founder.current_price.toFixed(2)}
-																				</span>
-																				<p className="text-xs text-dark-400">
-																					Price
-																				</p>
-																			</div>
-																		</td>
+																		{/* Current Price — hidden in simpleMode */}
+																		{!simpleMode && (
+																			<td className="py-3 px-4 w-1/4">
+																				<div className="flex flex-col items-center">
+																					<span className="text-lg font-bold text-accent-cyan mb-1">
+																						${founder.current_price.toFixed(2)}
+																					</span>
+																					<p className="text-xs text-dark-400">
+																						Price
+																					</p>
+																				</div>
+																			</td>
+																		)}
 																		{/* Owned Shares */}
 																		<td className="py-3 px-4 w-1/4">
 																			<div className="flex flex-col items-center">
@@ -1184,8 +1222,8 @@ const EventPage: React.FC = () => {
 																			</div>
 																		</td>
 																	</tr>
-																	{/* Price Chart Row - Expandable */}
-																	{expandedFounderId === founder.id && (
+																	{/* Price Chart Row - Expandable (hidden in simpleMode) */}
+																	{!simpleMode && expandedFounderId === founder.id && (
 																		<tr>
 																			<td
 																				colSpan={4}
@@ -1223,16 +1261,20 @@ const EventPage: React.FC = () => {
 																		Founder
 																	</span>
 																</th>
-																<th className="py-4 px-6 text-right">
-																	<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
-																		Price
-																	</span>
-																</th>
-																<th className="py-4 px-6 text-right">
-																	<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
-																		Market Cap
-																	</span>
-																</th>
+																{!simpleMode && (
+																	<th className="py-4 px-6 text-right">
+																		<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+																			Price
+																		</span>
+																	</th>
+																)}
+																{!simpleMode && (
+																	<th className="py-4 px-6 text-right">
+																		<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
+																			Market Cap
+																		</span>
+																	</th>
+																)}
 																<th className="py-4 px-6 text-right">
 																	<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
 																		Your Shares
@@ -1258,16 +1300,19 @@ const EventPage: React.FC = () => {
 
 																return (
 																	<React.Fragment key={founder.id}>
-																		<tr
-																			className="group hover:bg-gradient-to-r hover:from-dark-800/70 hover:to-dark-800/30 transition-all duration-200 cursor-pointer"
-																			onClick={() =>
+																	<tr
+																		className={`group hover:bg-gradient-to-r hover:from-dark-800/70 hover:to-dark-800/30 transition-all duration-200 ${
+																			simpleMode ? "" : "cursor-pointer"
+																		}`}
+																		onClick={() => {
+																			if (!simpleMode)
 																				setExpandedFounderId(
 																					expandedFounderId === founder.id
 																						? null
 																						: founder.id
-																				)
-																			}
-																		>
+																				);
+																		}}
+																	>
 																			{/* Profile Picture */}
 																			<td className="py-5 px-6">
 																				<button
@@ -1296,9 +1341,10 @@ const EventPage: React.FC = () => {
 																					)}
 																				</button>
 																			</td>
-																			{/* Founder Name */}
-																			<td className="py-5 px-6">
-																				<div className="flex items-center gap-3">
+								{/* Founder Name */}
+																		<td className="py-5 px-6">
+																			<div className="flex items-center gap-3">
+																				{!simpleMode && (
 																					<svg
 																						className={`w-5 h-5 text-dark-400 transition-transform flex-shrink-0 ${
 																							expandedFounderId === founder.id
@@ -1316,6 +1362,7 @@ const EventPage: React.FC = () => {
 																							d="M19 9l-7 7-7-7"
 																						/>
 																					</svg>
+																				)}
 																					<div className="w-10 h-10 bg-gradient-to-br from-accent-cyan/20 to-primary-500/20 rounded-lg flex items-center justify-center border border-accent-cyan/30">
 																						<span className="text-lg font-bold text-accent-cyan">
 																							{founder.name.charAt(0)}
@@ -1326,7 +1373,8 @@ const EventPage: React.FC = () => {
 																					</h3>
 																				</div>
 																			</td>
-																			{/* Price */}
+									{/* Price — hidden in simpleMode */}
+																		{!simpleMode && (
 																			<td className="py-5 px-6 text-right">
 																				<div className="inline-flex flex-col items-end">
 																					<span className="text-2xl font-bold text-accent-cyan">
@@ -1337,12 +1385,15 @@ const EventPage: React.FC = () => {
 																					</span>
 																				</div>
 																			</td>
-																			{/* Market Cap */}
+																		)}
+																		{/* Market Cap — hidden in simpleMode */}
+																		{!simpleMode && (
 																			<td className="py-5 px-6 text-right">
 																				<span className="text-white font-medium text-lg">
 																					{formatCurrency(founder.market_cap)}
 																				</span>
 																			</td>
+																		)}
 																			{/* Shares Owned */}
 																			<td className="py-5 px-6 text-right">
 																				<div className="inline-flex flex-col items-end">
@@ -1412,26 +1463,26 @@ const EventPage: React.FC = () => {
 																				</div>
 																			</td>
 																		</tr>
-																		{/* Price Chart Row - Expandable */}
-																		{expandedFounderId === founder.id && (
-																			<tr>
-																				<td
-																					colSpan={7}
-																					className="py-6 px-6 bg-dark-800/30"
-																				>
-																					<div className="max-w-4xl mx-auto">
-																						<div className="text-sm text-dark-400 mb-3 font-medium">
-																							Price History - {founder.name}
-																						</div>
-																						<FounderPriceChart
-																							founderId={founder.id}
-																							height={300}
-																							maxPoints={100}
-																						/>
+								{/* Price Chart Row - Expandable (hidden in simpleMode) */}
+																	{!simpleMode && expandedFounderId === founder.id && (
+																		<tr>
+																			<td
+																				colSpan={7}
+																				className="py-6 px-6 bg-dark-800/30"
+																			>
+																				<div className="max-w-4xl mx-auto">
+																					<div className="text-sm text-dark-400 mb-3 font-medium">
+																						Price History - {founder.name}
 																					</div>
-																				</td>
-																			</tr>
-																		)}
+																					<FounderPriceChart
+																						founderId={founder.id}
+																						height={300}
+																						maxPoints={100}
+																					/>
+																				</div>
+																			</td>
+																		</tr>
+																	)}
 																	</React.Fragment>
 																);
 															})}
@@ -1442,22 +1493,119 @@ const EventPage: React.FC = () => {
 										)}
 									</div>
 								</>
-							) : (
-								/* Leaderboard Tab */
-								<div className="space-y-6">
-									<div className="hidden md:block">
-										<h2 className="text-2xl font-bold text-white">
-											Event Leaderboard
-										</h2>
-										<p className="text-sm text-dark-400 mt-1">
-											Top performers ranked by portfolio value
-										</p>
-									</div>
-									<div className="w-full max-w-4xl mx-auto">
-										<Leaderboard eventId={eventId || ""} className="w-full" />
-									</div>
+						) : activeTab === "leaderboard" ? (
+							/* Leaderboard Tab */
+							<div className="space-y-6">
+								<div className="hidden md:block">
+									<h2 className="text-2xl font-bold text-white">
+										Event Leaderboard
+									</h2>
+									<p className="text-sm text-dark-400 mt-1">
+										Top performers ranked by portfolio value
+									</p>
 								</div>
-							)}
+								<div className="w-full max-w-4xl mx-auto">
+									<Leaderboard eventId={eventId || ""} className="w-full" />
+								</div>
+							</div>
+						) : (
+							/* Admin Analytics Tab (simpleMode only) */
+							<div className="space-y-6">
+								<div>
+									<h2 className="text-2xl font-bold text-white flex items-center gap-3">
+										Market Cap Analytics
+										<span className="text-sm bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30 rounded-lg px-2 py-1 font-medium">
+											Admin Only
+										</span>
+									</h2>
+									<p className="text-sm text-dark-400 mt-1">
+										Market cap history and peak values per founder — hidden from participants
+									</p>
+								</div>
+
+								{founders.length === 0 ? (
+									<div className="card-dark p-8 text-center text-dark-400">
+										No founders for this event.
+									</div>
+								) : (
+									<div className="space-y-6">
+										{/* Peak market cap summary */}
+										<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+											{founders.map((founder) => (
+												<div
+													key={founder.id}
+													className="card-dark p-4 border border-dark-700"
+												>
+													<div className="flex items-center gap-3 mb-3">
+														<div className="w-10 h-10 rounded-full overflow-hidden border border-accent-cyan/30 flex-shrink-0">
+															{founder.founder_user?.profile_picture_url ? (
+																<img
+																	src={founder.founder_user.profile_picture_url}
+																	alt={founder.name}
+																	className="w-full h-full object-cover"
+																/>
+															) : (
+																<div className="w-full h-full bg-gradient-to-br from-primary-600 to-accent-cyan flex items-center justify-center text-white font-bold">
+																	{founder.name.charAt(0)}
+																</div>
+															)}
+														</div>
+														<h3 className="text-white font-semibold truncate">
+															{founder.name}
+														</h3>
+													</div>
+													<div className="grid grid-cols-2 gap-2 text-sm">
+														<div>
+															<p className="text-dark-400 text-xs">Current Price</p>
+															<p className="text-accent-cyan font-bold">
+																${founder.current_price.toFixed(2)}
+															</p>
+														</div>
+														<div>
+															<p className="text-dark-400 text-xs">Current Market Cap</p>
+															<p className="text-white font-bold">
+																{formatCurrency(founder.market_cap)}
+															</p>
+														</div>
+													</div>
+												</div>
+											))}
+										</div>
+
+										{/* Market cap history per founder */}
+										{founders.map((founder) => (
+											<div
+												key={founder.id}
+												className="card-dark border border-dark-700 p-5"
+											>
+												<h3 className="text-white font-semibold text-lg mb-4 flex items-center gap-2">
+													<div className="w-8 h-8 rounded-full overflow-hidden border border-accent-cyan/30 flex-shrink-0">
+														{founder.founder_user?.profile_picture_url ? (
+															<img
+																src={founder.founder_user.profile_picture_url}
+																alt={founder.name}
+																className="w-full h-full object-cover"
+															/>
+														) : (
+															<div className="w-full h-full bg-gradient-to-br from-primary-600 to-accent-cyan flex items-center justify-center text-white font-bold text-sm">
+																{founder.name.charAt(0)}
+															</div>
+														)}
+													</div>
+													{founder.name} — Market Cap History
+												</h3>
+												<FounderMarketCapChart
+													founderId={founder.id}
+													founderName={founder.name}
+													height={280}
+													maxPoints={500}
+												/>
+											</div>
+										))}
+									</div>
+								)}
+							</div>
+						)}
 						</>
 					)}
 				</div>
@@ -1739,7 +1887,8 @@ const EventPage: React.FC = () => {
 								</div>
 							)}
 
-							{/* Market Stats */}
+						{/* Market Stats — hidden in simpleMode */}
+						{!simpleMode && (
 							<div className="grid grid-cols-2 gap-4 pt-4 border-t border-dark-700">
 								<div className="bg-dark-800/50 p-4 rounded-lg">
 									<p className="text-xs text-dark-400 mb-1">Current Price</p>
@@ -1754,6 +1903,7 @@ const EventPage: React.FC = () => {
 									</p>
 								</div>
 							</div>
+						)}
 
 							{/* Action Buttons */}
 							<div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-dark-700">
@@ -1828,17 +1978,18 @@ const EventPage: React.FC = () => {
 			/>
 
 			{selectedFounder && investorId && investor && (
-				<TradeModal
-					isOpen={true}
-					onClose={() => setSelectedFounder(null)}
-					founder={selectedFounder}
-					investorId={investorId}
-					investorBalance={investor.current_balance}
-					onTradeComplete={() => {
-						// Refetch will happen automatically via realtime subscriptions
-						setSelectedFounder(null);
-					}}
-				/>
+			<TradeModal
+				isOpen={true}
+				onClose={() => setSelectedFounder(null)}
+				founder={selectedFounder}
+				investorId={investorId}
+				investorBalance={investor.current_balance}
+				simpleMode={simpleMode}
+				onTradeComplete={() => {
+					// Refetch will happen automatically via realtime subscriptions
+					setSelectedFounder(null);
+				}}
+			/>
 			)}
 		</div>
 	);
