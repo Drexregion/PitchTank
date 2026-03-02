@@ -15,6 +15,10 @@ interface TradeModalProps {
 	investorId: string;
 	investorBalance: number;
 	onTradeComplete?: () => void;
+	/** When true: buy input is a dollar commitment; price/market cap are hidden */
+	simpleMode?: boolean;
+	/** Initial trade type when modal opens (default: "buy") */
+	initialTradeType?: "buy" | "sell";
 }
 
 export const TradeModal: React.FC<TradeModalProps> = ({
@@ -24,9 +28,13 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 	investorId,
 	investorBalance,
 	onTradeComplete,
+	simpleMode = false,
+	initialTradeType = "buy",
 }) => {
-	const [tradeType, setTradeType] = useState<"buy" | "sell">("buy");
+	const [tradeType, setTradeType] = useState<"buy" | "sell">(initialTradeType);
 	const [shares, setShares] = useState<number>(10);
+	// Simple-mode buy: dollar commitment
+	const [commitAmount, setCommitAmount] = useState<number>(100);
 	const [note, setNote] = useState<string>("");
 	const [estimatedCost, setEstimatedCost] = useState<number>(0);
 	const [resultingPrice, setResultingPrice] = useState<number>(0);
@@ -42,24 +50,21 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 	>(null);
 	const [checkingStatus, setCheckingStatus] = useState<boolean>(false);
 
-	// Reset state when founder changes
+	// Reset state when founder changes or initial trade type changes
 	useEffect(() => {
-		setTradeType("buy");
+		setTradeType(initialTradeType);
 		setShares(10);
+		setCommitAmount(100);
 		setNote("");
 		setError(null);
 		setSuccessMessage(null);
 		setCurrentFounder(founder);
 		fetchInvestorShares();
-	}, [founder.id, investorId]);
+	}, [founder.id, investorId, initialTradeType]);
 
-	// Set up real-time subscription for founder price updates
+	// Set up real-time subscription for founder price updates when modal is open
 	useEffect(() => {
 		if (!isOpen) return;
-
-		console.log(
-			`📡 Subscribing to real-time updates for founder: ${founder.name}`
-		);
 
 		const subscription = supabase
 			.channel(`founder_${founder.id}_updates`)
@@ -73,25 +78,16 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 				},
 				(payload) => {
 					const updatedFounder = payload.new as Founder;
-					console.log(`💹 Price update for ${founder.name}:`, {
-						old_price: currentFounder.current_price,
-						new_price: calculateCurrentPrice(updatedFounder),
-					});
-
 					setCurrentFounder({
 						...updatedFounder,
 						current_price: calculateCurrentPrice(updatedFounder),
-						market_cap: calculateMarketCap(updatedFounder, 100000),
+						market_cap: calculateMarketCap(updatedFounder),
 					});
 				}
 			)
-			.subscribe((status) => {
-				console.log(`🔌 Subscription status for ${founder.name}:`, status);
-			});
+			.subscribe();
 
-		// Clean up subscription when modal closes or founder changes
 		return () => {
-			console.log(`🔌 Unsubscribing from ${founder.name} updates`);
 			supabase.removeChannel(subscription);
 		};
 	}, [founder.id, isOpen]);
@@ -192,6 +188,37 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 		setShares(investorShares);
 	};
 
+	// Simple-mode: compute max whole shares purchasable with a dollar amount
+	const computeSharesFromCommit = (
+		amount: number
+	): { shares: number; actualCost: number; remainder: number } => {
+		let low = 0,
+			high = 50000,
+			maxShares = 0,
+			actualCost = 0;
+		while (low <= high) {
+			const mid = Math.floor((low + high) / 2);
+			if (mid === 0) {
+				low = mid + 1;
+				continue;
+			}
+			const { cost, error: simError } = simulateBuyTrade(currentFounder, mid);
+			if (!simError && cost <= amount) {
+				maxShares = mid;
+				actualCost = cost;
+				low = mid + 1;
+			} else {
+				high = mid - 1;
+			}
+		}
+		return { shares: maxShares, actualCost, remainder: amount - actualCost };
+	};
+
+	const commitResult =
+		simpleMode && tradeType === "buy"
+			? computeSharesFromCommit(commitAmount)
+			: null;
+
 	// Update cost estimate when shares or trade type changes
 	useEffect(() => {
 		if (shares <= 0) {
@@ -235,7 +262,24 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 
 	// Execute trade
 	const handleTrade = async () => {
-		if (shares <= 0) {
+		// In simple-mode buy, validate against commitAmount/commitResult instead of shares
+		const effectiveShares =
+			simpleMode && tradeType === "buy" ? (commitResult?.shares ?? 0) : shares;
+
+		if (simpleMode && tradeType === "buy") {
+			if (commitAmount <= 0) {
+				setError("Please enter a valid amount to commit");
+				return;
+			}
+			if (commitAmount > investorBalance) {
+				setError("Insufficient balance");
+				return;
+			}
+			if (effectiveShares <= 0) {
+				setError("Commit amount is too small to purchase any shares");
+				return;
+			}
+		} else if (effectiveShares <= 0) {
 			setError("Please enter a valid number of shares");
 			return;
 		}
@@ -255,13 +299,13 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 		}
 
 		// For buy trades, check if investor has enough balance
-		if (tradeType === "buy" && estimatedCost > investorBalance) {
+		if (tradeType === "buy" && !simpleMode && estimatedCost > investorBalance) {
 			setError("Insufficient balance to complete this trade");
 			return;
 		}
 
 		// For sell trades, check if investor has enough shares
-		if (tradeType === "sell" && shares > investorShares) {
+		if (tradeType === "sell" && effectiveShares > investorShares) {
 			setError("You don't own enough shares to sell");
 			return;
 		}
@@ -278,22 +322,28 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 			const accessToken =
 				session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-			// Call executeTrade edge function
-			const response = await fetch(`${supabaseUrl}/functions/v1/executeTrade`, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${accessToken}`,
-				},
-				body: JSON.stringify({
-					investor_id: investorId,
-					founder_id: founder.id,
-					shares,
-					type: tradeType,
-					event_id: founder.event_id,
-					note: trimmedNote,
-				}),
-			});
+		// Resolve effective shares (simple-mode buy uses commitment-derived shares)
+		const sharesToTrade =
+			simpleMode && tradeType === "buy"
+				? (commitResult?.shares ?? 0)
+				: shares;
+
+		// Call executeTrade edge function
+		const response = await fetch(`${supabaseUrl}/functions/v1/executeTrade`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${accessToken}`,
+			},
+			body: JSON.stringify({
+				investor_id: investorId,
+				founder_id: founder.id,
+				shares: sharesToTrade,
+				type: tradeType,
+				event_id: founder.event_id,
+				note: trimmedNote,
+			}),
+		});
 
 			const data = await response.json();
 
@@ -304,16 +354,19 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 			// Update investor shares
 			await fetchInvestorShares();
 
-			// Show success message
+		// Show success message
+		if (simpleMode && tradeType === "buy" && commitResult) {
+			const { shares: gotShares, actualCost, remainder } = commitResult;
+			setSuccessMessage(
+				`Committed $${commitAmount.toFixed(2)} — received ${gotShares.toLocaleString()} shares for $${actualCost.toFixed(2)}${remainder > 0.01 ? ` · $${remainder.toFixed(2)} returned` : ""}`
+			);
+		} else {
 			setSuccessMessage(
 				tradeType === "buy"
-					? `Successfully purchased ${shares} shares for $${estimatedCost.toFixed(
-							2
-					  )}`
-					: `Successfully sold ${shares} shares for $${estimatedCost.toFixed(
-							2
-					  )}`
+					? `Successfully purchased ${sharesToTrade} shares for $${estimatedCost.toFixed(2)}`
+					: `Successfully sold ${sharesToTrade} shares for $${estimatedCost.toFixed(2)}`
 			);
+		}
 
 			// Notify parent component
 			if (onTradeComplete) {
@@ -342,8 +395,9 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 					</div>
 				)}
 
-				{/* Info Cards */}
-				<div className="grid grid-cols-2 gap-3 mb-4">
+			{/* Info Cards */}
+			<div className={`grid gap-3 mb-4 ${simpleMode ? "grid-cols-1" : "grid-cols-2"}`}>
+				{!simpleMode && (
 					<div className="bg-dark-700 rounded-lg p-3 border border-dark-600 relative">
 						<p className="text-xs text-dark-400 mb-1 flex items-center gap-1">
 							Current Price
@@ -356,13 +410,20 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 							${currentFounder.current_price.toFixed(2)}
 						</p>
 					</div>
-					<div className="bg-dark-700 rounded-lg p-3 border border-dark-600">
-						<p className="text-xs text-dark-400 mb-1">Shares Owned</p>
-						<p className="text-lg md:text-xl font-bold text-white">
-							{investorShares.toLocaleString()}
-						</p>
-					</div>
+				)}
+				<div className="bg-dark-700 rounded-lg p-3 border border-dark-600">
+					<p className="text-xs text-dark-400 mb-1">Available Balance</p>
+					<p className="text-lg md:text-xl font-bold text-white">
+						${investorBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+					</p>
 				</div>
+				<div className="bg-dark-700 rounded-lg p-3 border border-dark-600">
+					<p className="text-xs text-dark-400 mb-1">Shares Owned</p>
+					<p className="text-lg md:text-xl font-bold text-white">
+						{investorShares.toLocaleString()}
+					</p>
+				</div>
+			</div>
 
 				{/* Buy/Sell Toggle */}
 				<div className="mb-4">
@@ -397,7 +458,70 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 					)}
 				</div>
 
-				{/* Shares Input with Max Buttons */}
+			{/* Input: commitment amount (simpleMode buy) or shares */}
+			{simpleMode && tradeType === "buy" ? (
+				<div className="mb-4">
+					<label className="block text-white mb-2 text-sm md:text-base">
+						Amount to Commit ($)
+					</label>
+					<div className="flex gap-2">
+						<input
+							type="number"
+							min="1"
+							step="1"
+							value={commitAmount}
+							onChange={(e) =>
+								setCommitAmount(Math.max(0, parseFloat(e.target.value) || 0))
+							}
+							className="input-dark flex-1"
+						/>
+						<button
+							onClick={() => setCommitAmount(Math.floor(investorBalance))}
+							className="px-3 md:px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-all text-xs md:text-sm whitespace-nowrap"
+						>
+							Commit Max
+						</button>
+					</div>
+					{/* Breakdown */}
+					{commitAmount > 0 && commitResult && (
+						<div className="mt-2 p-3 bg-dark-700/60 rounded-lg border border-dark-600 text-sm space-y-1">
+							{commitResult.shares > 0 ? (
+								<>
+									<div className="flex justify-between">
+										<span className="text-dark-400">Shares received</span>
+										<span className="text-white font-semibold">
+											{commitResult.shares.toLocaleString()}
+										</span>
+									</div>
+									<div className="flex justify-between">
+										<span className="text-dark-400">Cost</span>
+										<span className="text-accent-cyan font-semibold">
+											${commitResult.actualCost.toFixed(2)}
+										</span>
+									</div>
+									{commitResult.remainder > 0.01 && (
+										<div className="flex justify-between">
+											<span className="text-dark-400">Returned to you</span>
+											<span className="text-green-400 font-semibold">
+												${commitResult.remainder.toFixed(2)}
+											</span>
+										</div>
+									)}
+								</>
+							) : (
+								<p className="text-yellow-400 text-xs">
+									Amount too small to purchase any shares at the current price.
+								</p>
+							)}
+						</div>
+					)}
+					{commitAmount > investorBalance && (
+						<p className="text-red-400 text-xs mt-1">
+							⚠️ Exceeds your available balance of ${investorBalance.toFixed(2)}
+						</p>
+					)}
+				</div>
+			) : (
 				<div className="mb-4">
 					<label className="block text-white mb-2 text-sm md:text-base">
 						Number of Shares
@@ -429,6 +553,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 						)}
 					</div>
 				</div>
+			)}
 
 				{/* Note Input */}
 				<div className="mb-4">
@@ -455,32 +580,34 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 					)}
 				</div>
 
-				{/* Trade Summary */}
-				{shares > 0 && (
-					<div className="mb-4 p-3 md:p-4 bg-dark-700 rounded-lg border border-dark-600">
-						<div className="flex justify-between mb-2 text-sm md:text-base">
-							<span className="text-dark-300">
-								{tradeType === "buy" ? "Estimated Cost" : "Estimated Payout"}
-							</span>
-							<span className="font-bold text-accent-cyan">
-								${estimatedCost.toFixed(2)}
-							</span>
-						</div>
+			{/* Trade Summary — only for standard mode sell, or standard mode buy */}
+			{!(simpleMode && tradeType === "buy") && shares > 0 && (
+				<div className="mb-4 p-3 md:p-4 bg-dark-700 rounded-lg border border-dark-600">
+					<div className="flex justify-between mb-2 text-sm md:text-base">
+						<span className="text-dark-300">
+							{tradeType === "buy" ? "Estimated Cost" : "Estimated Payout"}
+						</span>
+						<span className="font-bold text-accent-cyan">
+							${estimatedCost.toFixed(2)}
+						</span>
+					</div>
 
+					{!simpleMode && (
 						<div className="flex justify-between text-sm md:text-base">
 							<span className="text-dark-300">Resulting Price</span>
 							<span className="font-bold text-white">
 								${resultingPrice.toFixed(2)}
 							</span>
 						</div>
+					)}
 
-						{tradeType === "buy" && estimatedCost > investorBalance && (
-							<p className="text-red-400 text-xs md:text-sm mt-2">
-								⚠️ Insufficient balance to complete this trade
-							</p>
-						)}
-					</div>
-				)}
+					{tradeType === "buy" && estimatedCost > investorBalance && (
+						<p className="text-red-400 text-xs md:text-sm mt-2">
+							⚠️ Insufficient balance to complete this trade
+						</p>
+					)}
+				</div>
+			)}
 
 				{/* Error Message */}
 				{error && (
@@ -505,33 +632,32 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 						Cancel
 					</button>
 
-					<button
-						onClick={handleTrade}
-						disabled={
-							isLoading ||
-							shares <= 0 ||
-							(tradeType === "buy" && estimatedCost > investorBalance) ||
-							(tradeType === "sell" && shares > investorShares) ||
-							isEventActiveServer === false ||
-							checkingStatus ||
-							note.trim().length === 0
+				<button
+					onClick={handleTrade}
+					disabled={(() => {
+						if (isLoading || checkingStatus || isEventActiveServer === false || note.trim().length === 0) return true;
+						if (simpleMode && tradeType === "buy") {
+							return commitAmount <= 0 || commitAmount > investorBalance || (commitResult?.shares ?? 0) <= 0;
 						}
-						className={`px-4 py-2 rounded-lg font-medium transition-all text-sm md:text-base ${
-							isLoading ||
-							shares <= 0 ||
-							(tradeType === "buy" && estimatedCost > investorBalance) ||
-							(tradeType === "sell" && shares > investorShares) ||
-							isEventActiveServer === false ||
-							checkingStatus ||
-							note.trim().length === 0
-								? "bg-dark-600 text-dark-400 cursor-not-allowed"
-								: tradeType === "buy"
-								? "bg-green-600 text-white hover:bg-green-700 shadow-md hover:shadow-glow"
-								: "bg-red-600 text-white hover:bg-red-700 shadow-md hover:shadow-glow"
-						}`}
-					>
-						{isLoading || checkingStatus ? "Processing..." : "Confirm Trade"}
-					</button>
+						return shares <= 0 || (tradeType === "buy" && estimatedCost > investorBalance) || (tradeType === "sell" && shares > investorShares);
+					})()}
+					className={`px-4 py-2 rounded-lg font-medium transition-all text-sm md:text-base ${(() => {
+						const isDisabled = isLoading || checkingStatus || isEventActiveServer === false || note.trim().length === 0
+							|| (simpleMode && tradeType === "buy"
+								? commitAmount <= 0 || commitAmount > investorBalance || (commitResult?.shares ?? 0) <= 0
+								: shares <= 0 || (tradeType === "buy" && estimatedCost > investorBalance) || (tradeType === "sell" && shares > investorShares));
+						if (isDisabled) return "bg-dark-600 text-dark-400 cursor-not-allowed";
+						return tradeType === "buy"
+							? "bg-green-600 text-white hover:bg-green-700 shadow-md hover:shadow-glow"
+							: "bg-red-600 text-white hover:bg-red-700 shadow-md hover:shadow-glow";
+					})()}`}
+				>
+					{isLoading || checkingStatus
+						? "Processing..."
+						: simpleMode && tradeType === "buy"
+						? "Confirm Commitment"
+						: "Confirm Trade"}
+				</button>
 				</div>
 			</div>
 		</div>

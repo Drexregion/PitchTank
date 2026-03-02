@@ -10,8 +10,8 @@ import {
 	calculateCurrentPrice,
 	calculateMarketCap,
 	verifyConstantProduct,
-} from "../src/lib/ammEngine";
-import { Founder } from "../src/types/Founder";
+} from "../../src/lib/ammEngine";
+import { Founder } from "../../src/types/Founder";
 
 interface TestResult {
 	testName: string;
@@ -811,4 +811,3 @@ if (require.main === module) {
 }
 
 export { runAllEdgeCaseTests, testResults };
-

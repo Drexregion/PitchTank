@@ -10,8 +10,8 @@ import {
 	simulateSellTrade,
 	calculateCurrentPrice,
 	verifyConstantProduct,
-} from "../src/lib/ammEngine";
-import { Founder } from "../src/types/Founder";
+} from "../../src/lib/ammEngine";
+import { Founder } from "../../src/types/Founder";
 
 // Test configuration
 const NUM_CONCURRENT_USERS = 100;

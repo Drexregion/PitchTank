@@ -13,6 +13,7 @@ export interface EventSettings {
   event_id: string;
   snapshot_interval_seconds: number;
   max_price_history_points: number;
+  hide_leaderboard_and_prices: boolean;
   created_at: string;
   updated_at: string;
 }

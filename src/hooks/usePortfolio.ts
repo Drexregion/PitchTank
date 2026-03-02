@@ -6,12 +6,14 @@ import { calculateCurrentPrice } from '../lib/ammEngine';
 
 type UsePortfolioOptions = {
   investorId?: string;
+  /** When provided, founders subscription is scoped to this event only (reduces re-renders from unrelated founder updates) */
+  eventId?: string;
 };
 
 /**
  * Hook to fetch and track an investor's portfolio with realtime updates
  */
-export function usePortfolio({ investorId }: UsePortfolioOptions) {
+export function usePortfolio({ investorId, eventId }: UsePortfolioOptions) {
   const [investor, setInvestor] = useState<Investor | null>(null);
   const [holdings, setHoldings] = useState<InvestorHoldingWithValue[]>([]);
   const [portfolioValue, setPortfolioValue] = useState<number>(0);
@@ -49,9 +51,6 @@ export function usePortfolio({ investorId }: UsePortfolioOptions) {
           .from('investor_holdings')
           .select('*')
           .eq('investor_id', investorData.id);
-
-          console.log("holdingsData");
-          console.log(holdingsData);
 
         if (holdingsError) {
           throw new Error(holdingsError.message);
@@ -147,13 +146,14 @@ export function usePortfolio({ investorId }: UsePortfolioOptions) {
       })
       .subscribe();
 
-    const foundersChannel = supabase.channel('founders_price_updates')
+    const foundersChannel = supabase
+      .channel(`founders_price_updates_${eventId || 'all'}`)
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
-        table: 'founders'
+        table: 'founders',
+        ...(eventId && { filter: `event_id=eq.${eventId}` }),
       }, () => {
-        // When any founder changes, refresh the portfolio to update prices
         fetchPortfolio();
       })
       .subscribe();
@@ -165,7 +165,7 @@ export function usePortfolio({ investorId }: UsePortfolioOptions) {
       supabase.removeChannel(foundersChannel);
     };
 
-  }, [investorId]);
+  }, [investorId, eventId]);
 
   return { 
     investor, 
