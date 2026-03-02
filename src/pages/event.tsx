@@ -29,7 +29,7 @@ const EventPage: React.FC = () => {
 		"trade" | "leaderboard" | "admin-analytics"
 	>("trade");
 	const [eventSettings, setEventSettings] = useState<EventSettings | null>(
-		null
+		null,
 	);
 	const [showQRModal, setShowQRModal] = useState(false);
 	const [showEventInfoModal, setShowEventInfoModal] = useState(false);
@@ -43,7 +43,7 @@ const EventPage: React.FC = () => {
 	const [sortBy, setSortBy] = useState<"price" | "alphabetical">("price");
 	const [showSortOptions, setShowSortOptions] = useState(false);
 	const [expandedFounderId, setExpandedFounderId] = useState<string | null>(
-		null
+		null,
 	);
 	const [showPortfolioDropdown, setShowPortfolioDropdown] = useState(false);
 	const portfolioDropdownRef = useRef<HTMLDivElement>(null);
@@ -95,16 +95,16 @@ const EventPage: React.FC = () => {
 					.eq("id", eventId)
 					.single();
 
-			if (eventError) throw eventError;
-			setEvent(eventData);
+				if (eventError) throw eventError;
+				setEvent(eventData);
 
-			// Fetch event settings (simple mode toggle etc.)
-			const { data: settingsData } = await supabase
-				.from("event_settings")
-				.select("*")
-				.eq("event_id", eventId)
-				.single();
-			if (settingsData) setEventSettings(settingsData);
+				// Fetch event settings (simple mode toggle etc.)
+				const { data: settingsData } = await supabase
+					.from("event_settings")
+					.select("*")
+					.eq("event_id", eventId)
+					.single();
+				if (settingsData) setEventSettings(settingsData);
 
 				// If user is logged in, get their investor record
 				if (user) {
@@ -139,7 +139,7 @@ const EventPage: React.FC = () => {
 							created_at,
 							updated_at
 						)
-					`
+					`,
 					)
 					.eq("event_id", eventId);
 
@@ -152,7 +152,7 @@ const EventPage: React.FC = () => {
 						founder_user: founder.founder_users || null,
 						current_price: calculateCurrentPrice(founder),
 						market_cap: calculateMarketCap(founder),
-					})
+					}),
 				);
 
 				// Sort by market cap (highest first)
@@ -198,7 +198,7 @@ const EventPage: React.FC = () => {
 									created_at,
 									updated_at
 								)
-							`
+							`,
 							)
 							.eq("event_id", eventId);
 
@@ -209,7 +209,7 @@ const EventPage: React.FC = () => {
 									founder_user: founder.founder_users || null,
 									current_price: calculateCurrentPrice(founder),
 									market_cap: calculateMarketCap(founder),
-								})
+								}),
 							);
 
 							// Sort by market cap (highest first)
@@ -217,7 +217,7 @@ const EventPage: React.FC = () => {
 
 							setFounders(updated);
 						}
-					}
+					},
 				)
 				.subscribe();
 
@@ -228,7 +228,7 @@ const EventPage: React.FC = () => {
 	}, [eventId, user]);
 
 	const handleSignIn = () => {
-		navigate(`/login?redirect=/events/${eventId}`);
+		navigate(`/signup?redirect=/events/${eventId}`);
 		setShowSignInNotification(false);
 	};
 
@@ -236,7 +236,7 @@ const EventPage: React.FC = () => {
 		const { data: foundersWithUser } = await supabase
 			.from("founders")
 			.select(
-				"id, name, founder_user_id, founder_users:founder_user_id (email)"
+				"id, name, founder_user_id, founder_users:founder_user_id (email)",
 			)
 			.eq("event_id", eventId);
 
@@ -244,7 +244,7 @@ const EventPage: React.FC = () => {
 			(foundersWithUser ?? []).map((f) => ({
 				founder: f.name,
 				email: (f as any).founder_users?.email ?? "—",
-			}))
+			})),
 		);
 	})();
 	// Format date for display
@@ -267,7 +267,7 @@ const EventPage: React.FC = () => {
 		const eventDate = new Date(
 			date.getFullYear(),
 			date.getMonth(),
-			date.getDate()
+			date.getDate(),
 		);
 
 		// If today, just show time
@@ -350,7 +350,7 @@ const EventPage: React.FC = () => {
 
 	const handleFounderProfileClick = (
 		founder: FounderWithPriceAndUser,
-		e: React.MouseEvent
+		e: React.MouseEvent,
 	) => {
 		e.stopPropagation();
 		setSelectedFounderForModal(founder);
@@ -384,7 +384,7 @@ const EventPage: React.FC = () => {
 	});
 
 	const canTrade = event ? isEventActive(event) : false;
-	const simpleMode = eventSettings?.hide_leaderboard_and_prices ?? false;
+	const simpleMode = eventSettings?.hide_leaderboard_and_prices ?? true;
 
 	// Tabs available in current mode
 	const availableTabs: Array<{
@@ -392,7 +392,9 @@ const EventPage: React.FC = () => {
 		label: string;
 	}> = [
 		{ id: "trade", label: "Trade" },
-		...(!simpleMode ? [{ id: "leaderboard" as const, label: "Leaderboard" }] : []),
+		...(!simpleMode
+			? [{ id: "leaderboard" as const, label: "Leaderboard" }]
+			: []),
 		...(simpleMode && isAdmin
 			? [{ id: "admin-analytics" as const, label: "Analytics" }]
 			: []),
@@ -448,23 +450,24 @@ const EventPage: React.FC = () => {
 											event.status === "active" && isEventActive(event)
 												? "bg-green-500/20 text-green-300 border border-green-500/50"
 												: isEventNotStarted(event)
-												? "bg-blue-500/20 text-blue-300 border border-blue-500/50"
-												: event.status === "completed" ||
-												  (event.status === "active" && !isEventActive(event))
-												? "bg-red-500/20 text-red-300 border border-red-500/50"
-												: "bg-yellow-500/20 text-yellow-300 border border-yellow-500/50"
+													? "bg-blue-500/20 text-blue-300 border border-blue-500/50"
+													: event.status === "completed" ||
+														  (event.status === "active" &&
+																!isEventActive(event))
+														? "bg-red-500/20 text-red-300 border border-red-500/50"
+														: "bg-yellow-500/20 text-yellow-300 border border-yellow-500/50"
 										}`}
 									>
 										{event.status === "active" && isEventActive(event)
 											? "Active"
 											: isEventNotStarted(event)
-											? `Starts ${formatEventDateShort(event.start_time)}`
-											: event.status === "active" && !isEventActive(event)
-											? "Ended"
-											: event.status === "completed"
-											? "Ended"
-											: event.status.charAt(0).toUpperCase() +
-											  event.status.slice(1)}
+												? `Starts ${formatEventDateShort(event.start_time)}`
+												: event.status === "active" && !isEventActive(event)
+													? "Ended"
+													: event.status === "completed"
+														? "Ended"
+														: event.status.charAt(0).toUpperCase() +
+															event.status.slice(1)}
 									</div>
 								</div>
 
@@ -490,29 +493,29 @@ const EventPage: React.FC = () => {
 							</div>
 						</div>
 
-					{/* Tabs - only render bar when there are multiple tabs */}
-					{availableTabs.length > 1 && (
-						<div className="px-4 pb-2 flex gap-2">
-							{availableTabs.map((tab) => (
-								<button
-									key={tab.id}
-									onClick={() => setActiveTab(tab.id)}
-									className={`flex-1 py-3 rounded-lg font-medium transition-all ${
-										activeTab === tab.id
-											? "bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-glow"
-											: "bg-dark-800 text-dark-400 hover:text-white border border-dark-700"
-									} ${tab.id === "admin-analytics" ? "relative" : ""}`}
-								>
-									{tab.label}
-									{tab.id === "admin-analytics" && (
-										<span className="ml-1.5 text-xs bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30 rounded px-1 py-0.5">
-											Admin
-										</span>
-									)}
-								</button>
-							))}
-						</div>
-					)}
+						{/* Tabs - only render bar when there are multiple tabs */}
+						{availableTabs.length > 1 && (
+							<div className="px-4 pb-2 flex gap-2">
+								{availableTabs.map((tab) => (
+									<button
+										key={tab.id}
+										onClick={() => setActiveTab(tab.id)}
+										className={`flex-1 py-3 rounded-lg font-medium transition-all ${
+											activeTab === tab.id
+												? "bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-glow"
+												: "bg-dark-800 text-dark-400 hover:text-white border border-dark-700"
+										} ${tab.id === "admin-analytics" ? "relative" : ""}`}
+									>
+										{tab.label}
+										{tab.id === "admin-analytics" && (
+											<span className="ml-1.5 text-xs bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30 rounded px-1 py-0.5">
+												Admin
+											</span>
+										)}
+									</button>
+								))}
+							</div>
+						)}
 					</div>
 				)}
 
@@ -531,8 +534,8 @@ const EventPage: React.FC = () => {
 						</div>
 					) : (
 						<>
-						{/* Tab Content */}
-						{activeTab === "trade" ? (
+							{/* Tab Content */}
+							{activeTab === "trade" ? (
 								<>
 									{/* Compact Portfolio Display - Mobile */}
 									{user && investor && (
@@ -755,7 +758,7 @@ const EventPage: React.FC = () => {
 															<div className="divide-y divide-dark-700">
 																{holdings.map((holding) => {
 																	const founder = founders.find(
-																		(f) => f.id === holding.founder_id
+																		(f) => f.id === holding.founder_id,
 																	);
 																	if (!founder) return null;
 
@@ -811,7 +814,7 @@ const EventPage: React.FC = () => {
 																							<span className="text-white font-medium ml-1">
 																								$
 																								{founder.current_price.toFixed(
-																									2
+																									2,
 																								)}
 																							</span>
 																						</div>
@@ -899,7 +902,7 @@ const EventPage: React.FC = () => {
 													<div className="flex gap-3">
 														<button
 															onClick={() =>
-																navigate(`/login?redirect=/events/${eventId}`)
+																navigate(`/signup?redirect=/events/${eventId}`)
 															}
 															className="px-5 py-2.5 rounded-lg bg-dark-800 border border-dark-700 text-white hover:bg-dark-700 transition-all"
 														>
@@ -941,117 +944,121 @@ const EventPage: React.FC = () => {
 											</p>
 										</div>
 
-										{/* Mobile: Dropdown button */}
-										<div className="relative md:hidden ml-auto">
-											<button
-												onClick={() => setShowSortOptions(!showSortOptions)}
-												className="px-4 py-2 bg-dark-800 border border-dark-700 text-white rounded-lg text-sm font-medium transition-all flex items-center gap-2"
-											>
-												<span>
-													{sortBy === "price" ? "Highest Price" : "A-Z"}
-												</span>
-												<svg
-													className="w-4 h-4"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
+										{/* Mobile: Dropdown button — hidden in simple mode */}
+										{!simpleMode && (
+											<div className="relative md:hidden ml-auto">
+												<button
+													onClick={() => setShowSortOptions(!showSortOptions)}
+													className="px-4 py-2 bg-dark-800 border border-dark-700 text-white rounded-lg text-sm font-medium transition-all flex items-center gap-2"
 												>
-													<path
-														strokeLinecap="round"
-														strokeLinejoin="round"
-														strokeWidth={2}
-														d="M19 9l-7 7-7-7"
-													/>
-												</svg>
-											</button>
-											{showSortOptions && (
-												<div className="absolute right-0 mt-2 w-48 bg-dark-800 border border-dark-700 rounded-lg shadow-lg z-10">
-													<button
-														onClick={() => {
-															setSortBy("price");
-															setShowSortOptions(false);
-														}}
-														className={`w-full px-4 py-3 text-left text-sm transition-colors rounded-t-lg ${
-															sortBy === "price"
-																? "bg-primary-600 text-white"
-																: "text-dark-300 hover:bg-dark-700"
-														}`}
+													<span>
+														{sortBy === "price" ? "Highest Price" : "A-Z"}
+													</span>
+													<svg
+														className="w-4 h-4"
+														fill="none"
+														stroke="currentColor"
+														viewBox="0 0 24 24"
 													>
-														Highest Price
-													</button>
-													<button
-														onClick={() => {
-															setSortBy("alphabetical");
-															setShowSortOptions(false);
-														}}
-														className={`w-full px-4 py-3 text-left text-sm transition-colors rounded-b-lg ${
-															sortBy === "alphabetical"
-																? "bg-primary-600 text-white"
-																: "text-dark-300 hover:bg-dark-700"
-														}`}
-													>
-														A-Z
-													</button>
-												</div>
-											)}
-										</div>
+														<path
+															strokeLinecap="round"
+															strokeLinejoin="round"
+															strokeWidth={2}
+															d="M19 9l-7 7-7-7"
+														/>
+													</svg>
+												</button>
+												{showSortOptions && (
+													<div className="absolute right-0 mt-2 w-48 bg-dark-800 border border-dark-700 rounded-lg shadow-lg z-10">
+														<button
+															onClick={() => {
+																setSortBy("price");
+																setShowSortOptions(false);
+															}}
+															className={`w-full px-4 py-3 text-left text-sm transition-colors rounded-t-lg ${
+																sortBy === "price"
+																	? "bg-primary-600 text-white"
+																	: "text-dark-300 hover:bg-dark-700"
+															}`}
+														>
+															Highest Price
+														</button>
+														<button
+															onClick={() => {
+																setSortBy("alphabetical");
+																setShowSortOptions(false);
+															}}
+															className={`w-full px-4 py-3 text-left text-sm transition-colors rounded-b-lg ${
+																sortBy === "alphabetical"
+																	? "bg-primary-600 text-white"
+																	: "text-dark-300 hover:bg-dark-700"
+															}`}
+														>
+															A-Z
+														</button>
+													</div>
+												)}
+											</div>
+										)}
 
-										{/* Desktop: Full buttons */}
-										<div className="hidden md:flex items-center gap-3">
-											<span className="text-sm text-dark-400 mr-2">
-												Sort by:
-											</span>
-											<button
-												onClick={() => setSortBy("price")}
-												className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-													sortBy === "price"
-														? "bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-lg shadow-primary-500/30"
-														: "bg-dark-800 text-dark-300 hover:text-white hover:bg-dark-700 border border-dark-700"
-												}`}
-											>
-												<div className="flex items-center gap-2">
-													<svg
-														className="w-4 h-4"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															strokeLinecap="round"
-															strokeLinejoin="round"
-															strokeWidth={2}
-															d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-														/>
-													</svg>
-													Highest Price
-												</div>
-											</button>
-											<button
-												onClick={() => setSortBy("alphabetical")}
-												className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-													sortBy === "alphabetical"
-														? "bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-lg shadow-primary-500/30"
-														: "bg-dark-800 text-dark-300 hover:text-white hover:bg-dark-700 border border-dark-700"
-												}`}
-											>
-												<div className="flex items-center gap-2">
-													<svg
-														className="w-4 h-4"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															strokeLinecap="round"
-															strokeLinejoin="round"
-															strokeWidth={2}
-															d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"
-														/>
-													</svg>
-													A-Z
-												</div>
-											</button>
-										</div>
+										{/* Desktop: Full buttons — hidden in simple mode */}
+										{!simpleMode && (
+											<div className="hidden md:flex items-center gap-3">
+												<span className="text-sm text-dark-400 mr-2">
+													Sort by:
+												</span>
+												<button
+													onClick={() => setSortBy("price")}
+													className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+														sortBy === "price"
+															? "bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-lg shadow-primary-500/30"
+															: "bg-dark-800 text-dark-300 hover:text-white hover:bg-dark-700 border border-dark-700"
+													}`}
+												>
+													<div className="flex items-center gap-2">
+														<svg
+															className="w-4 h-4"
+															fill="none"
+															stroke="currentColor"
+															viewBox="0 0 24 24"
+														>
+															<path
+																strokeLinecap="round"
+																strokeLinejoin="round"
+																strokeWidth={2}
+																d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+															/>
+														</svg>
+														Highest Price
+													</div>
+												</button>
+												<button
+													onClick={() => setSortBy("alphabetical")}
+													className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+														sortBy === "alphabetical"
+															? "bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-lg shadow-primary-500/30"
+															: "bg-dark-800 text-dark-300 hover:text-white hover:bg-dark-700 border border-dark-700"
+													}`}
+												>
+													<div className="flex items-center gap-2">
+														<svg
+															className="w-4 h-4"
+															fill="none"
+															stroke="currentColor"
+															viewBox="0 0 24 24"
+														>
+															<path
+																strokeLinecap="round"
+																strokeLinejoin="round"
+																strokeWidth={2}
+																d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"
+															/>
+														</svg>
+														A-Z
+													</div>
+												</button>
+											</div>
+										)}
 									</div>
 
 									{/* Founders Trading Table - Mobile & Desktop */}
@@ -1082,7 +1089,7 @@ const EventPage: React.FC = () => {
 																				setExpandedFounderId(
 																					expandedFounderId === founder.id
 																						? null
-																						: founder.id
+																						: founder.id,
 																				);
 																		}}
 																	>
@@ -1130,7 +1137,7 @@ const EventPage: React.FC = () => {
 																					onClick={(e) =>
 																						handleFounderProfileClick(
 																							founder,
-																							e
+																							e,
 																						)
 																					}
 																					className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center border-2 border-accent-cyan/30 hover:border-accent-cyan transition-all mb-1"
@@ -1175,8 +1182,8 @@ const EventPage: React.FC = () => {
 																				<span className="text-base font-medium text-white mb-1">
 																					{user
 																						? getOwnedShares(
-																								founder.id
-																						  ).toLocaleString()
+																								founder.id,
+																							).toLocaleString()
 																						: "-"}
 																				</span>
 																				<p className="text-xs text-dark-400">
@@ -1223,23 +1230,24 @@ const EventPage: React.FC = () => {
 																		</td>
 																	</tr>
 																	{/* Price Chart Row - Expandable (hidden in simpleMode) */}
-																	{!simpleMode && expandedFounderId === founder.id && (
-																		<tr>
-																			<td
-																				colSpan={4}
-																				className="py-4 px-4 bg-dark-800/20"
-																			>
-																				<div className="text-xs text-dark-400 mb-2 font-medium">
-																					Price History
-																				</div>
-																				<FounderPriceChart
-																					founderId={founder.id}
-																					height={200}
-																					maxPoints={50}
-																				/>
-																			</td>
-																		</tr>
-																	)}
+																	{!simpleMode &&
+																		expandedFounderId === founder.id && (
+																			<tr>
+																				<td
+																					colSpan={4}
+																					className="py-4 px-4 bg-dark-800/20"
+																				>
+																					<div className="text-xs text-dark-400 mb-2 font-medium">
+																						Price History
+																					</div>
+																					<FounderPriceChart
+																						founderId={founder.id}
+																						height={200}
+																						maxPoints={50}
+																					/>
+																				</td>
+																			</tr>
+																		)}
 																</React.Fragment>
 															))}
 														</tbody>
@@ -1300,26 +1308,26 @@ const EventPage: React.FC = () => {
 
 																return (
 																	<React.Fragment key={founder.id}>
-																	<tr
-																		className={`group hover:bg-gradient-to-r hover:from-dark-800/70 hover:to-dark-800/30 transition-all duration-200 ${
-																			simpleMode ? "" : "cursor-pointer"
-																		}`}
-																		onClick={() => {
-																			if (!simpleMode)
-																				setExpandedFounderId(
-																					expandedFounderId === founder.id
-																						? null
-																						: founder.id
-																				);
-																		}}
-																	>
+																		<tr
+																			className={`group hover:bg-gradient-to-r hover:from-dark-800/70 hover:to-dark-800/30 transition-all duration-200 ${
+																				simpleMode ? "" : "cursor-pointer"
+																			}`}
+																			onClick={() => {
+																				if (!simpleMode)
+																					setExpandedFounderId(
+																						expandedFounderId === founder.id
+																							? null
+																							: founder.id,
+																					);
+																			}}
+																		>
 																			{/* Profile Picture */}
 																			<td className="py-5 px-6">
 																				<button
 																					onClick={(e) =>
 																						handleFounderProfileClick(
 																							founder,
-																							e
+																							e,
 																						)
 																					}
 																					className="w-14 h-14 rounded-full overflow-hidden flex items-center justify-center border-2 border-accent-cyan/30 hover:border-accent-cyan transition-all shadow-lg group-hover:shadow-primary-500/50"
@@ -1341,28 +1349,28 @@ const EventPage: React.FC = () => {
 																					)}
 																				</button>
 																			</td>
-								{/* Founder Name */}
-																		<td className="py-5 px-6">
-																			<div className="flex items-center gap-3">
-																				{!simpleMode && (
-																					<svg
-																						className={`w-5 h-5 text-dark-400 transition-transform flex-shrink-0 ${
-																							expandedFounderId === founder.id
-																								? "rotate-180"
-																								: ""
-																						}`}
-																						fill="none"
-																						stroke="currentColor"
-																						viewBox="0 0 24 24"
-																					>
-																						<path
-																							strokeLinecap="round"
-																							strokeLinejoin="round"
-																							strokeWidth={2}
-																							d="M19 9l-7 7-7-7"
-																						/>
-																					</svg>
-																				)}
+																			{/* Founder Name */}
+																			<td className="py-5 px-6">
+																				<div className="flex items-center gap-3">
+																					{!simpleMode && (
+																						<svg
+																							className={`w-5 h-5 text-dark-400 transition-transform flex-shrink-0 ${
+																								expandedFounderId === founder.id
+																									? "rotate-180"
+																									: ""
+																							}`}
+																							fill="none"
+																							stroke="currentColor"
+																							viewBox="0 0 24 24"
+																						>
+																							<path
+																								strokeLinecap="round"
+																								strokeLinejoin="round"
+																								strokeWidth={2}
+																								d="M19 9l-7 7-7-7"
+																							/>
+																						</svg>
+																					)}
 																					<div className="w-10 h-10 bg-gradient-to-br from-accent-cyan/20 to-primary-500/20 rounded-lg flex items-center justify-center border border-accent-cyan/30">
 																						<span className="text-lg font-bold text-accent-cyan">
 																							{founder.name.charAt(0)}
@@ -1373,27 +1381,28 @@ const EventPage: React.FC = () => {
 																					</h3>
 																				</div>
 																			</td>
-									{/* Price — hidden in simpleMode */}
-																		{!simpleMode && (
-																			<td className="py-5 px-6 text-right">
-																				<div className="inline-flex flex-col items-end">
-																					<span className="text-2xl font-bold text-accent-cyan">
-																						${founder.current_price.toFixed(2)}
+																			{/* Price — hidden in simpleMode */}
+																			{!simpleMode && (
+																				<td className="py-5 px-6 text-right">
+																					<div className="inline-flex flex-col items-end">
+																						<span className="text-2xl font-bold text-accent-cyan">
+																							$
+																							{founder.current_price.toFixed(2)}
+																						</span>
+																						<span className="text-xs text-dark-400">
+																							per share
+																						</span>
+																					</div>
+																				</td>
+																			)}
+																			{/* Market Cap — hidden in simpleMode */}
+																			{!simpleMode && (
+																				<td className="py-5 px-6 text-right">
+																					<span className="text-white font-medium text-lg">
+																						{formatCurrency(founder.market_cap)}
 																					</span>
-																					<span className="text-xs text-dark-400">
-																						per share
-																					</span>
-																				</div>
-																			</td>
-																		)}
-																		{/* Market Cap — hidden in simpleMode */}
-																		{!simpleMode && (
-																			<td className="py-5 px-6 text-right">
-																				<span className="text-white font-medium text-lg">
-																					{formatCurrency(founder.market_cap)}
-																				</span>
-																			</td>
-																		)}
+																				</td>
+																			)}
 																			{/* Shares Owned */}
 																			<td className="py-5 px-6 text-right">
 																				<div className="inline-flex flex-col items-end">
@@ -1463,26 +1472,27 @@ const EventPage: React.FC = () => {
 																				</div>
 																			</td>
 																		</tr>
-								{/* Price Chart Row - Expandable (hidden in simpleMode) */}
-																	{!simpleMode && expandedFounderId === founder.id && (
-																		<tr>
-																			<td
-																				colSpan={7}
-																				className="py-6 px-6 bg-dark-800/30"
-																			>
-																				<div className="max-w-4xl mx-auto">
-																					<div className="text-sm text-dark-400 mb-3 font-medium">
-																						Price History - {founder.name}
-																					</div>
-																					<FounderPriceChart
-																						founderId={founder.id}
-																						height={300}
-																						maxPoints={100}
-																					/>
-																				</div>
-																			</td>
-																		</tr>
-																	)}
+																		{/* Price Chart Row - Expandable (hidden in simpleMode) */}
+																		{!simpleMode &&
+																			expandedFounderId === founder.id && (
+																				<tr>
+																					<td
+																						colSpan={7}
+																						className="py-6 px-6 bg-dark-800/30"
+																					>
+																						<div className="max-w-4xl mx-auto">
+																							<div className="text-sm text-dark-400 mb-3 font-medium">
+																								Price History - {founder.name}
+																							</div>
+																							<FounderPriceChart
+																								founderId={founder.id}
+																								height={300}
+																								maxPoints={100}
+																							/>
+																						</div>
+																					</td>
+																				</tr>
+																			)}
 																	</React.Fragment>
 																);
 															})}
@@ -1493,51 +1503,100 @@ const EventPage: React.FC = () => {
 										)}
 									</div>
 								</>
-						) : activeTab === "leaderboard" ? (
-							/* Leaderboard Tab */
-							<div className="space-y-6">
-								<div className="hidden md:block">
-									<h2 className="text-2xl font-bold text-white">
-										Event Leaderboard
-									</h2>
-									<p className="text-sm text-dark-400 mt-1">
-										Top performers ranked by portfolio value
-									</p>
-								</div>
-								<div className="w-full max-w-4xl mx-auto">
-									<Leaderboard eventId={eventId || ""} className="w-full" />
-								</div>
-							</div>
-						) : (
-							/* Admin Analytics Tab (simpleMode only) */
-							<div className="space-y-6">
-								<div>
-									<h2 className="text-2xl font-bold text-white flex items-center gap-3">
-										Market Cap Analytics
-										<span className="text-sm bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30 rounded-lg px-2 py-1 font-medium">
-											Admin Only
-										</span>
-									</h2>
-									<p className="text-sm text-dark-400 mt-1">
-										Market cap history and peak values per founder — hidden from participants
-									</p>
-								</div>
-
-								{founders.length === 0 ? (
-									<div className="card-dark p-8 text-center text-dark-400">
-										No founders for this event.
+							) : activeTab === "leaderboard" ? (
+								/* Leaderboard Tab */
+								<div className="space-y-6">
+									<div className="hidden md:block">
+										<h2 className="text-2xl font-bold text-white">
+											Event Leaderboard
+										</h2>
+										<p className="text-sm text-dark-400 mt-1">
+											Top performers ranked by portfolio value
+										</p>
 									</div>
-								) : (
-									<div className="space-y-6">
-										{/* Peak market cap summary */}
-										<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+									<div className="w-full max-w-4xl mx-auto">
+										<Leaderboard eventId={eventId || ""} className="w-full" />
+									</div>
+								</div>
+							) : (
+								/* Admin Analytics Tab (simpleMode only) */
+								<div className="space-y-6">
+									<div>
+										<h2 className="text-2xl font-bold text-white flex items-center gap-3">
+											Market Cap Analytics
+											<span className="text-sm bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30 rounded-lg px-2 py-1 font-medium">
+												Admin Only
+											</span>
+										</h2>
+										<p className="text-sm text-dark-400 mt-1">
+											Market cap history and peak values per founder — hidden
+											from participants
+										</p>
+									</div>
+
+									{founders.length === 0 ? (
+										<div className="card-dark p-8 text-center text-dark-400">
+											No founders for this event.
+										</div>
+									) : (
+										<div className="space-y-6">
+											{/* Peak market cap summary */}
+											<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+												{founders.map((founder) => (
+													<div
+														key={founder.id}
+														className="card-dark p-4 border border-dark-700"
+													>
+														<div className="flex items-center gap-3 mb-3">
+															<div className="w-10 h-10 rounded-full overflow-hidden border border-accent-cyan/30 flex-shrink-0">
+																{founder.founder_user?.profile_picture_url ? (
+																	<img
+																		src={
+																			founder.founder_user.profile_picture_url
+																		}
+																		alt={founder.name}
+																		className="w-full h-full object-cover"
+																	/>
+																) : (
+																	<div className="w-full h-full bg-gradient-to-br from-primary-600 to-accent-cyan flex items-center justify-center text-white font-bold">
+																		{founder.name.charAt(0)}
+																	</div>
+																)}
+															</div>
+															<h3 className="text-white font-semibold truncate">
+																{founder.name}
+															</h3>
+														</div>
+														<div className="grid grid-cols-2 gap-2 text-sm">
+															<div>
+																<p className="text-dark-400 text-xs">
+																	Current Price
+																</p>
+																<p className="text-accent-cyan font-bold">
+																	${founder.current_price.toFixed(2)}
+																</p>
+															</div>
+															<div>
+																<p className="text-dark-400 text-xs">
+																	Current Market Cap
+																</p>
+																<p className="text-white font-bold">
+																	{formatCurrency(founder.market_cap)}
+																</p>
+															</div>
+														</div>
+													</div>
+												))}
+											</div>
+
+											{/* Market cap history per founder */}
 											{founders.map((founder) => (
 												<div
 													key={founder.id}
-													className="card-dark p-4 border border-dark-700"
+													className="card-dark border border-dark-700 p-5"
 												>
-													<div className="flex items-center gap-3 mb-3">
-														<div className="w-10 h-10 rounded-full overflow-hidden border border-accent-cyan/30 flex-shrink-0">
+													<h3 className="text-white font-semibold text-lg mb-4 flex items-center gap-2">
+														<div className="w-8 h-8 rounded-full overflow-hidden border border-accent-cyan/30 flex-shrink-0">
 															{founder.founder_user?.profile_picture_url ? (
 																<img
 																	src={founder.founder_user.profile_picture_url}
@@ -1545,67 +1604,25 @@ const EventPage: React.FC = () => {
 																	className="w-full h-full object-cover"
 																/>
 															) : (
-																<div className="w-full h-full bg-gradient-to-br from-primary-600 to-accent-cyan flex items-center justify-center text-white font-bold">
+																<div className="w-full h-full bg-gradient-to-br from-primary-600 to-accent-cyan flex items-center justify-center text-white font-bold text-sm">
 																	{founder.name.charAt(0)}
 																</div>
 															)}
 														</div>
-														<h3 className="text-white font-semibold truncate">
-															{founder.name}
-														</h3>
-													</div>
-													<div className="grid grid-cols-2 gap-2 text-sm">
-														<div>
-															<p className="text-dark-400 text-xs">Current Price</p>
-															<p className="text-accent-cyan font-bold">
-																${founder.current_price.toFixed(2)}
-															</p>
-														</div>
-														<div>
-															<p className="text-dark-400 text-xs">Current Market Cap</p>
-															<p className="text-white font-bold">
-																{formatCurrency(founder.market_cap)}
-															</p>
-														</div>
-													</div>
+														{founder.name} — Market Cap History
+													</h3>
+													<FounderMarketCapChart
+														founderId={founder.id}
+														founderName={founder.name}
+														height={280}
+														maxPoints={500}
+													/>
 												</div>
 											))}
 										</div>
-
-										{/* Market cap history per founder */}
-										{founders.map((founder) => (
-											<div
-												key={founder.id}
-												className="card-dark border border-dark-700 p-5"
-											>
-												<h3 className="text-white font-semibold text-lg mb-4 flex items-center gap-2">
-													<div className="w-8 h-8 rounded-full overflow-hidden border border-accent-cyan/30 flex-shrink-0">
-														{founder.founder_user?.profile_picture_url ? (
-															<img
-																src={founder.founder_user.profile_picture_url}
-																alt={founder.name}
-																className="w-full h-full object-cover"
-															/>
-														) : (
-															<div className="w-full h-full bg-gradient-to-br from-primary-600 to-accent-cyan flex items-center justify-center text-white font-bold text-sm">
-																{founder.name.charAt(0)}
-															</div>
-														)}
-													</div>
-													{founder.name} — Market Cap History
-												</h3>
-												<FounderMarketCapChart
-													founderId={founder.id}
-													founderName={founder.name}
-													height={280}
-													maxPoints={500}
-												/>
-											</div>
-										))}
-									</div>
-								)}
-							</div>
-						)}
+									)}
+								</div>
+							)}
 						</>
 					)}
 				</div>
@@ -1716,25 +1733,25 @@ const EventPage: React.FC = () => {
 										event.status === "active" && isEventActive(event)
 											? "bg-green-500/20 text-green-300 border border-green-500/50"
 											: isEventNotStarted(event)
-											? "bg-blue-500/20 text-blue-300 border border-blue-500/50"
-											: event.status === "completed" ||
-											  (event.status === "active" && !isEventActive(event))
-											? "bg-red-500/20 text-red-300 border border-red-500/50"
-											: event.status === "draft"
-											? "bg-yellow-500/20 text-yellow-300 border border-yellow-500/50"
-											: "bg-red-500/20 text-red-300 border border-red-500/50"
+												? "bg-blue-500/20 text-blue-300 border border-blue-500/50"
+												: event.status === "completed" ||
+													  (event.status === "active" && !isEventActive(event))
+													? "bg-red-500/20 text-red-300 border border-red-500/50"
+													: event.status === "draft"
+														? "bg-yellow-500/20 text-yellow-300 border border-yellow-500/50"
+														: "bg-red-500/20 text-red-300 border border-red-500/50"
 									}`}
 								>
 									{event.status === "active" && isEventActive(event)
 										? "Active"
 										: isEventNotStarted(event)
-										? `Starts on ${formatEventDate(event.start_time)}`
-										: event.status === "active" && !isEventActive(event)
-										? "Ended"
-										: event.status === "completed"
-										? "Ended"
-										: event.status.charAt(0).toUpperCase() +
-										  event.status.slice(1)}
+											? `Starts on ${formatEventDate(event.start_time)}`
+											: event.status === "active" && !isEventActive(event)
+												? "Ended"
+												: event.status === "completed"
+													? "Ended"
+													: event.status.charAt(0).toUpperCase() +
+														event.status.slice(1)}
 								</div>
 							</div>
 
@@ -1887,23 +1904,23 @@ const EventPage: React.FC = () => {
 								</div>
 							)}
 
-						{/* Market Stats — hidden in simpleMode */}
-						{!simpleMode && (
-							<div className="grid grid-cols-2 gap-4 pt-4 border-t border-dark-700">
-								<div className="bg-dark-800/50 p-4 rounded-lg">
-									<p className="text-xs text-dark-400 mb-1">Current Price</p>
-									<p className="text-xl font-bold text-accent-cyan">
-										${selectedFounderForModal.current_price.toFixed(2)}
-									</p>
+							{/* Market Stats — hidden in simpleMode */}
+							{!simpleMode && (
+								<div className="grid grid-cols-2 gap-4 pt-4 border-t border-dark-700">
+									<div className="bg-dark-800/50 p-4 rounded-lg">
+										<p className="text-xs text-dark-400 mb-1">Current Price</p>
+										<p className="text-xl font-bold text-accent-cyan">
+											${selectedFounderForModal.current_price.toFixed(2)}
+										</p>
+									</div>
+									<div className="bg-dark-800/50 p-4 rounded-lg">
+										<p className="text-xs text-dark-400 mb-1">Market Cap</p>
+										<p className="text-xl font-bold text-white">
+											{formatCurrency(selectedFounderForModal.market_cap)}
+										</p>
+									</div>
 								</div>
-								<div className="bg-dark-800/50 p-4 rounded-lg">
-									<p className="text-xs text-dark-400 mb-1">Market Cap</p>
-									<p className="text-xl font-bold text-white">
-										{formatCurrency(selectedFounderForModal.market_cap)}
-									</p>
-								</div>
-							</div>
-						)}
+							)}
 
 							{/* Action Buttons */}
 							<div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-dark-700">
@@ -1978,18 +1995,18 @@ const EventPage: React.FC = () => {
 			/>
 
 			{selectedFounder && investorId && investor && (
-			<TradeModal
-				isOpen={true}
-				onClose={() => setSelectedFounder(null)}
-				founder={selectedFounder}
-				investorId={investorId}
-				investorBalance={investor.current_balance}
-				simpleMode={simpleMode}
-				onTradeComplete={() => {
-					// Refetch will happen automatically via realtime subscriptions
-					setSelectedFounder(null);
-				}}
-			/>
+				<TradeModal
+					isOpen={true}
+					onClose={() => setSelectedFounder(null)}
+					founder={selectedFounder}
+					investorId={investorId}
+					investorBalance={investor.current_balance}
+					simpleMode={simpleMode}
+					onTradeComplete={() => {
+						// Refetch will happen automatically via realtime subscriptions
+						setSelectedFounder(null);
+					}}
+				/>
 			)}
 		</div>
 	);

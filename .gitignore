@@ -43,6 +43,7 @@ supabase/.temp
 
 # Generated reports (from reports:generate script)
 internal/reports/
+internal/reports/*.pdf
 
 # Data files (exported/generated, may contain sensitive data)
 trades.csv
