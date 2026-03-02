@@ -384,7 +384,7 @@ const EventPage: React.FC = () => {
 	});
 
 	const canTrade = event ? isEventActive(event) : false;
-	const simpleMode = eventSettings?.hide_leaderboard_and_prices ?? true;
+	const simpleMode = eventSettings?.hide_leaderboard_and_prices ?? false;
 
 	// Tabs available in current mode
 	const availableTabs: Array<{
