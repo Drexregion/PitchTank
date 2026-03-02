@@ -149,17 +149,14 @@ export function usePortfolio({ investorId, eventId }: UsePortfolioOptions) {
       })
       .subscribe();
 
-    const foundersChannelConfig: { event: string; schema: string; table: string; filter?: string } = {
-      event: 'UPDATE',
-      schema: 'public',
-      table: 'founders',
-    };
-    if (eventId) {
-      foundersChannelConfig.filter = `event_id=eq.${eventId}`;
-    }
     const foundersChannel = supabase
       .channel(`founders_price_updates_${eventId || 'all'}`)
-      .on('postgres_changes', foundersChannelConfig, () => {
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'founders',
+        ...(eventId && { filter: `event_id=eq.${eventId}` }),
+      }, () => {
         fetchPortfolio();
       })
       .subscribe();
