@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { calculateCurrentPrice, calculateMarketCap } from "../lib/ammEngine";
+import { Founder } from "../types/Founder";
 
 interface LeaderboardProps {
 	eventId: string;
 	className?: string;
+	/** When provided, use these founders instead of fetching (avoids duplicate network calls) */
+	founders?: Founder[];
 }
 
 type InvestorLeaderboardEntry = {
@@ -26,6 +29,7 @@ type FounderLeaderboardEntry = {
 export const Leaderboard: React.FC<LeaderboardProps> = ({
 	eventId,
 	className = "",
+	founders: foundersProp,
 }) => {
 	const [activeTab, setActiveTab] = useState<"investors" | "founders">(
 		"investors"
@@ -39,9 +43,30 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
 	const [isLoading, setIsLoading] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
 
-	// Fetch leaderboard data
+	// Process founders into rankings (shared logic)
+	const processFoundersToRankings = (foundersList: Founder[]) => {
+		const initialPrice = 10; // $10 initial price
+		const founderEntries: FounderLeaderboardEntry[] = foundersList.map(
+			(founder) => {
+				const currentPrice = calculateCurrentPrice(founder);
+				const marketCap = calculateMarketCap(founder);
+				const priceChangePercent = (currentPrice / initialPrice - 1) * 100;
+
+				return {
+					id: founder.id,
+					name: founder.name,
+					price: currentPrice,
+					market_cap: marketCap,
+					price_change_percent: priceChangePercent,
+				};
+			}
+		);
+		return founderEntries.sort((a, b) => b.market_cap - a.market_cap);
+	};
+
+	// Fetch leaderboard data (investors only when founders provided; otherwise fetch both)
 	useEffect(() => {
-		const fetchLeaderboardData = async () => {
+		const fetchLeaderboardData = async (foundersList: Founder[]) => {
 			setIsLoading(true);
 			setError(null);
 
@@ -68,50 +93,18 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
 					throw new Error(investorsError.message);
 				}
 
-				// Fetch founders for this event
-				const { data: founders, error: foundersError } = await supabase
-					.from("founders")
-					.select("*")
-					.eq("event_id", eventId);
-
-				console.log(founders);
-
-				if (foundersError) {
-					throw new Error(foundersError.message);
-				}
-
 				// Process founder rankings
-				const initialPrice = 10; // $10 initial price
-				const founderEntries: FounderLeaderboardEntry[] = founders.map(
-					(founder) => {
-						const currentPrice = calculateCurrentPrice(founder);
-						const marketCap = calculateMarketCap(founder);
-						const priceChangePercent = (currentPrice / initialPrice - 1) * 100;
-
-						return {
-							id: founder.id,
-							name: founder.name,
-							price: currentPrice,
-							market_cap: marketCap,
-							price_change_percent: priceChangePercent,
-						};
-					}
-				);
-
-				// Sort founders by market cap (highest first)
-				const sortedFounders = founderEntries.sort(
-					(a, b) => b.market_cap - a.market_cap
-				);
+				const sortedFounders = processFoundersToRankings(foundersList);
 				setFounderRankings(sortedFounders);
 
 				// Create price lookup map for investor portfolio calculation
 				const founderPriceMap = new Map<string, number>();
-				founders.forEach((founder) => {
+				foundersList.forEach((founder) => {
 					founderPriceMap.set(founder.id, calculateCurrentPrice(founder));
 				});
 
 				// Process investor rankings
-				const investorEntries: InvestorLeaderboardEntry[] = investors.map(
+				const investorEntries: InvestorLeaderboardEntry[] = (investors ?? []).map(
 					(investor) => {
 						// Calculate portfolio value
 						let portfolioValue = 0;
@@ -152,7 +145,28 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
 			}
 		};
 
-		fetchLeaderboardData();
+		const loadData = async () => {
+			if (foundersProp && foundersProp.length > 0) {
+				// Use founders from parent - only fetch investors
+				await fetchLeaderboardData(foundersProp);
+			} else {
+				// Fetch founders first, then investors
+				const { data: founders, error: foundersError } = await supabase
+					.from("founders")
+					.select("*")
+					.eq("event_id", eventId);
+
+				if (foundersError) {
+					setError(foundersError.message);
+					setIsLoading(false);
+					return;
+				}
+
+				await fetchLeaderboardData(founders ?? []);
+			}
+		};
+
+		loadData();
 
 		// Set up realtime subscriptions for updates
 		const foundersChannel = supabase
@@ -165,8 +179,20 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
 					table: "founders",
 					filter: `event_id=eq.${eventId}`,
 				},
-				() => {
-					fetchLeaderboardData();
+				async () => {
+					// Refetch founders when using prop (parent will have updated via its subscription)
+					if (foundersProp && foundersProp.length > 0) {
+						// Parent has founders - refetch to get latest prices
+						const { data: founders } = await supabase
+							.from("founders")
+							.select("*")
+							.eq("event_id", eventId);
+						if (founders?.length) {
+							await fetchLeaderboardData(founders);
+						}
+					} else {
+						await loadData();
+					}
 				}
 			)
 			.subscribe();
@@ -181,7 +207,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
 					table: "investor_holdings",
 				},
 				() => {
-					fetchLeaderboardData();
+					loadData();
 				}
 			)
 			.subscribe();
@@ -191,7 +217,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
 			supabase.removeChannel(foundersChannel);
 			supabase.removeChannel(investorsChannel);
 		};
-	}, [eventId]);
+	}, [eventId, foundersProp?.length ?? -1]);
 
 	// Format currency
 	const formatCurrency = (value: number) => {

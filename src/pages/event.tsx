@@ -39,6 +39,9 @@ const EventPage: React.FC = () => {
 		useState<FounderWithPriceAndUser | null>(null);
 	const [selectedFounder, setSelectedFounder] =
 		useState<FounderWithPriceAndUser | null>(null);
+	const [tradeModalInitialType, setTradeModalInitialType] = useState<
+		"buy" | "sell"
+	>("buy");
 	const [investorId, setInvestorId] = useState<string | null>(null);
 	const [sortBy, setSortBy] = useState<"price" | "alphabetical">("price");
 	const [showSortOptions, setShowSortOptions] = useState(false);
@@ -47,13 +50,20 @@ const EventPage: React.FC = () => {
 	);
 	const [showPortfolioDropdown, setShowPortfolioDropdown] = useState(false);
 	const portfolioDropdownRef = useRef<HTMLDivElement>(null);
+	const eventSettingsRef = useRef<EventSettings | null>(null);
 	const { user, isAdmin } = useAuth();
+
+	// Keep ref in sync for use inside realtime callback
+	useEffect(() => {
+		eventSettingsRef.current = eventSettings;
+	}, [eventSettings]);
 	const [showTradingClosedNotification, setShowTradingClosedNotification] =
 		useState(false);
 
 	// Get investor portfolio if logged in
 	const { investor, holdings, roiPercent } = usePortfolio({
 		investorId: investorId || undefined,
+		eventId: eventId || undefined,
 	});
 
 	// Close portfolio dropdown when clicking outside
@@ -76,6 +86,7 @@ const EventPage: React.FC = () => {
 		};
 	}, [showPortfolioDropdown]);
 
+	// Fetch event, event_settings, founders once on load (eventId only - no auth dependency)
 	useEffect(() => {
 		const fetchEventDetails = async () => {
 			if (!eventId) {
@@ -103,24 +114,8 @@ const EventPage: React.FC = () => {
 					.from("event_settings")
 					.select("*")
 					.eq("event_id", eventId)
-					.single();
+					.maybeSingle();
 				if (settingsData) setEventSettings(settingsData);
-
-				// If user is logged in, get their investor record
-				if (user) {
-					const { data: investorData } = await supabase
-						.from("investors")
-						.select("*")
-						.eq("user_id", user.id)
-						.eq("event_id", eventId)
-						.single();
-
-					console.log(investorData);
-
-					if (investorData) {
-						setInvestorId(investorData.id);
-					}
-				}
 
 				// Fetch founders for this event with founder_users data
 				const { data: foundersData, error: foundersError } = await supabase
@@ -146,7 +141,7 @@ const EventPage: React.FC = () => {
 				if (foundersError) throw foundersError;
 
 				// Calculate current price and market cap for each founder
-				const foundersWithPrice: FounderWithPriceAndUser[] = foundersData.map(
+				const foundersWithPrice: FounderWithPriceAndUser[] = (foundersData ?? []).map(
 					(founder: any) => ({
 						...founder,
 						founder_user: founder.founder_users || null,
@@ -155,8 +150,11 @@ const EventPage: React.FC = () => {
 					}),
 				);
 
-				// Sort by market cap (highest first)
-				foundersWithPrice.sort((a, b) => b.market_cap - a.market_cap);
+				// Sort by market cap (highest first) — skip in simple mode to preserve DB order
+				const isSimpleMode = settingsData?.hide_leaderboard_and_prices ?? false;
+				if (!isSimpleMode) {
+					foundersWithPrice.sort((a, b) => b.market_cap - a.market_cap);
+				}
 
 				setFounders(foundersWithPrice);
 				setIsLoading(false);
@@ -212,8 +210,12 @@ const EventPage: React.FC = () => {
 								}),
 							);
 
-							// Sort by market cap (highest first)
-							updated.sort((a, b) => b.market_cap - a.market_cap);
+							// Sort by market cap (highest first) — skip in simple mode to preserve DB order
+							const isSimpleMode =
+								eventSettingsRef.current?.hide_leaderboard_and_prices ?? false;
+							if (!isSimpleMode) {
+								updated.sort((a, b) => b.market_cap - a.market_cap);
+							}
 
 							setFounders(updated);
 						}
@@ -225,28 +227,38 @@ const EventPage: React.FC = () => {
 				supabase.removeChannel(foundersChannel);
 			};
 		}
-	}, [eventId, user]);
+	}, [eventId]);
+
+	// Fetch investor record only when user is known (separate from main fetch to avoid re-fetching event/founders on auth load)
+	useEffect(() => {
+		if (!eventId || !user?.id) {
+			setInvestorId(null);
+			return;
+		}
+
+		const fetchInvestor = async () => {
+			const { data: investorData } = await supabase
+				.from("investors")
+				.select("*")
+				.eq("user_id", user.id)
+				.eq("event_id", eventId)
+				.maybeSingle();
+
+			if (investorData) {
+				setInvestorId(investorData.id);
+			} else {
+				setInvestorId(null);
+			}
+		};
+
+		fetchInvestor();
+	}, [eventId, user?.id]);
 
 	const handleSignIn = () => {
 		navigate(`/signup?redirect=/events/${eventId}`);
 		setShowSignInNotification(false);
 	};
 
-	(async () => {
-		const { data: foundersWithUser } = await supabase
-			.from("founders")
-			.select(
-				"id, name, founder_user_id, founder_users:founder_user_id (email)",
-			)
-			.eq("event_id", eventId);
-
-		console.table(
-			(foundersWithUser ?? []).map((f) => ({
-				founder: f.name,
-				email: (f as any).founder_users?.email ?? "—",
-			})),
-		);
-	})();
 	// Format date for display
 	const formatEventDate = (dateString: string) => {
 		const date = new Date(dateString);
@@ -332,6 +344,7 @@ const EventPage: React.FC = () => {
 			setShowTradingClosedNotification(true);
 			return;
 		}
+		setTradeModalInitialType("buy");
 		setSelectedFounder(founder);
 	};
 
@@ -345,6 +358,7 @@ const EventPage: React.FC = () => {
 			setShowTradingClosedNotification(true);
 			return;
 		}
+		setTradeModalInitialType("sell");
 		setSelectedFounder(founder);
 	};
 
@@ -373,18 +387,21 @@ const EventPage: React.FC = () => {
 		});
 	};
 
-	// Sort founders based on selected sort option
-	const sortedFounders = [...founders].sort((a, b) => {
-		if (sortBy === "alphabetical") {
-			return a.name.localeCompare(b.name);
-		} else {
-			// Sort by price (highest first)
-			return b.current_price - a.current_price;
-		}
-	});
-
 	const canTrade = event ? isEventActive(event) : false;
 	const simpleMode = eventSettings?.hide_leaderboard_and_prices ?? false;
+
+	// Sort founders based on selected sort option — in simple mode, preserve order (no auto-sort)
+	const sortedFounders = simpleMode
+		? founders
+		: [...founders].sort((a, b) => {
+				if (sortBy === "alphabetical") {
+					return a.name.localeCompare(b.name);
+				} else {
+					// Sort by price (highest first)
+					return b.current_price - a.current_price;
+				}
+			});
+	console.log(eventSettings);
 
 	// Tabs available in current mode
 	const availableTabs: Array<{
@@ -537,8 +554,42 @@ const EventPage: React.FC = () => {
 							{/* Tab Content */}
 							{activeTab === "trade" ? (
 								<>
-									{/* Compact Portfolio Display - Mobile */}
-									{user && investor && (
+									{/* Balance Display - simpleMode: compact balance only */}
+									{user && investor && simpleMode && (
+										<div className="mb-4 md:mb-6">
+											<div className="card-dark border border-accent-cyan/30 shadow-glow overflow-hidden">
+												<div className="p-5 md:p-6 flex items-center justify-between gap-4">
+													<div className="flex items-center gap-4">
+														<div className="w-12 h-12 bg-gradient-to-br from-accent-cyan to-primary-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
+															<svg
+																className="w-6 h-6 text-white"
+																fill="none"
+																stroke="currentColor"
+																viewBox="0 0 24 24"
+															>
+																<path
+																	strokeLinecap="round"
+																	strokeLinejoin="round"
+																	strokeWidth={2}
+																	d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+																/>
+															</svg>
+														</div>
+														<div>
+															<p className="text-xs font-medium text-dark-400 uppercase tracking-wide mb-1">
+																Your Balance
+															</p>
+															<p className="text-2xl md:text-3xl font-bold text-accent-cyan">
+																{formatCurrency(investor.current_balance)}
+															</p>
+														</div>
+													</div>
+												</div>
+											</div>
+										</div>
+									)}
+									{/* Compact Portfolio Display - Mobile (hidden in simpleMode) */}
+									{user && investor && !simpleMode && (
 										<div
 											className="mb-4 md:mb-6 relative"
 											ref={portfolioDropdownRef}
@@ -799,57 +850,63 @@ const EventPage: React.FC = () => {
 																								{holding.shares.toLocaleString()}
 																							</span>
 																						</div>
-																						<div>
-																							<span className="text-dark-400">
-																								Avg Price:
-																							</span>
-																							<span className="text-white font-medium ml-1">
-																								${holding.cost_basis.toFixed(2)}
-																							</span>
-																						</div>
-																						<div>
-																							<span className="text-dark-400">
-																								Current:
-																							</span>
-																							<span className="text-white font-medium ml-1">
-																								$
-																								{founder.current_price.toFixed(
-																									2,
-																								)}
-																							</span>
-																						</div>
-																						<div>
-																							<span className="text-dark-400">
-																								Value:
-																							</span>
-																							<span className="text-accent-cyan font-medium ml-1">
-																								{formatCurrency(currentValue)}
-																							</span>
-																						</div>
+																						{!simpleMode && (
+																							<>
+																								<div>
+																									<span className="text-dark-400">
+																										Avg Price:
+																									</span>
+																									<span className="text-white font-medium ml-1">
+																										${holding.cost_basis.toFixed(2)}
+																									</span>
+																								</div>
+																								<div>
+																									<span className="text-dark-400">
+																										Current:
+																									</span>
+																									<span className="text-white font-medium ml-1">
+																										$
+																										{founder.current_price.toFixed(
+																											2,
+																										)}
+																									</span>
+																								</div>
+																								<div>
+																									<span className="text-dark-400">
+																										Value:
+																									</span>
+																									<span className="text-accent-cyan font-medium ml-1">
+																										{formatCurrency(currentValue)}
+																									</span>
+																								</div>
+																							</>
+																						)}
 																					</div>
 																				</div>
-																				<div className="text-right flex-shrink-0">
-																					<div
-																						className={`text-sm font-bold ${
-																							profitLoss >= 0
-																								? "text-green-400"
-																								: "text-red-400"
-																						}`}
-																					>
-																						{profitLoss >= 0 ? "+" : ""}
-																						{formatCurrency(profitLoss)}
+																				{!simpleMode && (
+																					<div className="text-right flex-shrink-0">
+																						<div
+																							className={`text-sm font-bold ${
+																								profitLoss >= 0
+																									? "text-green-400"
+																									: "text-red-400"
+																							}`}
+																						>
+																							{profitLoss >= 0 ? "+" : ""}
+																							{formatCurrency(profitLoss)}
+																						</div>
+																						<div
+																							className={`text-xs font-medium ${
+																								profitLoss >= 0
+																									? "text-green-400"
+																									: "text-red-400"
+																							}`}
+																						>
+																							{profitLoss >= 0 ? "+" : ""}
+																							{profitLossPercent.toFixed(1)}%
+																						</div>
 																					</div>
-																					<div
-																						className={`text-xs font-medium ${
-																							profitLoss >= 0
-																								? "text-green-400"
-																								: "text-red-400"
-																						}`}
-																					>
-																						{profitLoss >= 0 ? "+" : ""}
-																						{profitLossPercent.toFixed(1)}%
-																					</div>
-																				</div>
+																				)}
 																			</div>
 																		</div>
 																	);
@@ -1515,7 +1572,7 @@ const EventPage: React.FC = () => {
 										</p>
 									</div>
 									<div className="w-full max-w-4xl mx-auto">
-										<Leaderboard eventId={eventId || ""} className="w-full" />
+										<Leaderboard eventId={eventId || ""} founders={founders} className="w-full" />
 									</div>
 								</div>
 							) : (
@@ -2002,6 +2059,7 @@ const EventPage: React.FC = () => {
 					investorId={investorId}
 					investorBalance={investor.current_balance}
 					simpleMode={simpleMode}
+					initialTradeType={tradeModalInitialType}
 					onTradeComplete={() => {
 						// Refetch will happen automatically via realtime subscriptions
 						setSelectedFounder(null);

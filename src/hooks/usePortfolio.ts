@@ -52,9 +52,6 @@ export function usePortfolio({ investorId, eventId }: UsePortfolioOptions) {
           .select('*')
           .eq('investor_id', investorData.id);
 
-          console.log("holdingsData");
-          console.log(holdingsData);
-
         if (holdingsError) {
           throw new Error(holdingsError.message);
         }

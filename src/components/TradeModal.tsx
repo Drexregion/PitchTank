@@ -17,6 +17,8 @@ interface TradeModalProps {
 	onTradeComplete?: () => void;
 	/** When true: buy input is a dollar commitment; price/market cap are hidden */
 	simpleMode?: boolean;
+	/** Initial trade type when modal opens (default: "buy") */
+	initialTradeType?: "buy" | "sell";
 }
 
 export const TradeModal: React.FC<TradeModalProps> = ({
@@ -27,8 +29,9 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 	investorBalance,
 	onTradeComplete,
 	simpleMode = false,
+	initialTradeType = "buy",
 }) => {
-	const [tradeType, setTradeType] = useState<"buy" | "sell">("buy");
+	const [tradeType, setTradeType] = useState<"buy" | "sell">(initialTradeType);
 	const [shares, setShares] = useState<number>(10);
 	// Simple-mode buy: dollar commitment
 	const [commitAmount, setCommitAmount] = useState<number>(100);
@@ -47,9 +50,9 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 	>(null);
 	const [checkingStatus, setCheckingStatus] = useState<boolean>(false);
 
-	// Reset state when founder changes
+	// Reset state when founder changes or initial trade type changes
 	useEffect(() => {
-		setTradeType("buy");
+		setTradeType(initialTradeType);
 		setShares(10);
 		setCommitAmount(100);
 		setNote("");
@@ -57,15 +60,11 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 		setSuccessMessage(null);
 		setCurrentFounder(founder);
 		fetchInvestorShares();
-	}, [founder.id, investorId]);
+	}, [founder.id, investorId, initialTradeType]);
 
-	// Set up real-time subscription for founder price updates
+	// Set up real-time subscription for founder price updates when modal is open
 	useEffect(() => {
 		if (!isOpen) return;
-
-		console.log(
-			`📡 Subscribing to real-time updates for founder: ${founder.name}`
-		);
 
 		const subscription = supabase
 			.channel(`founder_${founder.id}_updates`)
@@ -79,25 +78,16 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 				},
 				(payload) => {
 					const updatedFounder = payload.new as Founder;
-					console.log(`💹 Price update for ${founder.name}:`, {
-						old_price: currentFounder.current_price,
-						new_price: calculateCurrentPrice(updatedFounder),
-					});
-
 					setCurrentFounder({
 						...updatedFounder,
 						current_price: calculateCurrentPrice(updatedFounder),
-						market_cap: calculateMarketCap(updatedFounder, 100000),
+						market_cap: calculateMarketCap(updatedFounder),
 					});
 				}
 			)
-			.subscribe((status) => {
-				console.log(`🔌 Subscription status for ${founder.name}:`, status);
-			});
+			.subscribe();
 
-		// Clean up subscription when modal closes or founder changes
 		return () => {
-			console.log(`🔌 Unsubscribing from ${founder.name} updates`);
 			supabase.removeChannel(subscription);
 		};
 	}, [founder.id, isOpen]);
@@ -421,6 +411,12 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 						</p>
 					</div>
 				)}
+				<div className="bg-dark-700 rounded-lg p-3 border border-dark-600">
+					<p className="text-xs text-dark-400 mb-1">Available Balance</p>
+					<p className="text-lg md:text-xl font-bold text-white">
+						${investorBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+					</p>
+				</div>
 				<div className="bg-dark-700 rounded-lg p-3 border border-dark-600">
 					<p className="text-xs text-dark-400 mb-1">Shares Owned</p>
 					<p className="text-lg md:text-xl font-bold text-white">
