@@ -14,7 +14,9 @@
 		"test:stress": "node tests/launch-stress.cjs",
 		"test:edge": "node tests/launch-edge.cjs",
 		"test:integration": "ts-node --project tsconfig.test.json tests/integration/supabaseStressTest.ts",
-		"test:cleanup": "ts-node --project tsconfig.test.json tests/integration/cleanupArtifacts.ts",
+		"test:integration:simple": "ts-node --project tsconfig.test.json internal/integration/supabaseSimpleModeStressTest.ts",
+		"test:cleanup": "ts-node --project tsconfig.test.json internal/integration/cleanupArtifacts.ts",
+		"admin:reset-event": "ts-node --project tsconfig.test.json internal/admin/resetEventTrading.ts",
 		"reports:generate": "node internal/data_processing/generateFounderReports.js"
 	},
 	"dependencies": {
