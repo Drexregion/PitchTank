@@ -17,7 +17,8 @@
 		"test:integration:simple": "ts-node --project tsconfig.test.json internal/integration/supabaseSimpleModeStressTest.ts",
 		"test:cleanup": "ts-node --project tsconfig.test.json internal/integration/cleanupArtifacts.ts",
 		"admin:reset-event": "ts-node --project tsconfig.test.json internal/admin/resetEventTrading.ts",
-		"reports:generate": "node internal/data_processing/generateFounderReports.js"
+		"reports:generate": "node internal/data_processing/generateFounderReports.js",
+		"feedback:flag-unuseful": "node internal/data_processing/flagNegativeFeedback.js"
 	},
 	"dependencies": {
 		"@supabase/supabase-js": "^2.32.0",
