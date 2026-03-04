@@ -13,12 +13,12 @@ const openaiApiKey = process.env.OPENAI_API_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
 	throw new Error(
-		"Missing Supabase credentials. Ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set."
+		"Missing Supabase credentials. Ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set.",
 	);
 }
 if (!openaiApiKey) {
 	throw new Error(
-		"Missing OpenAI API key. Set OPENAI_API_KEY in your environment."
+		"Missing OpenAI API key. Set OPENAI_API_KEY in your environment.",
 	);
 }
 
@@ -73,13 +73,13 @@ async function fetchAll(eventId) {
 				supabase
 					.from("trades")
 					.select(
-						"id, founder_id, investor_id, note, amount, shares, price_per_share, created_at"
+						"id, founder_id, investor_id, note, amount, shares, price_per_share, created_at",
 					)
 					.in("founder_id", founderIds)
 					.order("created_at", { ascending: true }),
 				supabase
 					.from("price_history")
-					.select("founder_id, price, recorded_at")
+					.select("founder_id, price, shares_in_pool, recorded_at")
 					.in("founder_id", founderIds)
 					.order("recorded_at", { ascending: true }),
 			]);
@@ -93,12 +93,12 @@ async function fetchAll(eventId) {
 			supabase
 				.from("trades")
 				.select(
-					"id, founder_id, investor_id, note, amount, shares, price_per_share, created_at"
+					"id, founder_id, investor_id, note, amount, shares, price_per_share, created_at",
 				)
 				.order("created_at", { ascending: true }),
 			supabase
 				.from("price_history")
-				.select("founder_id, price, recorded_at")
+				.select("founder_id, price, shares_in_pool, recorded_at")
 				.order("recorded_at", { ascending: true }),
 		]);
 		if (tradesRes.error) throw tradesRes.error;
@@ -136,6 +136,8 @@ async function fetchBufferFromUrl(url) {
 	}
 }
 
+const INITIAL_SHARES = 100000;
+
 function downsampleSeries(labels, data, maxPoints = 300) {
 	if (labels.length <= maxPoints) return { labels, data };
 	const step = Math.ceil(labels.length / maxPoints);
@@ -148,7 +150,22 @@ function downsampleSeries(labels, data, maxPoints = 300) {
 	return { labels: dsLabels, data: dsData };
 }
 
-async function createPriceChartPng(labels, data) {
+/**
+ * Compute market cap from price history: marketCap = price * (initialShares - shares_in_pool)
+ * Matches calculateMarketCap in src/lib/ammEngine.ts
+ */
+function computeMarketCapFromHistory(priceHistoryPoints) {
+	return (priceHistoryPoints || [])
+		.filter((p) => p.shares_in_pool != null && p.price != null)
+		.map((p) => {
+			const price = Number(p.price);
+			const sharesInPool = Number(p.shares_in_pool);
+			const sharesIssued = INITIAL_SHARES - sharesInPool;
+			return { x: parseTs(p.recorded_at), y: price * sharesIssued };
+		});
+}
+
+async function createMarketCapChartPng(labels, data) {
 	if (!labels.length || !data.length) return null;
 	const { labels: l2, data: d2 } = downsampleSeries(labels, data, 300);
 	const chartConfig = {
@@ -157,7 +174,7 @@ async function createPriceChartPng(labels, data) {
 			labels: l2,
 			datasets: [
 				{
-					label: "Price",
+					label: "Market Cap",
 					data: d2,
 					borderColor: "#2563eb",
 					backgroundColor: "rgba(37,99,235,0.15)",
@@ -178,6 +195,13 @@ async function createPriceChartPng(labels, data) {
 					titleColor: "#ffffff",
 					bodyColor: "#ffffff",
 					footerColor: "#ffffff",
+					callbacks: {
+						label: (ctx) =>
+							`Market Cap: $${Number(ctx.raw).toLocaleString("en-US", {
+								minimumFractionDigits: 0,
+								maximumFractionDigits: 0,
+							})}`,
+					},
 				},
 			},
 			scales: {
@@ -197,8 +221,12 @@ async function createPriceChartPng(labels, data) {
 					display: true,
 					beginAtZero: false,
 					grid: { color: "rgba(148,163,184,0.2)" },
-					ticks: { color: "#ffffff" },
-					title: { display: true, text: "Price", color: "#ffffff" },
+					ticks: {
+						color: "#ffffff",
+						callback: (v) =>
+							v >= 1e6 ? `$${v / 1e6}M` : v >= 1e3 ? `$${v / 1e3}K` : `$${v}`,
+					},
+					title: { display: true, text: "Market Cap", color: "#ffffff" },
 				},
 			},
 		},
@@ -246,14 +274,12 @@ function buildRawNotesRows(tradesWithNotes, investorsById) {
 			const pricePerShare = Number(t.price_per_share || 0);
 			// Determine trade type solely from amount: negative => Sell, otherwise => Buy
 			let type = amount < 0 ? "Sell" : "Buy";
-			const name =
-				investorsById.get(t.investor_id)?.name || String(t.investor_id || "—");
 			let amountDisplay = "—";
 			if (amount !== 0) {
 				amountDisplay = formatCurrency(Math.abs(amount));
 			} else if (shares !== 0 && pricePerShare > 0) {
 				amountDisplay = `${formatNumber(Math.abs(shares))} @ ${formatCurrency(
-					pricePerShare
+					pricePerShare,
 				)}`;
 			} else if (shares !== 0) {
 				amountDisplay = `${formatNumber(Math.abs(shares))} shares`;
@@ -266,7 +292,6 @@ function buildRawNotesRows(tradesWithNotes, investorsById) {
 				typeClass,
 				amount: amountDisplay,
 				note: String(t.note || "—"),
-				name,
 			};
 		});
 	return rows;
@@ -275,7 +300,7 @@ function buildRawNotesRows(tradesWithNotes, investorsById) {
 async function summarizeAndSelectFeedback(
 	founder,
 	investorById,
-	tradesWithNotes
+	tradesWithNotes,
 ) {
 	if (!tradesWithNotes.length) {
 		return {
@@ -306,7 +331,7 @@ async function summarizeAndSelectFeedback(
 			content: `Founder: ${
 				founder.name
 			}\n\nTrade feedback context (JSON array):\n${JSON.stringify(
-				context
+				context,
 			)}\n\nTask: 1) Summarize the overall feedback in 4-6 sentences. 2) Select 3-7 of the most useful feedback notes. Prefer notes that are specific, constructive, and actionable.\n\nReturn JSON with keys: summary (string), selected_feedback (array of {trade_id, investor_name, note, reason}).`,
 		},
 	];
@@ -343,23 +368,19 @@ function buildFounderReportHtml({
 	selectedFeedback,
 	rawNotesRows,
 }) {
-	const safePitch = (founder.pitch_summary || "—").toString();
 	const safeSummary = (feedbackSummary || "—").toString();
 	const notesHtml =
 		Array.isArray(selectedFeedback) && selectedFeedback.length
 			? selectedFeedback
 					.map((item) => {
-						const who = item.investor_name
-							? ` <span class="note-meta">(${item.investor_name})</span>`
-							: "";
 						const reason = item.reason
 							? `<div class="note-reason">Why included: ${String(
-									item.reason
-							  )}</div>`
+									item.reason,
+								)}</div>`
 							: "";
 						return `<li class="note-item"><div class="note">${String(
-							item.note
-						)}</div>${who}${reason}</li>`;
+							item.note,
+						)}</div>${reason}</li>`;
 					})
 					.join("")
 			: '<div class="muted">No notable written feedback was selected.</div>';
@@ -521,17 +542,12 @@ function buildFounderReportHtml({
 
 			<div class="grid">
 				<div class="section">
-					<h2>Pitch Summary</h2>
-					<div class="card">${safePitch}</div>
-				</div>
-
-				<div class="section">
-					<h2>Price History</h2>
+					<h2>Market Cap History</h2>
 					<div class="card">
 						${
 							chartDataUrl
-								? `<img class="chart" src="${chartDataUrl}" alt="Price chart" />`
-								: `<div class="chart placeholder">No price history available</div>`
+								? `<img class="chart" src="${chartDataUrl}" alt="Market cap chart" />`
+								: `<div class="chart placeholder">No market cap data available</div>`
 						}
 					</div>
 				</div>
@@ -547,7 +563,7 @@ function buildFounderReportHtml({
 				</div>
 
 				<div class="section">
-					<h2>Trades with Valid Notes</h2>
+					<h2>Trades with Feedback</h2>
 					<div class="card" style="padding:0;">
 						<table class="table">
 							<thead>
@@ -556,7 +572,6 @@ function buildFounderReportHtml({
 									<th style="width:80px;">Type</th>
 									<th style="width:120px;">Amount</th>
 									<th>Note</th>
-									<th style="width:180px;">Name</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -568,9 +583,8 @@ function buildFounderReportHtml({
 										<td><span class="${r.typeClass}">${r.type}</span></td>
 										<td>${r.amount}</td>
 										<td>${r.note}</td>
-										<td>${r.name}</td>
 									</tr>
-								`
+								`,
 									)
 									.join("")}
 							</tbody>
@@ -616,7 +630,12 @@ function getEventIdFromArgs() {
 }
 
 async function main() {
-	const eventId = "9992807d-612c-4495-ba80-3ad061a7e075";
+	const eventId = getEventIdFromArgs();
+	if (!eventId) {
+		throw new Error(
+			"Event ID required. Use --event <id>, --event-id <id>, or set EVENT_ID env var.",
+		);
+	}
 	const { founders, investors, trades, priceHistory } = await fetchAll(eventId);
 	const investorsById = new Map(investors.map((i) => [i.id, i]));
 	const tradesByFounder = groupBy(trades, (t) => t.founder_id);
@@ -638,19 +657,17 @@ async function main() {
 		const feedback = await summarizeAndSelectFeedback(
 			founder,
 			investorsById,
-			tradesWithNotes
+			tradesWithNotes,
 		);
 
-		const founderPrices = (pricesByFounder.get(founder.id) || []).map((p) => ({
-			x: parseTs(p.recorded_at),
-			y: Number(p.price || 0),
-		}));
-		founderPrices.sort((a, b) => a.x - b.x);
-		const labels = founderPrices.map((p) => formatTimeHM(p.x));
-		const data = founderPrices.map((p) => p.y);
+		const founderPriceHistory = pricesByFounder.get(founder.id) || [];
+		const marketCapPoints = computeMarketCapFromHistory(founderPriceHistory);
+		marketCapPoints.sort((a, b) => a.x - b.x);
+		const labels = marketCapPoints.map((p) => formatTimeHM(p.x));
+		const data = marketCapPoints.map((p) => p.y);
 
 		const [chartBuffer, logoRes] = await Promise.all([
-			createPriceChartPng(labels, data),
+			createMarketCapChartPng(labels, data),
 			fetchBufferFromUrl(founder.logo_url),
 		]);
 

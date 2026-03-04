@@ -1,3 +1,14 @@
+/**
+ * PitchTank Analytics – Core metrics, timing, holdings, awards.
+ *
+ * Usage:
+ *   node internal/data_processing/analyzeData.js [--event <eventId>]
+ *   node internal/data_processing/analyzeData.js [--event-id <eventId>]
+ *   EVENT_ID=<eventId> node internal/data_processing/analyzeData.js
+ *
+ * If event_id is provided, only data for that event is analyzed.
+ * If omitted, all data across events is analyzed.
+ */
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
 dotenv.config();
@@ -107,20 +118,38 @@ function findMinBetween(prices, start, end) {
 	return found ? min : null;
 }
 
-async function fetchAll() {
+function getEventIdFromArgs() {
+	const args = process.argv.slice(2);
+	for (let i = 0; i < args.length; i++) {
+		const a = args[i];
+		if (a === "--event" || a === "--event-id") return args[i + 1];
+		if (a && a.startsWith("--event=")) return a.split("=")[1];
+		if (a && a.startsWith("--event-id=")) return a.split("=")[1];
+		if (a && !a.startsWith("--")) return a;
+	}
+	return process.env.EVENT_ID || null;
+}
+
+async function fetchAll(eventId) {
+	const tradesQuery = supabase
+		.from("trades")
+		.select("*")
+		.order("created_at", { ascending: true });
+	const investorsQuery = supabase.from("investors").select("*");
+	const foundersQuery = supabase.from("founders").select("*");
+	const pricesQuery = supabase
+		.from("price_history")
+		.select("*")
+		.order("recorded_at", { ascending: true });
+	const holdingsQuery = supabase.from("investor_holdings").select("*");
+
 	const [tradesRes, investorsRes, foundersRes, pricesRes, holdingsRes] =
 		await Promise.all([
-			supabase
-				.from("trades")
-				.select("*")
-				.order("created_at", { ascending: true }),
-			supabase.from("investors").select("*"),
-			supabase.from("founders").select("*"),
-			supabase
-				.from("price_history")
-				.select("*")
-				.order("recorded_at", { ascending: true }),
-			supabase.from("investor_holdings").select("*"),
+			eventId ? tradesQuery.eq("event_id", eventId) : tradesQuery,
+			eventId ? investorsQuery.eq("event_id", eventId) : investorsQuery,
+			eventId ? foundersQuery.eq("event_id", eventId) : foundersQuery,
+			eventId ? pricesQuery.eq("event_id", eventId) : pricesQuery,
+			holdingsQuery,
 		]);
 
 	if (tradesRes.error) throw tradesRes.error;
@@ -129,12 +158,21 @@ async function fetchAll() {
 	if (pricesRes.error) throw pricesRes.error;
 	if (holdingsRes.error) throw holdingsRes.error;
 
+	let holdings = holdingsRes.data || [];
+	if (eventId) {
+		const investorIds = new Set((investorsRes.data || []).map((i) => i.id));
+		const founderIds = new Set((foundersRes.data || []).map((f) => f.id));
+		holdings = holdings.filter(
+			(h) => investorIds.has(h.investor_id) && founderIds.has(h.founder_id)
+		);
+	}
+
 	return {
 		trades: tradesRes.data || [],
 		investors: investorsRes.data || [],
 		founders: foundersRes.data || [],
 		priceHistory: pricesRes.data || [],
-		holdings: holdingsRes.data || [],
+		holdings,
 	};
 }
 
@@ -411,8 +449,14 @@ function computeFounderNotes(trades) {
 }
 
 async function main() {
+	const eventId = getEventIdFromArgs();
 	const { trades, investors, founders, priceHistory, holdings } =
-		await fetchAll();
+		await fetchAll(eventId);
+
+	if (eventId) {
+		// eslint-disable-next-line no-console
+		console.log(`\nAnalyzing event: ${eventId}\n`);
+	}
 	const investorsById = mapById(investors);
 	const foundersById = mapById(founders);
 	const pricesByFounder = groupBy(priceHistory, (p) => p.founder_id);

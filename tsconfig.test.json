@@ -7,7 +7,7 @@
 		"resolveJsonModule": true,
 		"moduleResolution": "node"
 	},
-	"include": ["tests/**/*", "src/lib/**/*", "src/types/**/*"],
+	"include": ["tests/**/*", "internal/**/*", "src/lib/**/*", "src/types/**/*"],
 	"exclude": ["node_modules"]
 }
 
