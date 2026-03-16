@@ -59,6 +59,11 @@ const EventPage: React.FC = () => {
 	}, [eventSettings]);
 	const [showTradingClosedNotification, setShowTradingClosedNotification] =
 		useState(false);
+	const [showClosingCountdown, setShowClosingCountdown] = useState(false);
+	const [closingSecondsLeft, setClosingSecondsLeft] = useState(0);
+	const [totalClosingSeconds, setTotalClosingSeconds] = useState(60);
+	const [showTradingStartedToast, setShowTradingStartedToast] = useState(false);
+	const prevEventRef = useRef<Event | null>(null);
 
 	// Get investor portfolio if logged in
 	const { investor, holdings, roiPercent } = usePortfolio({
@@ -108,6 +113,7 @@ const EventPage: React.FC = () => {
 
 				if (eventError) throw eventError;
 				setEvent(eventData);
+				prevEventRef.current = eventData;
 
 				// Fetch event settings (simple mode toggle etc.)
 				const { data: settingsData } = await supabase
@@ -228,6 +234,68 @@ const EventPage: React.FC = () => {
 			};
 		}
 	}, [eventId]);
+
+	// Realtime subscription for event status changes (start/end detection + countdown)
+	useEffect(() => {
+		if (!eventId) return;
+		const eventChannel = supabase
+			.channel(`event_status_${eventId}`)
+			.on(
+				"postgres_changes",
+				{
+					event: "UPDATE",
+					schema: "public",
+					table: "events",
+					filter: `id=eq.${eventId}`,
+				},
+				(payload) => {
+					const updated = payload.new as Event;
+					const prev = prevEventRef.current;
+					prevEventRef.current = updated;
+					setEvent(updated);
+
+					// Closing countdown: closing_at just got set
+					if (updated.closing_at && !prev?.closing_at) {
+						const secs = Math.max(
+							0,
+							Math.round(
+								(new Date(updated.closing_at).getTime() - Date.now()) / 1000,
+							),
+						);
+						if (secs > 0) {
+							setTotalClosingSeconds(secs);
+							setClosingSecondsLeft(secs);
+							setShowClosingCountdown(true);
+						}
+					}
+					// Closing countdown cancelled by admin
+					if (!updated.closing_at && prev?.closing_at) {
+						setShowClosingCountdown(false);
+					}
+
+					// "Trading started" toast when status flips to active
+					if (updated.status === "active" && prev?.status !== "active") {
+						setShowTradingStartedToast(true);
+						setTimeout(() => setShowTradingStartedToast(false), 4000);
+					}
+				},
+			)
+			.subscribe();
+		return () => {
+			supabase.removeChannel(eventChannel);
+		};
+	}, [eventId]);
+
+	// Countdown tick for closing countdown
+	useEffect(() => {
+		if (!showClosingCountdown || closingSecondsLeft <= 0) return;
+		const t = setTimeout(() => {
+			const next = closingSecondsLeft - 1;
+			setClosingSecondsLeft(next);
+			if (next <= 0) setShowClosingCountdown(false);
+		}, 1000);
+		return () => clearTimeout(t);
+	}, [showClosingCountdown, closingSecondsLeft]);
 
 	// Fetch investor record only when user is known (separate from main fetch to avoid re-fetching event/founders on auth load)
 	useEffect(() => {
@@ -1731,6 +1799,54 @@ const EventPage: React.FC = () => {
 							/>
 						</svg>
 						<p className="font-medium">Trading has closed for this event</p>
+					</div>
+				</div>
+			)}
+
+			{/* Closing countdown modal */}
+			{showClosingCountdown && (
+				<div className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-4 px-4 pointer-events-none">
+					<div className="bg-dark-900 border border-yellow-500/50 rounded-xl shadow-2xl p-5 max-w-md w-full pointer-events-auto">
+						<div className="flex items-start justify-between gap-4">
+							<div>
+								<p className="text-yellow-300 font-semibold">Trading is closing soon</p>
+								<p className="text-dark-300 text-sm mt-1">
+									Trading closes in{" "}
+									<span className="text-white font-bold tabular-nums">
+										{Math.floor(closingSecondsLeft / 60)}:{String(closingSecondsLeft % 60).padStart(2, "0")}
+									</span>
+								</p>
+							</div>
+							<button
+								onClick={() => setShowClosingCountdown(false)}
+								className="text-dark-400 hover:text-white transition-colors flex-shrink-0"
+							>
+								<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+								</svg>
+							</button>
+						</div>
+						<div className="mt-3 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+							<div
+								className="h-full bg-yellow-400 rounded-full transition-all duration-1000"
+								style={{ width: `${(closingSecondsLeft / totalClosingSeconds) * 100}%` }}
+							/>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Trading started toast */}
+			{showTradingStartedToast && (
+				<div
+					className="fixed bottom-6 left-6 z-50"
+					onClick={() => setShowTradingStartedToast(false)}
+				>
+					<div className="bg-green-500 text-white px-6 py-4 rounded-lg shadow-2xl flex items-center gap-3 max-w-sm">
+						<svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+						</svg>
+						<p className="font-medium">Trading has started!</p>
 					</div>
 				</div>
 			)}
