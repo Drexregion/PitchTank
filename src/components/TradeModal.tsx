@@ -32,9 +32,12 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 	initialTradeType = "buy",
 }) => {
 	const [tradeType, setTradeType] = useState<"buy" | "sell">(initialTradeType);
-	const [shares, setShares] = useState<number>(10);
+	const [sharesInput, setSharesInput] = useState<string>("10");
 	// Simple-mode buy: dollar commitment
-	const [commitAmount, setCommitAmount] = useState<number>(100);
+	const [commitAmountInput, setCommitAmountInput] = useState<string>("100");
+	// Derived numerics used for all calculations and submit logic
+	const shares = Math.max(0, parseInt(sharesInput, 10) || 0);
+	const commitAmount = Math.max(0, parseFloat(commitAmountInput) || 0);
 	const [note, setNote] = useState<string>("");
 	const [estimatedCost, setEstimatedCost] = useState<number>(0);
 	const [resultingPrice, setResultingPrice] = useState<number>(0);
@@ -53,8 +56,8 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 	// Reset state when founder changes or initial trade type changes
 	useEffect(() => {
 		setTradeType(initialTradeType);
-		setShares(10);
-		setCommitAmount(100);
+		setSharesInput("10");
+		setCommitAmountInput("100");
 		setNote("");
 		setError(null);
 		setSuccessMessage(null);
@@ -180,12 +183,12 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 	// Handler for buy-max button
 	const handleBuyMax = () => {
 		const maxShares = calculateMaxBuyShares();
-		setShares(maxShares);
+		setSharesInput(String(maxShares));
 	};
 
 	// Handler for sell-max button
 	const handleSellMax = () => {
-		setShares(investorShares);
+		setSharesInput(String(investorShares));
 	};
 
 	// Simple-mode: compute max whole shares purchasable with a dollar amount
@@ -466,17 +469,16 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 					</label>
 					<div className="flex gap-2">
 						<input
-							type="number"
-							min="1"
-							step="1"
-							value={commitAmount}
+							type="text"
+							inputMode="numeric"
+							value={commitAmountInput}
 							onChange={(e) =>
-								setCommitAmount(Math.max(0, parseFloat(e.target.value) || 0))
+								setCommitAmountInput(e.target.value.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, ""))
 							}
 							className="input-dark flex-1"
 						/>
 						<button
-							onClick={() => setCommitAmount(Math.floor(investorBalance))}
+							onClick={() => setCommitAmountInput(String(Math.floor(investorBalance)))}
 							className="px-3 md:px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-all text-xs md:text-sm whitespace-nowrap"
 						>
 							Commit Max
@@ -528,11 +530,10 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 					</label>
 					<div className="flex gap-2">
 						<input
-							type="number"
-							min="1"
-							max={tradeType === "sell" ? investorShares : undefined}
-							value={shares}
-							onChange={(e) => setShares(parseInt(e.target.value))}
+							type="text"
+							inputMode="numeric"
+							value={sharesInput}
+							onChange={(e) => setSharesInput(e.target.value.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, ""))}
 							className="input-dark flex-1"
 						/>
 						{tradeType === "buy" ? (

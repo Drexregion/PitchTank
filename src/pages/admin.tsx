@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { Navbar } from "../components/Navbar";
@@ -7,6 +7,22 @@ import { FounderInvitationManager } from "../components/FounderInvitationManager
 import { DatabaseTest } from "../components/DatabaseTest";
 import { useAuth } from "../hooks/useAuth";
 import { Event } from "../types/Event";
+
+const CountdownDisplay: React.FC<{ target: string }> = ({ target }) => {
+	const [secs, setSecs] = useState(() =>
+		Math.max(0, Math.round((new Date(target).getTime() - Date.now()) / 1000))
+	);
+	useEffect(() => {
+		if (secs <= 0) return;
+		const t = setTimeout(() => setSecs(s => Math.max(0, s - 1)), 1000);
+		return () => clearTimeout(t);
+	}, [secs]);
+	return (
+		<span className="tabular-nums font-bold">
+			{Math.floor(secs / 60)}:{String(secs % 60).padStart(2, "0")}
+		</span>
+	);
+};
 
 const AdminPage: React.FC = () => {
 	const [events, setEvents] = useState<Event[]>([]);
@@ -17,6 +33,8 @@ const AdminPage: React.FC = () => {
 	);
 	const { user, isAdmin, isLoading } = useAuth();
 	const location = useLocation();
+	const [closingMinutes, setClosingMinutes] = useState<Record<string, number>>({});
+	const adminTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
 	// Sync active view with deep links like /admin/events/new
 	useEffect(() => {
@@ -129,18 +147,39 @@ const AdminPage: React.FC = () => {
 		setActiveView("list");
 	};
 
-	// Handle status update
-	const handleStatusUpdate = async (eventId: string, newStatus: string) => {
-		try {
-			const { error: updateError } = await supabase
-				.from("events")
-				.update({ status: newStatus })
-				.eq("id", eventId);
+const handleStartTrading = async (eventId: string) => {
+		const { error: updateError } = await supabase
+			.from("events")
+			.update({ status: "active" })
+			.eq("id", eventId);
+		if (updateError) setError(updateError.message);
+	};
 
-			if (updateError) throw updateError;
-		} catch (err: any) {
-			setError(err.message || "Failed to update event status");
-		}
+	const handleEndTradingCountdown = async (eventId: string, minutes: number) => {
+		const closingAt = new Date(Date.now() + minutes * 60_000).toISOString();
+		const { error: updateError } = await supabase
+			.from("events")
+			.update({ closing_at: closingAt })
+			.eq("id", eventId);
+		if (updateError) { setError(updateError.message); return; }
+		// Admin browser drives the final status update when timer fires
+		adminTimersRef.current[eventId] = setTimeout(async () => {
+			await supabase
+				.from("events")
+				.update({ status: "completed", closing_at: null })
+				.eq("id", eventId);
+			delete adminTimersRef.current[eventId];
+		}, minutes * 60_000);
+	};
+
+	const handleCancelClosingCountdown = async (eventId: string) => {
+		clearTimeout(adminTimersRef.current[eventId]);
+		delete adminTimersRef.current[eventId];
+		const { error: updateError } = await supabase
+			.from("events")
+			.update({ closing_at: null })
+			.eq("id", eventId);
+		if (updateError) setError(updateError.message);
 	};
 
 	return (
@@ -292,27 +331,67 @@ const AdminPage: React.FC = () => {
 														{event.name}
 													</div>
 												</td>
-												<td className="px-6 py-4 whitespace-nowrap">
-													<select
-														value={event.status}
-														onChange={(e) =>
-															handleStatusUpdate(event.id, e.target.value)
-														}
-														className={`text-sm font-medium px-2 py-1 rounded-full ${
-															event.status === "active"
-																? "bg-green-100 text-green-800"
-																: event.status === "completed"
-																? "bg-blue-100 text-blue-800"
-																: event.status === "draft"
-																? "bg-yellow-100 text-yellow-800"
-																: "bg-red-100 text-red-800"
-														}`}
-													>
-														<option value="draft">Draft</option>
-														<option value="active">Active</option>
-														<option value="completed">Completed</option>
-														<option value="cancelled">Cancelled</option>
-													</select>
+												<td className="px-6 py-4">
+													{/* Status badge */}
+													<span className={`text-xs font-medium px-2 py-1 rounded-full ${
+														event.status === "active"
+															? "bg-green-100 text-green-800"
+															: event.status === "completed"
+															? "bg-blue-100 text-blue-800"
+															: event.status === "draft"
+															? "bg-yellow-100 text-yellow-800"
+															: "bg-red-100 text-red-800"
+													}`}>
+														{event.status}
+													</span>
+
+													{/* Closing countdown (when running) */}
+													{event.closing_at && new Date(event.closing_at) > new Date() && (
+														<div className="mt-2 flex items-center gap-2">
+															<p className="text-xs text-yellow-700">
+																Closes in <CountdownDisplay target={event.closing_at} />
+															</p>
+															<button
+																onClick={() => handleCancelClosingCountdown(event.id)}
+																className="text-xs text-red-500 hover:underline"
+															>
+																Cancel
+															</button>
+														</div>
+													)}
+
+													{/* Start Trading (draft only) */}
+													{event.status === "draft" && (
+														<button
+															onClick={() => handleStartTrading(event.id)}
+															className="mt-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded hover:bg-green-200 font-medium"
+														>
+															Start Trading
+														</button>
+													)}
+
+													{/* End Trading (active only, no countdown running) */}
+													{event.status === "active" && !event.closing_at && (
+														<div className="flex items-center gap-1 mt-2">
+															<select
+																value={closingMinutes[event.id] ?? 1}
+																onChange={(e) =>
+																	setClosingMinutes(p => ({ ...p, [event.id]: Number(e.target.value) }))
+																}
+																className="text-xs border border-gray-300 rounded px-1 py-0.5 bg-white"
+															>
+																<option value={1}>1 min</option>
+																<option value={3}>3 min</option>
+																<option value={5}>5 min</option>
+															</select>
+															<button
+																onClick={() => handleEndTradingCountdown(event.id, closingMinutes[event.id] ?? 1)}
+																className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded hover:bg-yellow-200 font-medium"
+															>
+																End Trading
+															</button>
+														</div>
+													)}
 												</td>
 												<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
 													{formatDate(event.start_time)}
@@ -321,12 +400,6 @@ const AdminPage: React.FC = () => {
 													{formatDate(event.created_at)}
 												</td>
 												<td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-													<Link
-														to={`/admin/events/${event.id}`}
-														className="text-blue-600 hover:text-blue-900 mr-4"
-													>
-														Manage
-													</Link>
 													<Link
 														to={`/events/${event.id}`}
 														className="text-green-600 hover:text-green-900"

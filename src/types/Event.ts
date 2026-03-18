@@ -7,6 +7,7 @@ export interface Event {
   created_at: string;
   updated_at: string;
   status: 'draft' | 'active' | 'completed' | 'cancelled';
+  closing_at?: string | null;
 }
 
 export interface EventSettings {
