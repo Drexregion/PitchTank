@@ -1910,27 +1910,25 @@ const EventPage: React.FC = () => {
 				</div>
 			)}
 
-			{/* Closing countdown — bottom-right corner */}
-			{showClosingCountdown && (
-				<div className="fixed bottom-6 right-6 z-50 pointer-events-auto">
-					<div className="bg-dark-900 border border-yellow-500/50 rounded-xl shadow-2xl px-4 py-3 w-56">
-						<div className="flex items-center justify-between gap-3 mb-2">
-							<div>
-								<p className="text-yellow-300 font-semibold text-xs">Trading closing soon</p>
-								<span className="text-white font-bold tabular-nums text-lg leading-tight">
-									{Math.floor(closingSecondsLeft / 60)}:{String(closingSecondsLeft % 60).padStart(2, "0")}
-								</span>
-							</div>
+			{/* Closing countdown — bottom-right corner (dismissible) */}
+			{showClosingCountdown && closingSecondsLeft > 0 && (
+				<div className="fixed bottom-4 right-4 z-50 pointer-events-auto">
+					<div className="bg-dark-900 border border-yellow-500/50 rounded-lg shadow-xl px-3 py-2 w-40">
+						<div className="flex items-center justify-between gap-2 mb-1.5">
+							<p className="text-yellow-300 font-medium text-xs">Closing soon</p>
 							<button
 								onClick={() => setShowClosingCountdown(false)}
-								className="text-dark-400 hover:text-white transition-colors flex-shrink-0"
+								className="text-dark-500 hover:text-white transition-colors flex-shrink-0"
 							>
-								<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
 								</svg>
 							</button>
 						</div>
-						<div className="mt-3 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+						<span className="text-white font-bold tabular-nums text-base leading-none block mb-1.5">
+							{Math.floor(closingSecondsLeft / 60)}:{String(closingSecondsLeft % 60).padStart(2, "0")}
+						</span>
+						<div className="h-1 bg-dark-700 rounded-full overflow-hidden">
 							<div
 								className="h-full bg-yellow-400 rounded-full transition-all duration-1000"
 								style={{ width: `${(closingSecondsLeft / totalClosingSeconds) * 100}%` }}
@@ -2280,6 +2278,7 @@ const EventPage: React.FC = () => {
 					investorBalance={investor.current_balance}
 					simpleMode={simpleMode}
 					initialTradeType={tradeModalInitialType}
+					initialShares={getOwnedShares(selectedFounder.id)}
 					onTradeComplete={() => {
 						// Refetch will happen automatically via realtime subscriptions
 						setSelectedFounder(null);
