@@ -19,6 +19,8 @@ interface TradeModalProps {
 	simpleMode?: boolean;
 	/** Initial trade type when modal opens (default: "buy") */
 	initialTradeType?: "buy" | "sell";
+	/** Pre-fetched shares owned — avoids redundant fetch on open */
+	initialShares?: number;
 }
 
 export const TradeModal: React.FC<TradeModalProps> = ({
@@ -30,6 +32,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 	onTradeComplete,
 	simpleMode = false,
 	initialTradeType = "buy",
+	initialShares = 0,
 }) => {
 	const [tradeType, setTradeType] = useState<"buy" | "sell">(initialTradeType);
 	const [sharesInput, setSharesInput] = useState<string>("10");
@@ -44,7 +47,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 	const [isLoading, setIsLoading] = useState<boolean>(false);
 	const [error, setError] = useState<string | null>(null);
 	const [successMessage, setSuccessMessage] = useState<string | null>(null);
-	const [investorShares, setInvestorShares] = useState<number>(0);
+	const [investorShares, setInvestorShares] = useState<number>(initialShares);
 	// Track real-time founder updates
 	const [currentFounder, setCurrentFounder] =
 		useState<FounderWithPrice>(founder);
@@ -62,7 +65,6 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 		setError(null);
 		setSuccessMessage(null);
 		setCurrentFounder(founder);
-		fetchInvestorShares();
 	}, [founder.id, investorId, initialTradeType]);
 
 	// Set up real-time subscription for founder price updates when modal is open
@@ -120,13 +122,6 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 			setCheckingStatus(false);
 		}
 	};
-
-	// Check status when modal opens or founder changes
-	useEffect(() => {
-		if (!isOpen) return;
-		verifyEventIsActiveLatest();
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [isOpen, currentFounder.event_id]);
 
 	// Fetch how many shares the investor owns of this founder
 	const fetchInvestorShares = async () => {
