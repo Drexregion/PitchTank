@@ -147,21 +147,7 @@ const AdminPage: React.FC = () => {
 		setActiveView("list");
 	};
 
-	// Handle status update (kept as emergency override)
-	const handleStatusUpdate = async (eventId: string, newStatus: string) => {
-		try {
-			const { error: updateError } = await supabase
-				.from("events")
-				.update({ status: newStatus })
-				.eq("id", eventId);
-
-			if (updateError) throw updateError;
-		} catch (err: any) {
-			setError(err.message || "Failed to update event status");
-		}
-	};
-
-	const handleStartTrading = async (eventId: string) => {
+const handleStartTrading = async (eventId: string) => {
 		const { error: updateError } = await supabase
 			.from("events")
 			.update({ status: "active" })
