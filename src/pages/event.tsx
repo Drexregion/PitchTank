@@ -34,6 +34,8 @@ const EventPage: React.FC = () => {
 	const [showQRModal, setShowQRModal] = useState(false);
 	const [showEventInfoModal, setShowEventInfoModal] = useState(false);
 	const [showSignInNotification, setShowSignInNotification] = useState(false);
+	const [showRegisterNotification, setShowRegisterNotification] = useState(false);
+	const [isRegistering, setIsRegistering] = useState(false);
 	const [showFounderModal, setShowFounderModal] = useState(false);
 	const [selectedFounderForModal, setSelectedFounderForModal] =
 		useState<FounderWithPriceAndUser | null>(null);
@@ -327,6 +329,34 @@ const EventPage: React.FC = () => {
 		setShowSignInNotification(false);
 	};
 
+	const handleRegisterForEvent = async () => {
+		if (!user || !eventId) return;
+		setIsRegistering(true);
+		try {
+			const { data: newInvestor, error: investorError } = await supabase
+				.from("investors")
+				.insert({
+					event_id: eventId,
+					name: user.email?.split("@")[0] || "Investor",
+					email: user.email || "",
+					user_id: user.id,
+					initial_balance: 1000000,
+					current_balance: 1000000,
+				})
+				.select()
+				.single();
+			if (investorError) throw investorError;
+			if (newInvestor) {
+				setInvestorId(newInvestor.id);
+				setShowRegisterNotification(false);
+			}
+		} catch (err: any) {
+			console.error("Failed to register for event:", err);
+		} finally {
+			setIsRegistering(false);
+		}
+	};
+
 	// Format date for display
 	const formatEventDate = (dateString: string) => {
 		const date = new Date(dateString);
@@ -407,6 +437,10 @@ const EventPage: React.FC = () => {
 			setShowSignInNotification(true);
 			return;
 		}
+		if (!investorId) {
+			setShowRegisterNotification(true);
+			return;
+		}
 		const canTradeNow = await verifyEventIsActiveLatest();
 		if (!canTradeNow) {
 			setShowTradingClosedNotification(true);
@@ -419,6 +453,10 @@ const EventPage: React.FC = () => {
 	const handleSellClick = async (founder: FounderWithPriceAndUser) => {
 		if (!user) {
 			setShowSignInNotification(true);
+			return;
+		}
+		if (!investorId) {
+			setShowRegisterNotification(true);
 			return;
 		}
 		const canTradeNow = await verifyEventIsActiveLatest();
@@ -984,6 +1022,48 @@ const EventPage: React.FC = () => {
 													</div>
 												</div>
 											)}
+										</div>
+									)}
+
+									{/* If signed in but not registered for this event, show register CTA */}
+									{user && !investorId && !isLoading && (
+										<div className="mb-4 md:mb-6">
+											<div className="card-dark border border-primary-500/30 shadow-glow overflow-hidden">
+												<div className="p-5 md:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+													<div className="flex items-start gap-3">
+														<div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-600/30 to-accent-cyan/30 flex items-center justify-center flex-shrink-0 border border-primary-500/40">
+															<svg
+																className="w-6 h-6 text-primary-400"
+																fill="none"
+																stroke="currentColor"
+																viewBox="0 0 24 24"
+															>
+																<path
+																	strokeLinecap="round"
+																	strokeLinejoin="round"
+																	strokeWidth={2}
+																	d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+																/>
+															</svg>
+														</div>
+														<div>
+															<h3 className="text-white font-semibold">
+																Register for this event
+															</h3>
+															<p className="text-sm text-dark-300 mt-1">
+																You're signed in but haven't joined this event yet. Register to start trading.
+															</p>
+														</div>
+													</div>
+													<button
+														onClick={handleRegisterForEvent}
+														disabled={isRegistering}
+														className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary-600 to-primary-500 text-white hover:from-primary-700 hover:to-primary-600 transition-all shadow-lg disabled:opacity-70 disabled:cursor-not-allowed whitespace-nowrap"
+													>
+														{isRegistering ? "Registering..." : "Register for Event"}
+													</button>
+												</div>
+											</div>
 										</div>
 									)}
 
@@ -1774,6 +1854,33 @@ const EventPage: React.FC = () => {
 							/>
 						</svg>
 						<p className="font-medium">Please sign in to start trading</p>
+					</div>
+				</div>
+			)}
+
+			{/* Floating notification for register */}
+			{user && !investorId && !isLoading && event && showRegisterNotification && (
+				<div className="fixed bottom-6 right-6 z-50 max-w-sm">
+					<div className="bg-dark-900 border border-primary-500/50 rounded-lg shadow-2xl p-4 flex items-start gap-3">
+						<svg className="w-6 h-6 text-primary-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+						</svg>
+						<div className="flex-1">
+							<p className="font-medium text-white">Register to trade</p>
+							<p className="text-sm text-dark-300 mt-0.5">You need to join this event before trading.</p>
+							<button
+								onClick={handleRegisterForEvent}
+								disabled={isRegistering}
+								className="mt-2 px-4 py-1.5 rounded-lg bg-gradient-to-r from-primary-600 to-primary-500 text-white text-sm font-medium hover:from-primary-700 hover:to-primary-600 transition-all disabled:opacity-70"
+							>
+								{isRegistering ? "Registering..." : "Register for Event"}
+							</button>
+						</div>
+						<button onClick={() => setShowRegisterNotification(false)} className="text-dark-400 hover:text-white transition-colors flex-shrink-0">
+							<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						</button>
 					</div>
 				</div>
 			)}
