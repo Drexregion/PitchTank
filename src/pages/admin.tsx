@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { Navbar } from "../components/Navbar";
@@ -36,6 +36,25 @@ const AdminPage: React.FC = () => {
 	const [closingMinutes, setClosingMinutes] = useState<Record<string, number>>({});
 	const adminTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
+	const fetchEvents = useCallback(async () => {
+		try {
+			setIsLoadingEvents(true);
+			setError(null);
+
+			const { data, error: fetchError } = await supabase
+				.from("events")
+				.select("*")
+				.order("created_at", { ascending: false });
+
+			if (fetchError) throw fetchError;
+			setEvents(data || []);
+		} catch (err: any) {
+			setError(err.message || "Failed to fetch events");
+		} finally {
+			setIsLoadingEvents(false);
+		}
+	}, []);
+
 	// Sync active view with deep links like /admin/events/new
 	useEffect(() => {
 		if (location.pathname.endsWith("/admin/events/new")) {
@@ -54,36 +73,6 @@ const AdminPage: React.FC = () => {
 			setIsLoadingEvents(false);
 			return;
 		}
-
-		const fetchEvents = async () => {
-			try {
-				console.log("Fetching events...");
-				setIsLoadingEvents(true);
-				setError(null);
-
-				// Query events
-				const { data, error: fetchError } = await supabase
-					.from("events")
-					.select("*")
-					.order("created_at", { ascending: false });
-
-				console.log("Events query result:", { data, error: fetchError });
-
-				if (fetchError) {
-					console.error("Events fetch error:", fetchError);
-					throw fetchError;
-				}
-
-				console.log("Events loaded successfully:", data);
-				setEvents(data || []);
-			} catch (err: any) {
-				console.error("Events fetch exception:", err);
-				setError(err.message || "Failed to fetch events");
-			} finally {
-				console.log("Events fetch complete");
-				setIsLoadingEvents(false);
-			}
-		};
 
 		fetchEvents();
 
@@ -113,7 +102,7 @@ const AdminPage: React.FC = () => {
 			clearTimeout(timeout);
 			supabase.removeChannel(eventsSubscription);
 		};
-	}, [user, isAdmin]);
+	}, [user, isAdmin, fetchEvents]);
 
 	// Show loading while auth is being checked
 	if (isLoading) {
@@ -147,21 +136,23 @@ const AdminPage: React.FC = () => {
 		setActiveView("list");
 	};
 
-const handleStartTrading = async (eventId: string) => {
+	const handleSetStatus = async (eventId: string, status: Event["status"]) => {
 		const { error: updateError } = await supabase
 			.from("events")
-			.update({ status: "active" })
+			.update({ status })
 			.eq("id", eventId);
 		if (updateError) setError(updateError.message);
+		else fetchEvents();
 	};
 
-	const handleEndTradingCountdown = async (eventId: string, minutes: number) => {
+	const handleStartCountdown = async (eventId: string, minutes: number) => {
 		const closingAt = new Date(Date.now() + minutes * 60_000).toISOString();
 		const { error: updateError } = await supabase
 			.from("events")
 			.update({ closing_at: closingAt })
 			.eq("id", eventId);
 		if (updateError) { setError(updateError.message); return; }
+		fetchEvents();
 		// Admin browser drives the final status update when timer fires
 		adminTimersRef.current[eventId] = setTimeout(async () => {
 			await supabase
@@ -169,10 +160,11 @@ const handleStartTrading = async (eventId: string) => {
 				.update({ status: "completed", closing_at: null })
 				.eq("id", eventId);
 			delete adminTimersRef.current[eventId];
+			fetchEvents();
 		}, minutes * 60_000);
 	};
 
-	const handleCancelClosingCountdown = async (eventId: string) => {
+	const handleCancelCountdown = async (eventId: string) => {
 		clearTimeout(adminTimersRef.current[eventId]);
 		delete adminTimersRef.current[eventId];
 		const { error: updateError } = await supabase
@@ -180,6 +172,7 @@ const handleStartTrading = async (eventId: string) => {
 			.update({ closing_at: null })
 			.eq("id", eventId);
 		if (updateError) setError(updateError.message);
+		else fetchEvents();
 	};
 
 	return (
@@ -290,127 +283,108 @@ const handleStartTrading = async (eventId: string) => {
 								</button>
 							</div>
 						) : (
-							<div className="bg-white rounded-lg shadow overflow-hidden">
-								<table className="min-w-full divide-y divide-gray-200">
-									<thead className="bg-gray-50">
-										<tr>
-											<th
-												scope="col"
-												className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-											>
-												Event
-											</th>
-											<th
-												scope="col"
-												className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-											>
-												Status
-											</th>
-											<th
-												scope="col"
-												className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-											>
-												Date
-											</th>
-											<th
-												scope="col"
-												className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-											>
-												Created
-											</th>
-											<th scope="col" className="relative px-6 py-3">
-												<span className="sr-only">Actions</span>
-											</th>
-										</tr>
-									</thead>
-									<tbody className="bg-white divide-y divide-gray-200">
-										{events.map((event) => (
-											<tr key={event.id} className="hover:bg-gray-50">
-												<td className="px-6 py-4 whitespace-nowrap">
-													<div className="text-sm font-medium text-gray-900">
-														{event.name}
-													</div>
-												</td>
-												<td className="px-6 py-4">
-													{/* Status badge */}
-													<span className={`text-xs font-medium px-2 py-1 rounded-full ${
-														event.status === "active"
-															? "bg-green-100 text-green-800"
-															: event.status === "completed"
-															? "bg-blue-100 text-blue-800"
-															: event.status === "draft"
-															? "bg-yellow-100 text-yellow-800"
-															: "bg-red-100 text-red-800"
-													}`}>
+							<div className="space-y-4">
+								{events.map((event) => {
+									const countdownActive = !!event.closing_at && new Date(event.closing_at) > new Date();
+									const statusStyles: Record<string, string> = {
+										active: "bg-green-100 text-green-800 border-green-200",
+										draft: "bg-yellow-100 text-yellow-800 border-yellow-200",
+										completed: "bg-blue-100 text-blue-800 border-blue-200",
+										cancelled: "bg-red-100 text-red-800 border-red-200",
+									};
+									return (
+										<div key={event.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+											{/* Header row */}
+											<div className="flex items-start justify-between gap-4 mb-4">
+												<div>
+													<h3 className="text-base font-semibold text-gray-900">{event.name}</h3>
+													<p className="text-xs text-gray-400 mt-0.5">
+														{formatDate(event.start_time)} &mdash; created {formatDate(event.created_at)}
+													</p>
+												</div>
+												<div className="flex items-center gap-2 flex-shrink-0">
+													<span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${statusStyles[event.status] ?? "bg-gray-100 text-gray-700 border-gray-200"}`}>
 														{event.status}
 													</span>
-
-													{/* Closing countdown (when running) */}
-													{event.closing_at && new Date(event.closing_at) > new Date() && (
-														<div className="mt-2 flex items-center gap-2">
-															<p className="text-xs text-yellow-700">
-																Closes in <CountdownDisplay target={event.closing_at} />
-															</p>
-															<button
-																onClick={() => handleCancelClosingCountdown(event.id)}
-																className="text-xs text-red-500 hover:underline"
-															>
-																Cancel
-															</button>
-														</div>
-													)}
-
-													{/* Start Trading (draft only) */}
-													{event.status === "draft" && (
-														<button
-															onClick={() => handleStartTrading(event.id)}
-															className="mt-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded hover:bg-green-200 font-medium"
-														>
-															Start Trading
-														</button>
-													)}
-
-													{/* End Trading (active only, no countdown running) */}
-													{event.status === "active" && !event.closing_at && (
-														<div className="flex items-center gap-1 mt-2">
-															<select
-																value={closingMinutes[event.id] ?? 1}
-																onChange={(e) =>
-																	setClosingMinutes(p => ({ ...p, [event.id]: Number(e.target.value) }))
-																}
-																className="text-xs border border-gray-300 rounded px-1 py-0.5 bg-white"
-															>
-																<option value={1}>1 min</option>
-																<option value={3}>3 min</option>
-																<option value={5}>5 min</option>
-															</select>
-															<button
-																onClick={() => handleEndTradingCountdown(event.id, closingMinutes[event.id] ?? 1)}
-																className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded hover:bg-yellow-200 font-medium"
-															>
-																End Trading
-															</button>
-														</div>
-													)}
-												</td>
-												<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-													{formatDate(event.start_time)}
-												</td>
-												<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-													{formatDate(event.created_at)}
-												</td>
-												<td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
 													<Link
 														to={`/events/${event.id}`}
-														className="text-green-600 hover:text-green-900"
+														className="text-xs text-blue-600 hover:underline font-medium"
 													>
-														View
+														View →
 													</Link>
-												</td>
-											</tr>
-										))}
-									</tbody>
-								</table>
+												</div>
+											</div>
+
+											{/* Controls */}
+											<div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-4 border-t border-gray-100">
+												{/* Status switcher */}
+												<div className="flex-1">
+													<p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">Set Status</p>
+													<div className="flex flex-wrap gap-1.5">
+														{(["draft", "active", "completed", "cancelled"] as const).map((s) => (
+															<button
+																key={s}
+																onClick={() => handleSetStatus(event.id, s)}
+																disabled={event.status === s}
+																className={`px-3 py-1 rounded-lg text-xs font-medium border transition-all ${
+																	event.status === s
+																		? `${statusStyles[s]} cursor-default`
+																		: "bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-700"
+																}`}
+															>
+																{s.charAt(0).toUpperCase() + s.slice(1)}
+															</button>
+														))}
+													</div>
+												</div>
+
+												{/* Countdown controls — only relevant when active */}
+												{event.status === "active" && (
+													<div className="flex-shrink-0">
+														<p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">Close Countdown</p>
+														{countdownActive ? (
+															<div className="flex items-center gap-2">
+																<span className="text-sm font-semibold text-yellow-700 bg-yellow-50 border border-yellow-200 px-3 py-1 rounded-lg">
+																	⏱ Closes in <CountdownDisplay target={event.closing_at!} />
+																</span>
+																<button
+																	onClick={() => handleCancelCountdown(event.id)}
+																	className="px-3 py-1 rounded-lg text-xs font-medium bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-all"
+																>
+																	Cancel
+																</button>
+															</div>
+														) : (
+															<div className="flex items-center gap-1.5">
+																<select
+																	value={closingMinutes[event.id] ?? 5}
+																	onChange={(e) =>
+																		setClosingMinutes(p => ({ ...p, [event.id]: Number(e.target.value) }))
+																	}
+																	className="text-xs border border-gray-300 rounded-lg px-2 py-1 bg-white"
+																>
+																	<option value={1}>1 min</option>
+																	<option value={2}>2 min</option>
+																	<option value={3}>3 min</option>
+																	<option value={5}>5 min</option>
+																	<option value={10}>10 min</option>
+																	<option value={15}>15 min</option>
+																	<option value={30}>30 min</option>
+																</select>
+																<button
+																	onClick={() => handleStartCountdown(event.id, closingMinutes[event.id] ?? 5)}
+																	className="px-3 py-1 rounded-lg text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-200 hover:bg-yellow-100 transition-all"
+																>
+																	Start Countdown
+																</button>
+															</div>
+														)}
+													</div>
+												)}
+											</div>
+										</div>
+									);
+								})}
 							</div>
 						)}
 					</>
