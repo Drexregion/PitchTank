@@ -1910,25 +1910,22 @@ const EventPage: React.FC = () => {
 				</div>
 			)}
 
-			{/* Closing countdown modal */}
+			{/* Closing countdown — bottom-right corner */}
 			{showClosingCountdown && (
-				<div className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-4 px-4 pointer-events-none">
-					<div className="bg-dark-900 border border-yellow-500/50 rounded-xl shadow-2xl p-5 max-w-md w-full pointer-events-auto">
-						<div className="flex items-start justify-between gap-4">
+				<div className="fixed bottom-6 right-6 z-50 pointer-events-auto">
+					<div className="bg-dark-900 border border-yellow-500/50 rounded-xl shadow-2xl px-4 py-3 w-56">
+						<div className="flex items-center justify-between gap-3 mb-2">
 							<div>
-								<p className="text-yellow-300 font-semibold">Trading is closing soon</p>
-								<p className="text-dark-300 text-sm mt-1">
-									Trading closes in{" "}
-									<span className="text-white font-bold tabular-nums">
-										{Math.floor(closingSecondsLeft / 60)}:{String(closingSecondsLeft % 60).padStart(2, "0")}
-									</span>
-								</p>
+								<p className="text-yellow-300 font-semibold text-xs">Trading closing soon</p>
+								<span className="text-white font-bold tabular-nums text-lg leading-tight">
+									{Math.floor(closingSecondsLeft / 60)}:{String(closingSecondsLeft % 60).padStart(2, "0")}
+								</span>
 							</div>
 							<button
 								onClick={() => setShowClosingCountdown(false)}
 								className="text-dark-400 hover:text-white transition-colors flex-shrink-0"
 							>
-								<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
 								</svg>
 							</button>
