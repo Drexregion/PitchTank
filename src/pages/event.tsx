@@ -639,10 +639,28 @@ const EventPage: React.FC = () => {
 								))}
 							</div>
 						)}
+
+						{/* Slim closing banner - shown when the bottom widget is dismissed */}
+						{!showClosingCountdown && closingSecondsLeft > 0 && (
+							<div className="px-4 py-1.5 bg-yellow-500/10 border-t border-yellow-500/20 flex items-center justify-between">
+								<span className="text-yellow-300 text-xs font-medium">
+									⏱ Trading closes in{" "}
+									<span className="tabular-nums font-bold">
+										{Math.floor(closingSecondsLeft / 60)}:{String(closingSecondsLeft % 60).padStart(2, "0")}
+									</span>
+								</span>
+								<button
+									onClick={() => setShowClosingCountdown(true)}
+									className="text-yellow-400 text-xs hover:text-yellow-200 transition-colors"
+								>
+									Expand
+								</button>
+							</div>
+						)}
 					</div>
 				)}
 
-				<div className=" md:px-8 py-5  max-w-[1600px] mx-auto">
+				<div className={"md:px-8 py-5 max-w-[1600px] mx-auto" + (showClosingCountdown && closingSecondsLeft > 0 ? " pb-24" : "")}>
 					{isLoading ? (
 						<div className="flex justify-center py-12">
 							<div className="text-lg text-white">Loading event details...</div>
