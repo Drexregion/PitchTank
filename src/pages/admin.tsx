@@ -35,6 +35,8 @@ const AdminPage: React.FC = () => {
 	const location = useLocation();
 	const [closingMinutes, setClosingMinutes] = useState<Record<string, number>>({});
 	const adminTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+	const [resetCountdown, setResetCountdown] = useState<Record<string, number | null>>({});
+	const resetIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
 	const fetchEvents = useCallback(async () => {
 		try {
@@ -162,6 +164,57 @@ const AdminPage: React.FC = () => {
 			delete adminTimersRef.current[eventId];
 			fetchEvents();
 		}, minutes * 60_000);
+	};
+
+	const handleResetTradingArm = (eventId: string) => {
+		setResetCountdown(p => ({ ...p, [eventId]: 5 }));
+		const interval = setInterval(() => {
+			setResetCountdown(p => {
+				const cur = p[eventId];
+				if (cur == null || cur <= 1) {
+					clearInterval(resetIntervalsRef.current[eventId]);
+					delete resetIntervalsRef.current[eventId];
+					return { ...p, [eventId]: null };
+				}
+				return { ...p, [eventId]: cur - 1 };
+			});
+		}, 1000);
+		resetIntervalsRef.current[eventId] = interval;
+	};
+
+	const handleResetTradingCancel = (eventId: string) => {
+		clearInterval(resetIntervalsRef.current[eventId]);
+		delete resetIntervalsRef.current[eventId];
+		setResetCountdown(p => ({ ...p, [eventId]: null }));
+	};
+
+	const handleResetTradingConfirm = async (eventId: string) => {
+		clearInterval(resetIntervalsRef.current[eventId]);
+		delete resetIntervalsRef.current[eventId];
+		setResetCountdown(p => ({ ...p, [eventId]: null }));
+
+		const { error: tradesError } = await supabase
+			.from("trades")
+			.delete()
+			.eq("event_id", eventId);
+		if (tradesError) { setError(tradesError.message); return; }
+
+		const { data: founders, error: foundersError } = await supabase
+			.from("founders")
+			.select("id")
+			.eq("event_id", eventId);
+		if (foundersError) { setError(foundersError.message); return; }
+
+		const founderIds = (founders || []).map((f: { id: string }) => f.id);
+		if (founderIds.length > 0) {
+			const { error: priceError } = await supabase
+				.from("price_history")
+				.delete()
+				.in("founder_id", founderIds);
+			if (priceError) { setError(priceError.message); return; }
+		}
+
+		fetchEvents();
 	};
 
 	const handleCancelCountdown = async (eventId: string) => {
@@ -336,6 +389,34 @@ const AdminPage: React.FC = () => {
 															</button>
 														))}
 													</div>
+												</div>
+
+												{/* Reset trading data */}
+												<div className="flex-shrink-0">
+													<p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">Reset Data</p>
+													{resetCountdown[event.id] != null ? (
+														<div className="flex items-center gap-1.5">
+															<button
+																onClick={() => handleResetTradingConfirm(event.id)}
+																className="px-3 py-1 rounded-lg text-xs font-medium bg-red-600 text-white border border-red-700 hover:bg-red-700 transition-all"
+															>
+																Confirm Reset ({resetCountdown[event.id]}s)
+															</button>
+															<button
+																onClick={() => handleResetTradingCancel(event.id)}
+																className="px-3 py-1 rounded-lg text-xs font-medium bg-white text-gray-500 border border-gray-200 hover:border-gray-400 transition-all"
+															>
+																Cancel
+															</button>
+														</div>
+													) : (
+														<button
+															onClick={() => handleResetTradingArm(event.id)}
+															className="px-3 py-1 rounded-lg text-xs font-medium bg-white text-red-500 border border-red-200 hover:bg-red-50 hover:border-red-400 transition-all"
+														>
+															Reset Trading Data
+														</button>
+													)}
 												</div>
 
 												{/* Countdown controls — only relevant when active */}
