@@ -93,7 +93,7 @@ export const FounderPriceChart: React.FC<FounderPriceChartProps> = ({
             strokeWidth={2}
             dot={false}
             activeDot={{ r: 4, stroke: lineColor, strokeWidth: 1 }}
-            isAnimationActive={true}
+            isAnimationActive={false}
           />
         </LineChart>
       </ResponsiveContainer>
