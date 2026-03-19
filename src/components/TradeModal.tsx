@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { FounderWithPrice, Founder } from "../types/Founder";
 import { supabase, supabaseUrl } from "../lib/supabaseClient";
 import {
@@ -55,6 +55,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 		boolean | null
 	>(null);
 	const [checkingStatus, setCheckingStatus] = useState<boolean>(false);
+	const isSubmittingRef = useRef(false);
 
 	// Reset state when founder changes or initial trade type changes
 	useEffect(() => {
@@ -66,6 +67,11 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 		setSuccessMessage(null);
 		setCurrentFounder(founder);
 	}, [founder.id, investorId, initialTradeType]);
+
+	// Sync investorShares whenever the parent's holdings update (via usePortfolio realtime)
+	useEffect(() => {
+		setInvestorShares(initialShares);
+	}, [initialShares]);
 
 	// Set up real-time subscription for founder price updates when modal is open
 	useEffect(() => {
@@ -120,33 +126,6 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 			return active;
 		} finally {
 			setCheckingStatus(false);
-		}
-	};
-
-	// Fetch how many shares the investor owns of this founder
-	const fetchInvestorShares = async () => {
-		try {
-			const response = await fetch(
-				`${supabaseUrl}/rest/v1/investor_holdings?investor_id=eq.${investorId}&founder_id=eq.${founder.id}`,
-				{
-					method: "GET",
-					headers: {
-						apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-						"Content-Type": "application/json",
-					},
-				}
-			);
-
-			const data = await response.json();
-
-			if (data && data.length > 0) {
-				setInvestorShares(Number(data[0].shares));
-			} else {
-				setInvestorShares(0);
-			}
-		} catch (err) {
-			console.error("Error fetching investor shares:", err);
-			setInvestorShares(0);
 		}
 	};
 
@@ -260,6 +239,9 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 
 	// Execute trade
 	const handleTrade = async () => {
+		if (isSubmittingRef.current) return;
+		isSubmittingRef.current = true;
+
 		// In simple-mode buy, validate against commitAmount/commitResult instead of shares
 		const effectiveShares =
 			simpleMode && tradeType === "buy" ? (commitResult?.shares ?? 0) : shares;
@@ -267,18 +249,22 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 		if (simpleMode && tradeType === "buy") {
 			if (commitAmount <= 0) {
 				setError("Please enter a valid amount to commit");
+				isSubmittingRef.current = false;
 				return;
 			}
 			if (commitAmount > investorBalance) {
 				setError("Insufficient balance");
+				isSubmittingRef.current = false;
 				return;
 			}
 			if (effectiveShares <= 0) {
 				setError("Commit amount is too small to purchase any shares");
+				isSubmittingRef.current = false;
 				return;
 			}
 		} else if (effectiveShares <= 0) {
 			setError("Please enter a valid number of shares");
+			isSubmittingRef.current = false;
 			return;
 		}
 
@@ -286,6 +272,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 		const trimmedNote = note.trim();
 		if (!trimmedNote) {
 			setError("Please add a brief note explaining your trade");
+			isSubmittingRef.current = false;
 			return;
 		}
 
@@ -293,18 +280,21 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 		const canTradeNow = await verifyEventIsActiveLatest();
 		if (!canTradeNow) {
 			setError("Trading has closed for this event");
+			isSubmittingRef.current = false;
 			return;
 		}
 
 		// For buy trades, check if investor has enough balance
 		if (tradeType === "buy" && !simpleMode && estimatedCost > investorBalance) {
 			setError("Insufficient balance to complete this trade");
+			isSubmittingRef.current = false;
 			return;
 		}
 
 		// For sell trades, check if investor has enough shares
 		if (tradeType === "sell" && effectiveShares > investorShares) {
 			setError("You don't own enough shares to sell");
+			isSubmittingRef.current = false;
 			return;
 		}
 
@@ -349,9 +339,6 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 				throw new Error(data.error || "Failed to execute trade");
 			}
 
-			// Update investor shares
-			await fetchInvestorShares();
-
 		// Show success message
 		if (simpleMode && tradeType === "buy" && commitResult) {
 			const { shares: gotShares, actualCost, remainder } = commitResult;
@@ -374,6 +361,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 			setError(err.message || "An error occurred while executing the trade");
 		} finally {
 			setIsLoading(false);
+			isSubmittingRef.current = false;
 		}
 	};
 
