@@ -212,6 +212,37 @@ const AdminPage: React.FC = () => {
 				.delete()
 				.in("founder_id", founderIds);
 			if (priceError) { setError(priceError.message); return; }
+
+			const { error: holdingsError } = await supabase
+				.from("investor_holdings")
+				.delete()
+				.in("founder_id", founderIds);
+			if (holdingsError) { setError(holdingsError.message); return; }
+
+			const { error: founderResetError } = await supabase
+				.from("founders")
+				.update({
+					shares_in_pool: 100000,
+					cash_in_pool: 10000000,
+					k_constant: 100000 * 10000000,
+				})
+				.in("id", founderIds);
+			if (founderResetError) { setError(founderResetError.message); return; }
+		}
+
+		// Reset investor balances to their initial_balance
+		const { data: investors, error: investorsError } = await supabase
+			.from("investors")
+			.select("id, initial_balance")
+			.eq("event_id", eventId);
+		if (investorsError) { setError(investorsError.message); return; }
+
+		for (const investor of investors || []) {
+			const { error: balanceError } = await supabase
+				.from("investors")
+				.update({ current_balance: investor.initial_balance })
+				.eq("id", investor.id);
+			if (balanceError) { setError(balanceError.message); return; }
 		}
 
 		fetchEvents();
