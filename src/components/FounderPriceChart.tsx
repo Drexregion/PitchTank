@@ -15,12 +15,12 @@ export const FounderPriceChart: React.FC<FounderPriceChartProps> = ({
   height = 180,
   showGrid = true,
   maxPoints = 100,
-  since
+  since,
 }) => {
-  const { chartData, isLoading, error } = usePriceHistory({ 
+  const { chartData, isLoading, error } = usePriceHistory({
     founderId,
     since,
-    maxPoints
+    maxPoints,
   });
   
   if (isLoading) {

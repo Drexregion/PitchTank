@@ -123,6 +123,14 @@ export function usePortfolio({ investorId, eventId }: UsePortfolioOptions) {
     fetchPortfolio();
 
     // Set up realtime subscriptions
+    // Debounce fetchPortfolio so simultaneous realtime events (e.g. holdings +
+    // founders both updating after a trade) collapse into a single fetch.
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedFetchPortfolio = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(fetchPortfolio, 50);
+    };
+
     const investorChannel = supabase.channel('investor_updates')
       .on('postgres_changes', {
         event: 'UPDATE',
@@ -141,8 +149,7 @@ export function usePortfolio({ investorId, eventId }: UsePortfolioOptions) {
         table: 'investor_holdings',
         filter: `investor_id=eq.${investorId}`
       }, () => {
-        // When holdings change, refetch the entire portfolio
-        fetchPortfolio();
+        debouncedFetchPortfolio();
       })
       .subscribe();
 
@@ -154,12 +161,13 @@ export function usePortfolio({ investorId, eventId }: UsePortfolioOptions) {
         table: 'founders',
         ...(eventId && { filter: `event_id=eq.${eventId}` }),
       }, () => {
-        fetchPortfolio();
+        debouncedFetchPortfolio();
       })
       .subscribe();
 
     // Clean up subscriptions
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       supabase.removeChannel(investorChannel);
       supabase.removeChannel(holdingsChannel);
       supabase.removeChannel(foundersChannel);
