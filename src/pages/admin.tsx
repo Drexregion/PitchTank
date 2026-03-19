@@ -201,11 +201,11 @@ const AdminPage: React.FC = () => {
 
 		const { data: founders, error: foundersError } = await supabase
 			.from("founders")
-			.select("id")
+			.select("id, k_constant")
 			.eq("event_id", eventId);
 		if (foundersError) { setError(foundersError.message); return; }
 
-		const founderIds = (founders || []).map((f: { id: string }) => f.id);
+		const founderIds = (founders || []).map((f: { id: string; k_constant: number }) => f.id);
 		if (founderIds.length > 0) {
 			const { error: priceError } = await supabase
 				.from("price_history")
@@ -219,15 +219,19 @@ const AdminPage: React.FC = () => {
 				.in("founder_id", founderIds);
 			if (holdingsError) { setError(holdingsError.message); return; }
 
-			const { error: founderResetError } = await supabase
-				.from("founders")
-				.update({
-					shares_in_pool: 100000,
-					cash_in_pool: 10000000,
-					k_constant: 100000 * 10000000,
-				})
-				.in("id", founderIds);
-			if (founderResetError) { setError(founderResetError.message); return; }
+			for (const f of founders || []) {
+				const initialShares = 100000;
+				const initialCash = Number(f.k_constant) / initialShares;
+				const { error: founderResetError } = await supabase
+					.from("founders")
+					.update({
+						shares_in_pool: initialShares,
+						cash_in_pool: initialCash,
+						k_constant: f.k_constant,
+					})
+					.eq("id", f.id);
+				if (founderResetError) { setError(founderResetError.message); return; }
+			}
 		}
 
 		// Reset investor balances to their initial_balance
