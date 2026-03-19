@@ -519,7 +519,7 @@ const EventPage: React.FC = () => {
 		...(!simpleMode
 			? [{ id: "leaderboard" as const, label: "Leaderboard" }]
 			: []),
-		...(simpleMode && isAdmin
+		...(isAdmin
 			? [{ id: "admin-analytics" as const, label: "Analytics" }]
 			: []),
 	];
