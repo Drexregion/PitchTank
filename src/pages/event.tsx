@@ -273,6 +273,7 @@ const EventPage: React.FC = () => {
 					// Closing countdown cancelled by admin
 					if (!updated.closing_at && prev?.closing_at) {
 						setShowClosingCountdown(false);
+						setClosingSecondsLeft(0);
 					}
 
 					// "Trading started" toast when status flips to active
