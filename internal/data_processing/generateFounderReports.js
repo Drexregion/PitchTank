@@ -165,9 +165,12 @@ function computeMarketCapFromHistory(priceHistoryPoints) {
 		});
 }
 
-async function createMarketCapChartPng(labels, data) {
+async function createMarketCapChartPng(labels, data, compress = false) {
 	if (!labels.length || !data.length) return null;
 	const { labels: l2, data: d2 } = downsampleSeries(labels, data, 300);
+	const chartWidth = compress ? 700 : 1200;
+	const chartHeight = compress ? 280 : 500;
+	const chartFormat = compress ? "jpg" : "png";
 	const chartConfig = {
 		type: "line",
 		data: {
@@ -232,12 +235,12 @@ async function createMarketCapChartPng(labels, data) {
 		},
 	};
 	const url =
-		"https://quickchart.io/chart?format=png&width=1200&height=500&version=4&backgroundColor=transparent&c=" +
+		`https://quickchart.io/chart?format=${chartFormat}&width=${chartWidth}&height=${chartHeight}&version=4&backgroundColor=%230b1220&c=` +
 		encodeURIComponent(JSON.stringify(chartConfig));
 	const res = await fetch(url);
 	if (!res.ok) return null;
 	const ab = await res.arrayBuffer();
-	return Buffer.from(ab);
+	return { buffer: Buffer.from(ab), mime: `image/${chartFormat}` };
 }
 
 function bufferToDataUrl(buf, mime) {
@@ -367,6 +370,7 @@ function buildFounderReportHtml({
 	feedbackSummary,
 	selectedFeedback,
 	rawNotesRows,
+	compress = false,
 }) {
 	const safeSummary = (feedbackSummary || "—").toString();
 	const notesHtml =
@@ -407,7 +411,7 @@ function buildFounderReportHtml({
 			* { box-sizing: border-box; }
 			html, body { margin:0; padding:0; }
 			body {
-				background: linear-gradient(180deg, #0b1220 0%, #0b1426 40%, #0b1220 100%);
+				background: ${compress ? "#0b1220" : "linear-gradient(180deg, #0b1220 0%, #0b1426 40%, #0b1220 100%)"};
 				color: var(--text);
 				font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
 				line-height: 1.5;
@@ -417,10 +421,10 @@ function buildFounderReportHtml({
 				max-width: 960px;
 				margin: 0 auto;
 				padding: 20px 24px;
-				background: linear-gradient(180deg, rgba(59,130,246,0.05) 0%, rgba(34,211,238,0.03) 100%), var(--bg-elev);
+				background: ${compress ? "var(--bg-elev)" : "linear-gradient(180deg, rgba(59,130,246,0.05) 0%, rgba(34,211,238,0.03) 100%), var(--bg-elev)"};
 				border: 1px solid var(--divider);
 				border-radius: 16px;
-				box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+				${compress ? "" : "box-shadow: 0 10px 30px rgba(0,0,0,0.45);"}
 			}
 			.header {
 				display: grid;
@@ -468,7 +472,7 @@ function buildFounderReportHtml({
 			.card {
 				border-radius: 12px;
 				border: 1px solid var(--divider);
-				background: radial-gradient(1200px 600px at 0% 0%, rgba(59,130,246,0.08) 0%, rgba(34,211,238,0.06) 40%, rgba(15,26,43,0.6) 100%);
+				background: ${compress ? "#0f1a2b" : "radial-gradient(1200px 600px at 0% 0%, rgba(59,130,246,0.08) 0%, rgba(34,211,238,0.06) 40%, rgba(15,26,43,0.6) 100%)"};
 				padding: 14px;
 			}
 			.chart {
@@ -629,8 +633,16 @@ function getEventIdFromArgs() {
 	return process.env.EVENT_ID || null;
 }
 
+function getCompressFromArgs() {
+	return (
+		process.argv.slice(2).includes("--compress") ||
+		process.env.COMPRESS === "1"
+	);
+}
+
 async function main() {
 	const eventId = getEventIdFromArgs();
+	const compress = getCompressFromArgs();
 	if (!eventId) {
 		throw new Error(
 			"Event ID required. Use --event <id>, --event-id <id>, or set EVENT_ID env var.",
@@ -667,12 +679,12 @@ async function main() {
 		const data = marketCapPoints.map((p) => p.y);
 
 		const [chartBuffer, logoRes] = await Promise.all([
-			createMarketCapChartPng(labels, data),
+			createMarketCapChartPng(labels, data, compress),
 			fetchBufferFromUrl(founder.logo_url),
 		]);
 
 		const chartDataUrl = chartBuffer
-			? bufferToDataUrl(chartBuffer, "image/png")
+			? bufferToDataUrl(chartBuffer.buffer, chartBuffer.mime)
 			: null;
 		const logoDataUrl = logoRes
 			? bufferToDataUrl(logoRes.buffer, logoRes.contentType || "image/png")
@@ -685,6 +697,7 @@ async function main() {
 			feedbackSummary: feedback.summary,
 			selectedFeedback: feedback.selected_feedback,
 			rawNotesRows: buildRawNotesRows(tradesWithNotes, investorsById),
+			compress,
 		});
 
 		const safeName = sanitizeFileName(founder.name || founder.id || "founder");
