@@ -334,6 +334,10 @@ const EventPage: React.FC = () => {
 		if (!user || !eventId) return;
 		setIsRegistering(true);
 		try {
+			const STARTING_CASH = 500000;
+			const SHARES_POOL_BUDGET = 500000;
+			const INITIAL_PRICE_PER_SHARE = 10;
+
 			const { data: newInvestor, error: investorError } = await supabase
 				.from("investors")
 				.insert({
@@ -342,15 +346,30 @@ const EventPage: React.FC = () => {
 					email: user.email || "",
 					user_id: user.id,
 					initial_balance: 1000000,
-					current_balance: 1000000,
+					current_balance: STARTING_CASH,
 				})
 				.select()
 				.single();
 			if (investorError) throw investorError;
-			if (newInvestor) {
-				setInvestorId(newInvestor.id);
-				setShowRegisterNotification(false);
+
+			if (newInvestor && founders.length > 0) {
+				const sharesPerFounder = Math.floor(
+					SHARES_POOL_BUDGET / founders.length / INITIAL_PRICE_PER_SHARE,
+				);
+				const holdingsToInsert = founders.map((founder) => ({
+					investor_id: newInvestor.id,
+					founder_id: founder.id,
+					shares: sharesPerFounder,
+					cost_basis: INITIAL_PRICE_PER_SHARE,
+				}));
+				const { error: holdingsError } = await supabase
+					.from("investor_holdings")
+					.insert(holdingsToInsert);
+				if (holdingsError) throw holdingsError;
 			}
+
+			setInvestorId(newInvestor.id);
+			setShowRegisterNotification(false);
 		} catch (err: any) {
 			console.error("Failed to register for event:", err);
 		} finally {
