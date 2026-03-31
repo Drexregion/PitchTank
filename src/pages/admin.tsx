@@ -234,19 +234,39 @@ const AdminPage: React.FC = () => {
 			}
 		}
 
-		// Reset investor balances to their initial_balance
+		// Reset investor balances and re-issue initial phantom holdings
+		const STARTING_CASH = 500000;
+		const INITIAL_PRICE_PER_SHARE = 10;
+		const SHARES_POOL_BUDGET = 500000;
+		const sharesPerFounder = founders && founders.length > 0
+			? Math.floor(SHARES_POOL_BUDGET / founders.length / INITIAL_PRICE_PER_SHARE)
+			: 0;
+
 		const { data: investors, error: investorsError } = await supabase
 			.from("investors")
-			.select("id, initial_balance")
+			.select("id")
 			.eq("event_id", eventId);
 		if (investorsError) { setError(investorsError.message); return; }
 
 		for (const investor of investors || []) {
 			const { error: balanceError } = await supabase
 				.from("investors")
-				.update({ current_balance: investor.initial_balance })
+				.update({ current_balance: STARTING_CASH })
 				.eq("id", investor.id);
 			if (balanceError) { setError(balanceError.message); return; }
+
+			if (sharesPerFounder > 0) {
+				const holdingsToInsert = (founders || []).map((f: { id: string; k_constant: number }) => ({
+					investor_id: investor.id,
+					founder_id: f.id,
+					shares: sharesPerFounder,
+					cost_basis: INITIAL_PRICE_PER_SHARE,
+				}));
+				const { error: holdingsInsertError } = await supabase
+					.from("investor_holdings")
+					.insert(holdingsToInsert);
+				if (holdingsInsertError) { setError(holdingsInsertError.message); return; }
+			}
 		}
 
 		fetchEvents();
