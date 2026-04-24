@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(txt|md|json\\)$\")",
+      "WebFetch(domain:pitchtank.ca)",
+      "Bash(node -e \"import\\('@gradio/client'\\).then\\(m => console.log\\('ok', Object.keys\\(m\\)\\)\\).catch\\(e => console.error\\(e.message\\)\\)\")",
+      "Bash(node internal/emails/generate-hero-images.mjs)",
+      "Bash(node internal/emails/fix-overlay.mjs)",
+      "Bash(node -e ' *)"
+    ]
+  }
+}

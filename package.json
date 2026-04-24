@@ -18,20 +18,20 @@
 		"test:cleanup": "ts-node --project tsconfig.test.json internal/integration/cleanupArtifacts.ts",
 		"admin:reset-event": "ts-node --project tsconfig.test.json internal/admin/resetEventTrading.ts",
 		"reports:generate": "node internal/data_processing/generateFounderReports.js",
-		"feedback:flag-unuseful": "node internal/data_processing/flagNegativeFeedback.js"
+		"feedback:flag-unuseful": "node internal/data_processing/flagNegativeFeedback.js",
+		"admin:export-event-users": "node internal/admin/exportEventUsers.js"
 	},
 	"dependencies": {
+		"@gradio/client": "^2.2.0",
 		"@supabase/supabase-js": "^2.32.0",
 		"qrcode.react": "^4.2.0",
 		"react": "^18.2.0",
 		"react-dom": "^18.2.0",
 		"react-router-dom": "^6.15.0",
-		"recharts": "^2.7.3"
+		"recharts": "^2.7.3",
+		"verifalia": "^5.0.0"
 	},
 	"devDependencies": {
-		"openai": "^4.57.0",
-		"pdfkit": "^0.15.0",
-		"puppeteer": "^23.6.0",
 		"@types/node": "^20.5.0",
 		"@types/qrcode.react": "^3.0.0",
 		"@types/react": "^18.2.15",
@@ -44,7 +44,11 @@
 		"eslint": "^8.45.0",
 		"eslint-plugin-react-hooks": "^4.6.0",
 		"eslint-plugin-react-refresh": "^0.4.3",
+		"openai": "^4.57.0",
+		"pdfkit": "^0.15.0",
 		"postcss": "^8.4.28",
+		"puppeteer": "^23.6.0",
+		"sharp": "^0.34.5",
 		"supabase": "^2.53.6",
 		"tailwindcss": "^3.3.3",
 		"ts-node": "^10.9.1",

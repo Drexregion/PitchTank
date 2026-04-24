@@ -1,0 +1,47 @@
+PITCHTANK — FEATURE LIST
+For: Landing Page Designer
+
+---
+
+WHAT IS IT?
+A live investment simulation platform for pitch competitions. Participants trade
+virtual shares in real founders — prices move in real-time based on crowd activity.
+No judges. The market decides.
+
+---
+
+FOR ORGANIZERS
+- Create and manage pitch events
+- Add founders with bios, logos, and pitch summaries
+- Start/stop trading with one click
+- Set a live countdown timer for closing
+- QR code + shareable link for event access
+- Analytics dashboard (market cap, trade history)
+- "Simple Mode" — hide pricing/leaderboard for low-distraction events
+
+FOR INVESTORS / PARTICIPANTS
+- Buy and sell founder shares in real-time
+- See live prices update as others trade
+- Portfolio dashboard: cash balance, holdings, ROI, profit/loss
+- Leaderboard ranked by portfolio performance
+- Price history charts per founder
+
+FOR FOUNDERS
+- Editable profile: bio, photo, pitch summary, video link, logo
+- Analytics: price history, market cap over time, peak market cap
+- See trade-by-trade activity with investor notes
+
+---
+
+KEY DIFFERENTIATOR
+Pricing is powered by an Automated Market Maker (AMM) — the same model used in
+DeFi. Buying drives prices up, selling drives them down. Early believers are
+rewarded for spotting talent before the crowd.
+
+---
+
+PLATFORM
+- Web-based, works on any device — no download required
+- Real-time updates (no refresh needed)
+- Dark, premium UI with glassmorphic design
+- React + TypeScript frontend, Supabase backend

@@ -13,9 +13,11 @@ const LoginPage: React.FC = () => {
 	const location = useLocation();
 	const [searchParams] = useSearchParams();
 
-	// Get redirect path from query params, location state, or default to home
-	const redirectPath =
-		searchParams.get("redirect") || location.state?.from || "/";
+	// If ?id= is present it's a claim token → land on /profile after login
+	const claimId = searchParams.get("id");
+	const redirectPath = claimId
+		? `/profile?id=${claimId}`
+		: searchParams.get("redirect") || location.state?.from || "/";
 
 	// If already logged in, redirect to intended destination
 	if (user) {
