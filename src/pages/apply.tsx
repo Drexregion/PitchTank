@@ -273,6 +273,9 @@ const ApplyPage: React.FC = () => {
 						<label className="block text-white font-medium mb-1.5">
 							Email address <span className="text-red-400">*</span>
 						</label>
+						<p className="text-gray-500 text-xs mb-2">
+							This email will be used as the main point of contact for your application status.
+						</p>
 						<input
 							type="email"
 							value={applicantEmail}
@@ -356,12 +359,12 @@ const ApplyPage: React.FC = () => {
 							)}
 
 							{q.question_type === "text" && (
-								<input
-									type="text"
+								<textarea
 									value={answers[q.id] ?? ""}
 									onChange={(e) => setAnswer(q.id, e.target.value)}
+									rows={2}
 									disabled={autofilling}
-									className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm disabled:cursor-not-allowed"
+									className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm resize-y disabled:cursor-not-allowed whitespace-pre-wrap break-words"
 								/>
 							)}
 
@@ -369,9 +372,9 @@ const ApplyPage: React.FC = () => {
 								<textarea
 									value={answers[q.id] ?? ""}
 									onChange={(e) => setAnswer(q.id, e.target.value)}
-									rows={4}
+									rows={6}
 									disabled={autofilling}
-									className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm resize-none disabled:cursor-not-allowed"
+									className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm resize-y disabled:cursor-not-allowed whitespace-pre-wrap break-words"
 								/>
 							)}
 

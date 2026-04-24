@@ -64,3 +64,6 @@ internal/reports/*
 internal/reports
 internal/emails/*
 internal/admin/output/*
+
+.claude/*
+.claude/settings.local.json
