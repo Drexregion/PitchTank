@@ -10,6 +10,9 @@ import SignupPage from "./pages/signup";
 import FounderSignupPage from "./pages/founder-signup";
 import FounderLoginPage from "./pages/founder-login";
 import FounderDashboardPage from "./pages/founder-dashboard";
+import ApplyPage from "./pages/apply";
+import AdminEventApplicationsPage from "./pages/admin-event-applications";
+import ProfilePage from "./pages/profile";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -28,6 +31,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 				<Route path="/founder-signup/:token" element={<FounderSignupPage />} />
 				<Route path="/founder-login" element={<FounderLoginPage />} />
 				<Route path="/founder-dashboard" element={<FounderDashboardPage />} />
+				<Route path="/apply/:eventId" element={<ApplyPage />} />
+				<Route path="/admin/events/:eventId/applications" element={<AdminEventApplicationsPage />} />
+				<Route path="/profile" element={<ProfilePage />} />
 			</Routes>
 		</BrowserRouter>
 	</React.StrictMode>

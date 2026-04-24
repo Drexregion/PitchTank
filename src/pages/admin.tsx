@@ -3,8 +3,6 @@ import { Link, Navigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { Navbar } from "../components/Navbar";
 import { EventSetupForm } from "../components/EventSetupForm";
-import { FounderInvitationManager } from "../components/FounderInvitationManager";
-import { DatabaseTest } from "../components/DatabaseTest";
 import { useAuth } from "../hooks/useAuth";
 import { Event } from "../types/Event";
 
@@ -28,9 +26,8 @@ const AdminPage: React.FC = () => {
 	const [events, setEvents] = useState<Event[]>([]);
 	const [isLoadingEvents, setIsLoadingEvents] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
-	const [activeView, setActiveView] = useState<"list" | "new" | "invitations">(
-		"list"
-	);
+	const [activeView, setActiveView] = useState<"list" | "new" | "edit">("list");
+	const [editingEventId, setEditingEventId] = useState<string | null>(null);
 	const { user, isAdmin, isLoading } = useAuth();
 	const location = useLocation();
 	const [closingMinutes, setClosingMinutes] = useState<Record<string, number>>({});
@@ -136,6 +133,12 @@ const AdminPage: React.FC = () => {
 	const handleEventCreated = (newEvent: Event) => {
 		setEvents([newEvent, ...events]);
 		setActiveView("list");
+	};
+
+	const handleEventUpdated = () => {
+		fetchEvents();
+		setActiveView("list");
+		setEditingEventId(null);
 	};
 
 	const handleSetStatus = async (eventId: string, status: Event["status"]) => {
@@ -299,17 +302,9 @@ const AdminPage: React.FC = () => {
 								Create New Event
 							</button>
 						)}
-						{activeView === "new" && (
+						{(activeView === "new" || activeView === "edit") && (
 							<button
-								onClick={() => setActiveView("list")}
-								className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg"
-							>
-								Back to Events
-							</button>
-						)}
-						{activeView === "invitations" && (
-							<button
-								onClick={() => setActiveView("list")}
+								onClick={() => { setActiveView("list"); setEditingEventId(null); }}
 								className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg"
 							>
 								Back to Events
@@ -331,40 +326,17 @@ const AdminPage: React.FC = () => {
 						>
 							Events
 						</button>
-						<button
-							onClick={() => setActiveView("invitations")}
-							className={`py-2 px-1 border-b-2 font-medium text-sm ${
-								activeView === "invitations"
-									? "border-blue-500 text-blue-600"
-									: "border-transparent text-gray-500 hover:text-gray-700"
-							}`}
-						>
-							Founder Invitations
-						</button>
 					</nav>
 				</div>
 
 				{/* Tab Content */}
 				{activeView === "new" ? (
 					<EventSetupForm onEventCreated={handleEventCreated} />
-				) : activeView === "invitations" ? (
-					<div className="space-y-6">
-						<div className="flex justify-between items-center">
-							<h2 className="text-xl font-semibold">
-								Send Founder Invitations
-							</h2>
-						</div>
-
-						{/* Database Test Component - Remove this after debugging */}
-						<DatabaseTest />
-
-						<FounderInvitationManager
-							events={events}
-							onInvitationsSent={() => {
-								// Could add refresh logic here if needed
-							}}
-						/>
-					</div>
+				) : activeView === "edit" && editingEventId ? (
+					<EventSetupForm
+						eventId={editingEventId}
+						onEventUpdated={handleEventUpdated}
+					/>
 				) : (
 					<>
 						{isLoadingEvents ? (
@@ -419,6 +391,18 @@ const AdminPage: React.FC = () => {
 														className="text-xs text-blue-600 hover:underline font-medium"
 													>
 														View →
+													</Link>
+													<button
+														onClick={() => { setEditingEventId(event.id); setActiveView("edit"); }}
+														className="text-xs text-gray-500 hover:underline font-medium"
+													>
+														Edit →
+													</button>
+													<Link
+														to={`/admin/events/${event.id}/applications`}
+														className="text-xs text-purple-600 hover:underline font-medium"
+													>
+														Applications →
 													</Link>
 												</div>
 											</div>
