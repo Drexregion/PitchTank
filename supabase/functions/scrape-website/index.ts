@@ -9,6 +9,7 @@ const CORS_HEADERS = {
 interface Question {
   id: string;
   question_text: string;
+  description?: string;
   question_type: string;
 }
 
@@ -46,9 +47,12 @@ serve(async (req: Request) => {
     // Each text/textarea question becomes a schema property named by its id
     const schemaProperties: Record<string, { type: string; description: string }> = {};
     for (const q of textQuestions) {
+      const description = q.description
+        ? `${q.question_text} — ${q.description}`
+        : q.question_text;
       schemaProperties[q.id] = {
         type: "string",
-        description: q.question_text,
+        description,
       };
     }
 
