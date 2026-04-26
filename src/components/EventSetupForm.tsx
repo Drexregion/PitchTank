@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 import { supabase } from "../lib/supabaseClient";
 import { Event } from "../types/Event";
 
@@ -43,6 +44,8 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 	// Settings
 	const [hideLeaderboardAndPrices, setHideLeaderboardAndPrices] =
 		useState<boolean>(false);
+
+	const [descriptionPreview, setDescriptionPreview] = useState(false);
 
 	// Form status
 	const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -362,15 +365,41 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 							</div>
 
 							<div>
-								<label className="block text-gray-700 mb-1">
-									Event Description
-								</label>
-								<textarea
-									value={eventDescription}
-									onChange={(e) => setEventDescription(e.target.value)}
-									className="w-full p-2 border rounded-lg"
-									rows={3}
-								/>
+								<div className="flex items-center justify-between mb-1">
+									<label className="block text-gray-700">Event Description</label>
+									<div className="flex text-xs border border-gray-200 rounded-lg overflow-hidden">
+										<button
+											type="button"
+											onClick={() => setDescriptionPreview(false)}
+											className={`px-2.5 py-1 transition-colors ${!descriptionPreview ? "bg-gray-100 text-gray-800 font-medium" : "text-gray-400 hover:text-gray-600"}`}
+										>
+											Write
+										</button>
+										<button
+											type="button"
+											onClick={() => setDescriptionPreview(true)}
+											className={`px-2.5 py-1 transition-colors ${descriptionPreview ? "bg-gray-100 text-gray-800 font-medium" : "text-gray-400 hover:text-gray-600"}`}
+										>
+											Preview
+										</button>
+									</div>
+								</div>
+								{descriptionPreview ? (
+									<div className="w-full p-2 border rounded-lg min-h-[76px] prose prose-sm max-w-none text-gray-700">
+										{eventDescription
+											? <ReactMarkdown>{eventDescription}</ReactMarkdown>
+											: <span className="text-gray-400 italic">Nothing to preview.</span>
+										}
+									</div>
+								) : (
+									<textarea
+										value={eventDescription}
+										onChange={(e) => setEventDescription(e.target.value)}
+										className="w-full p-2 border rounded-lg"
+										rows={3}
+										placeholder="Supports markdown (e.g. **bold**, _italic_, bullet lists)"
+									/>
+								)}
 							</div>
 						</div>
 					)}
