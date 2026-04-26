@@ -4,7 +4,8 @@
       "Bash(node -e ' *)",
       "Bash(curl -s https://api.supabase.com/v1/projects/ccwwdkpafpxfxyuzgmjs/functions -H 'Authorization: Bearer sbp_01c816fcd2403e59776ba623ea5eb1c542b29a52')",
       "Bash(/tmp/supabase.exe login *)",
-      "Bash(/tmp/supabase.exe functions *)"
+      "Bash(/tmp/supabase.exe functions *)",
+      "Bash(npm install *)"
     ]
   }
 }

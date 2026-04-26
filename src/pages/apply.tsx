@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
+import ReactMarkdown from "react-markdown";
 import { supabase } from "../lib/supabaseClient";
 import { Event } from "../types/Event";
 import { EventQuestion } from "../types/Application";
@@ -257,7 +258,9 @@ const ApplyPage: React.FC = () => {
 					</p>
 					<h1 className="text-3xl font-bold text-white">{event.name}</h1>
 					{event.description && (
-						<p className="mt-2 text-gray-400">{event.description}</p>
+						<div className="mt-2 text-gray-400 prose prose-sm prose-invert max-w-none">
+							<ReactMarkdown>{event.description}</ReactMarkdown>
+						</div>
 					)}
 				</div>
 
