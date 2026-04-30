@@ -6,6 +6,7 @@
 
 -- Create policy to allow SELECT on event_settings
 -- Adjust if you need stricter rules (e.g. only for active events)
+DROP POLICY IF EXISTS "Allow public read of event_settings" ON event_settings;
 CREATE POLICY "Allow public read of event_settings"
 ON event_settings
 FOR SELECT
