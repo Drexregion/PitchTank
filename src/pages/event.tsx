@@ -111,9 +111,10 @@ const EventPage: React.FC = () => {
 					.from("events")
 					.select("*")
 					.eq("id", eventId)
-					.single();
+					.maybeSingle();
 
 				if (eventError) throw eventError;
+				if (!eventData) throw new Error("Event not found");
 				setEvent(eventData);
 				prevEventRef.current = eventData;
 
@@ -446,7 +447,7 @@ const EventPage: React.FC = () => {
 			.from("events")
 			.select("*")
 			.eq("id", eventId)
-			.single();
+			.maybeSingle();
 		if (latestError || !latest) return false;
 		setEvent(latest);
 		return isEventActive(latest);
