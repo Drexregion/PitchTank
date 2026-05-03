@@ -24,16 +24,18 @@ interface ProfileData {
 	profile_picture_url: string;
 	linkedin_url: string;
 	twitter_url: string;
-	role: "pitcher" | "sponsor" | "judge" | "";
+	role: "pitcher" | "sponsor" | "judge" | "member" | "";
 }
 
 const ROLE_LABELS: Record<string, string> = {
+	member: "Member",
 	pitcher: "Pitcher",
 	sponsor: "Sponsor",
 	judge: "Judge",
 };
 
 const ROLE_COLORS: Record<string, string> = {
+	member: "bg-white/10 text-white/50 border-white/20",
 	pitcher: "bg-violet-500/20 text-violet-300 border-violet-500/40",
 	sponsor: "bg-cyan-500/20 text-cyan-300 border-cyan-500/40",
 	judge: "bg-amber-500/20 text-amber-300 border-amber-500/40",
@@ -256,7 +258,7 @@ const ProfilePage: React.FC = () => {
 		profile_picture_url: "",
 		linkedin_url: "",
 		twitter_url: "",
-		role: "",
+		role: "member",
 	});
 	const [draft, setDraft] = useState<ProfileData>(profile);
 	const [isSaving, setIsSaving] = useState(false);
@@ -430,7 +432,7 @@ const ProfilePage: React.FC = () => {
 				profile_picture_url: draft.profile_picture_url || null,
 				linkedin_url: draft.linkedin_url || null,
 				twitter_url: draft.twitter_url || null,
-				role: draft.role || null,
+				role: draft.role || "member",
 			},
 			{ onConflict: "auth_user_id" }
 		);
@@ -452,17 +454,17 @@ const ProfilePage: React.FC = () => {
 		? `${window.location.origin}/profile?id=${profile.id}`
 		: `${window.location.origin}/profile`;
 
-	// Public view (no auth required)
-	if (!authLoading && !user && isLikelyProfileId) {
-		return <PublicProfileView founderUserId={claimId!} />;
-	}
-
 	if (authLoading) {
 		return (
 			<div className="min-h-screen flex items-center justify-center" style={{ background: "#080a14" }}>
 				<div className="w-8 h-8 rounded-full border-2 border-violet-400 border-t-transparent animate-spin" />
 			</div>
 		);
+	}
+
+	// Public view — show for anyone (including logged-in users) viewing someone else's profile
+	if (isLikelyProfileId) {
+		return <PublicProfileView founderUserId={claimId!} />;
 	}
 
 	if (!user) {
@@ -767,30 +769,6 @@ const ProfilePage: React.FC = () => {
 											/>
 										</div>
 									))}
-								</div>
-
-								{/* Role */}
-								<div>
-									<label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-1.5">
-										Role at event
-									</label>
-									<div className="flex gap-2">
-										{(["pitcher", "sponsor", "judge"] as const).map((r) => (
-											<button
-												key={r}
-												type="button"
-												onClick={() => setDraft((d) => ({ ...d, role: d.role === r ? "" : r }))}
-												className="flex-1 py-2 rounded-xl text-xs font-bold border transition-all capitalize"
-												style={
-													draft.role === r
-														? { background: "rgba(124,58,237,0.25)", border: "1px solid rgba(124,58,237,0.6)", color: "#c4b5fd" }
-														: { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)" }
-												}
-											>
-												{ROLE_LABELS[r]}
-											</button>
-										))}
-									</div>
 								</div>
 
 								{/* Bio */}

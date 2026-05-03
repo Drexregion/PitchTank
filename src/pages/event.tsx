@@ -14,7 +14,7 @@ import { SchedulePanel } from "../components/SchedulePanel";
 import { SettingsPanel } from "../components/SettingsPanel";
 import { useAuth } from "../hooks/useAuth";
 import { usePortfolioHistory } from "../hooks/usePortfolioHistory";
-import { Event } from "../types/Event";
+import { Event, Judge, Sponsor } from "../types/Event";
 import { FounderWithPriceAndUser } from "../types/Founder";
 import { EventDataProvider, useEventData } from "../contexts/EventDataContext";
 
@@ -190,6 +190,108 @@ const EventInfoSheet: React.FC<{
 						</div>
 					</div>
 				</div>
+
+				{/* Judges */}
+				{event.judges && event.judges.length > 0 && (
+					<div className="px-6 pb-4">
+						<p className="text-white/35 text-[10px] font-semibold uppercase tracking-wider mb-2">
+							Judges
+						</p>
+						<div className="space-y-2">
+							{event.judges.map((judge: Judge) => (
+								<div
+									key={judge.name}
+									className="rounded-2xl px-4 py-3 flex items-center gap-3"
+									style={{
+										background: "rgba(255,255,255,0.04)",
+										border: "1px solid rgba(255,255,255,0.06)",
+									}}
+								>
+									<div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-white/10">
+										{judge.profile_picture ? (
+											<img src={judge.profile_picture} alt={judge.name} className="w-full h-full object-cover" />
+										) : (
+											<div className="w-full h-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white font-bold text-sm">
+												{judge.name.charAt(0)}
+											</div>
+										)}
+									</div>
+									<div className="flex-1 min-w-0">
+										<div className="flex items-center gap-2">
+											<p className="text-white font-semibold text-sm">{judge.name}</p>
+											{judge.linkedin && (
+												<a
+													href={judge.linkedin}
+													target="_blank"
+													rel="noopener noreferrer"
+													onClick={(e) => e.stopPropagation()}
+													className="text-cyan-400/70 hover:text-cyan-400 transition-colors flex-shrink-0"
+												>
+													<svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+														<path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+													</svg>
+												</a>
+											)}
+										</div>
+										{judge.bio && (
+											<p className="text-white/45 text-xs mt-0.5 leading-relaxed line-clamp-2">{judge.bio}</p>
+										)}
+									</div>
+								</div>
+							))}
+						</div>
+					</div>
+				)}
+
+				{/* Sponsors */}
+				{event.sponsors && event.sponsors.length > 0 && (
+					<div className="px-6 pb-4">
+						<p className="text-white/35 text-[10px] font-semibold uppercase tracking-wider mb-2">
+							Sponsors
+						</p>
+						<div className="space-y-2">
+							{event.sponsors.map((sponsor: Sponsor) => (
+								<div
+									key={sponsor.name}
+									className="rounded-2xl px-4 py-3 flex items-center gap-3"
+									style={{
+										background: "rgba(255,255,255,0.04)",
+										border: "1px solid rgba(255,255,255,0.06)",
+									}}
+								>
+									<div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 border border-white/10 bg-white/5 flex items-center justify-center">
+										{sponsor.logo ? (
+											<img src={sponsor.logo} alt={sponsor.name} className="w-full h-full object-contain p-1" />
+										) : (
+											<span className="text-white/40 font-bold text-sm">{sponsor.name.charAt(0)}</span>
+										)}
+									</div>
+									<div className="flex-1 min-w-0">
+										<div className="flex items-center gap-2">
+											<p className="text-white font-semibold text-sm">{sponsor.name}</p>
+											{sponsor.website && (
+												<a
+													href={sponsor.website}
+													target="_blank"
+													rel="noopener noreferrer"
+													onClick={(e) => e.stopPropagation()}
+													className="text-cyan-400/70 hover:text-cyan-400 transition-colors flex-shrink-0"
+												>
+													<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+													</svg>
+												</a>
+											)}
+										</div>
+										{sponsor.description && (
+											<p className="text-white/45 text-xs mt-0.5 leading-relaxed line-clamp-2">{sponsor.description}</p>
+										)}
+									</div>
+								</div>
+							))}
+						</div>
+					</div>
+				)}
 
 				<div className="px-6 pb-6">
 					<button
@@ -517,6 +619,19 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const [showSchedule, setShowSchedule] = useState(false);
 	const [showSettings, setShowSettings] = useState(false);
 	const portfolioDropdownRef = useRef<HTMLDivElement>(null);
+	const [founderUserId, setFounderUserId] = useState<string | null>(null);
+
+	useEffect(() => {
+		if (!user?.id) return;
+		import("../lib/supabaseClient").then(({ supabase }) => {
+			supabase
+				.from("founder_users")
+				.select("id")
+				.eq("auth_user_id", user.id)
+				.maybeSingle()
+				.then(({ data }) => { if (data) setFounderUserId(data.id); });
+		});
+	}, [user?.id]);
 
 	// Closing countdown UI state (driven by context's closingAt signal)
 	const [showTradingClosedNotification, setShowTradingClosedNotification] = useState(false);
@@ -1445,7 +1560,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 			<ScannerModal
 				isOpen={showScanner}
 				onClose={() => setShowScanner(false)}
-				profileUrl={`${window.location.origin}/profile`}
+				profileUrl={founderUserId ? `${window.location.origin}/profile?id=${founderUserId}` : `${window.location.origin}/profile`}
 				profileName={displayName ?? undefined}
 			/>
 			<ChatPanel isOpen={showChat} onClose={() => setShowChat(false)} eventId={eventId} userId={user?.id ?? null} displayName={displayName ?? "Guest"} />
