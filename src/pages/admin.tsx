@@ -3,8 +3,11 @@ import { Link, Navigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { Navbar } from "../components/Navbar";
 import { EventSetupForm } from "../components/EventSetupForm";
+import { AdminFounderManager } from "../components/AdminFounderManager";
+import { AdminFounderAnalytics } from "../components/AdminFounderAnalytics";
 import { useAuth } from "../hooks/useAuth";
 import { Event } from "../types/Event";
+import { Founder } from "../types/Founder";
 
 const CountdownDisplay: React.FC<{ target: string }> = ({ target }) => {
 	const [secs, setSecs] = useState(() =>
@@ -34,6 +37,8 @@ const AdminPage: React.FC = () => {
 	const adminTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 	const [resetCountdown, setResetCountdown] = useState<Record<string, number | null>>({});
 	const resetIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+	const [expandedFounders, setExpandedFounders] = useState<Record<string, boolean>>({});
+	const [analyticsFounder, setAnalyticsFounder] = useState<Founder | null>(null);
 
 	const fetchEvents = useCallback(async () => {
 		try {
@@ -502,6 +507,25 @@ const AdminPage: React.FC = () => {
 													</div>
 												)}
 											</div>
+
+											{/* Pitchers panel */}
+											<div className="pt-3 border-t border-gray-100 mt-1">
+												<button
+													onClick={() => setExpandedFounders(p => ({ ...p, [event.id]: !p[event.id] }))}
+													className="flex items-center gap-1.5 text-xs font-semibold text-purple-600 hover:text-purple-800 transition-colors"
+												>
+													<svg className={`w-3.5 h-3.5 transition-transform ${expandedFounders[event.id] ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+													</svg>
+													Pitchers
+												</button>
+												{expandedFounders[event.id] && (
+													<AdminFounderManager
+														eventId={event.id}
+														onViewAnalytics={(f) => setAnalyticsFounder(f)}
+													/>
+												)}
+											</div>
 										</div>
 									);
 								})}
@@ -510,6 +534,19 @@ const AdminPage: React.FC = () => {
 					</>
 				)}
 			</div>
+
+			{/* Analytics modal */}
+			{analyticsFounder && (
+				<div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm overflow-y-auto py-8 px-4" onClick={() => setAnalyticsFounder(null)}>
+					<div className="w-full max-w-4xl" onClick={e => e.stopPropagation()}>
+						<div className="flex justify-between items-center mb-4">
+							<h2 className="text-lg font-bold text-white">{analyticsFounder.name} — Analytics</h2>
+							<button onClick={() => setAnalyticsFounder(null)} className="text-white/60 hover:text-white text-sm">✕ Close</button>
+						</div>
+						<AdminFounderAnalytics founder={analyticsFounder} />
+					</div>
+				</div>
+			)}
 		</div>
 	);
 };

@@ -1,7 +1,8 @@
 export interface Founder {
   id: string;
   event_id: string;
-  founder_user_id: string;
+  founder_user_id: string | null;
+  application_id?: string | null;
   name: string;
   bio: string | null;
   logo_url: string | null;
@@ -27,6 +28,18 @@ export interface FounderWithUserDetails extends Founder {
     profile_picture_url: string | null;
     bio: string | null;
   };
+}
+
+export interface FounderUserEmbed {
+  id: string;
+  first_name: string;
+  last_name: string;
+  profile_picture_url: string | null;
+  bio: string | null;
+}
+
+export interface FounderWithPriceAndUser extends FounderWithPrice {
+  founder_user: FounderUserEmbed | null;
 }
 
 export interface CreateFounderProjectRequest {

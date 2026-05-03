@@ -5,6 +5,18 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pitch Tank - Live Startup Market Simulator</title>
+    <!-- Apply persisted theme + font size before first paint to avoid flash -->
+    <script>
+      (function () {
+        var fs = localStorage.getItem('pt_font_size');
+        var map = { sm: '14px', md: '16px', lg: '18px' };
+        document.documentElement.style.setProperty(
+          '--app-font-size', map[fs] || '16px'
+        );
+        var theme = localStorage.getItem('pt_theme') || 'midnight';
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { supabase } from "../lib/supabaseClient";
-import { Event } from "../types/Event";
+import { Event, ScheduleItem } from "../types/Event";
 
 interface EventSetupFormProps {
 	onEventCreated?: (event: Event) => void;
@@ -9,7 +9,7 @@ interface EventSetupFormProps {
 	eventId?: string; // when provided, component is in edit mode
 }
 
-type Tab = "event-info" | "questionnaire" | "settings";
+type Tab = "event-info" | "questionnaire" | "settings" | "schedule";
 
 interface QuestionDraft {
 	id: string;
@@ -17,6 +17,14 @@ interface QuestionDraft {
 	description: string;
 	question_type: "text" | "textarea" | "image" | "url" | "website_url";
 	required: boolean;
+}
+
+interface ScheduleItemDraft {
+	id: string;
+	title: string;
+	description: string;
+	time: string;
+	duration: string;
 }
 
 // Converts a DB timestamptz string to the value needed by datetime-local inputs
@@ -40,6 +48,9 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 
 	// Questionnaire
 	const [questions, setQuestions] = useState<QuestionDraft[]>([]);
+
+	// Schedule
+	const [scheduleItems, setScheduleItems] = useState<ScheduleItemDraft[]>([]);
 
 	// Settings
 	const [hideLeaderboardAndPrices, setHideLeaderboardAndPrices] =
@@ -87,6 +98,18 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 					}))
 				);
 			}
+			if (eventRes.data) {
+				const raw: ScheduleItem[] = eventRes.data.schedule ?? [];
+				setScheduleItems(
+					raw.map((item) => ({
+						id: crypto.randomUUID(),
+						title: item.title,
+						description: item.description ?? "",
+						time: item.time ?? "",
+						duration: item.duration ?? "",
+					}))
+				);
+			}
 			setIsLoadingData(false);
 		});
 	}, [eventId]);
@@ -122,6 +145,41 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 		setQuestions(next);
 	};
 
+	const addScheduleItem = () => {
+		setScheduleItems((prev) => [
+			...prev,
+			{ id: crypto.randomUUID(), title: "", description: "", time: "", duration: "" },
+		]);
+	};
+
+	const removeScheduleItem = (id: string) => {
+		setScheduleItems((prev) => prev.filter((s) => s.id !== id));
+	};
+
+	const updateScheduleItem = (id: string, patch: Partial<ScheduleItemDraft>) => {
+		setScheduleItems((prev) =>
+			prev.map((s) => (s.id === id ? { ...s, ...patch } : s))
+		);
+	};
+
+	const moveScheduleItem = (index: number, direction: "up" | "down") => {
+		const next = [...scheduleItems];
+		const target = direction === "up" ? index - 1 : index + 1;
+		if (target < 0 || target >= next.length) return;
+		[next[index], next[target]] = [next[target], next[index]];
+		setScheduleItems(next);
+	};
+
+	const serializeSchedule = () =>
+		scheduleItems
+			.filter((s) => s.title.trim() !== "")
+			.map(({ title, description, time, duration }) => ({
+				title: title.trim(),
+				...(description.trim() ? { description: description.trim() } : {}),
+				...(time.trim() ? { time: time.trim() } : {}),
+				...(duration.trim() ? { duration: duration.trim() } : {}),
+			}));
+
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setIsSubmitting(true);
@@ -145,6 +203,7 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 						description: eventDescription,
 						start_time: startTime,
 						end_time: endTime,
+						schedule: serializeSchedule(),
 					})
 					.eq("id", eventId)
 					.select()
@@ -195,6 +254,7 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 						start_time: startTime,
 						end_time: endTime,
 						status: "draft",
+						schedule: serializeSchedule(),
 					})
 					.select()
 					.single();
@@ -234,6 +294,7 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 				setStartTime("");
 				setEndTime("");
 				setQuestions([]);
+				setScheduleItems([]);
 				setHideLeaderboardAndPrices(false);
 				setActiveTab("event-info");
 
@@ -315,6 +376,18 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 						onClick={() => setActiveTab("settings")}
 					>
 						Settings
+					</button>
+					<button
+						type="button"
+						className={tabClass("schedule")}
+						onClick={() => setActiveTab("schedule")}
+					>
+						Schedule
+						{scheduleItems.length > 0 && (
+							<span className="ml-1.5 bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded-full">
+								{scheduleItems.length}
+							</span>
+						)}
 					</button>
 				</div>
 
@@ -525,7 +598,7 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 									<div className="flex-1">
 										<div className="flex items-center gap-2 mb-1">
 											<span className="font-medium text-gray-800">
-												Simple Commitment Mode
+												Non-Competitive Mode
 											</span>
 											<div className="relative group">
 												<svg
@@ -542,12 +615,12 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 													/>
 												</svg>
 												<div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 bg-gray-900 text-white text-xs rounded-lg p-3 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10 shadow-lg">
-													<p className="font-semibold mb-1">Simple Commitment Mode</p>
+													<p className="font-semibold mb-1">Non-Competitive Mode</p>
 													<ul className="list-disc ml-4 space-y-1 text-gray-300">
-														<li>Hides the leaderboard tab from participants</li>
-														<li>Investors commit a dollar amount instead of picking share quantities — shares and any unspent remainder are automatically returned</li>
-														<li>Hides share prices and market cap from participants</li>
-														<li>Admins get a private analytics tab with full market cap history and peak caps per founder</li>
+														<li>Hides the leaderboard from participants</li>
+														<li>Hides share prices, market caps, and ROI from participants</li>
+														<li>Investors enter a dollar amount — shares and any unspent remainder are automatically calculated</li>
+														<li>Admins get a private analytics tab with full market cap history per founder</li>
 													</ul>
 													<div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900" />
 												</div>
@@ -555,8 +628,8 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 										</div>
 										<p className="text-sm text-gray-500">
 											{hideLeaderboardAndPrices
-												? "Participants commit a dollar amount. Share prices and leaderboard are hidden. Admins have a private analytics view."
-												: "Standard mode: participants see live share prices, market caps, and the leaderboard."}
+												? "Prices, ROI, and leaderboard are hidden from participants. Admins have a private analytics view."
+												: "Standard mode: participants see live share prices, market caps, ROI, and the leaderboard."}
 										</p>
 									</div>
 
@@ -579,15 +652,111 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 
 								{hideLeaderboardAndPrices && (
 									<div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
-										<p className="font-medium mb-1">Simple Commitment Mode is ON</p>
+										<p className="font-medium mb-1">Non-Competitive Mode is ON</p>
 										<p>
-											Investors will enter a dollar amount to commit. The system
-											automatically calculates shares based on current AMM pricing,
-											returning any unused remainder.
+											Prices, ROI, and the leaderboard are hidden from participants.
+											Investors enter a dollar amount; shares and any unspent remainder
+											are calculated automatically.
 										</p>
 									</div>
 								)}
 							</div>
+						</div>
+					)}
+
+					{/* Schedule Tab */}
+					{activeTab === "schedule" && (
+						<div>
+							<div className="flex justify-between items-center mb-4">
+								<p className="text-sm text-gray-500">
+									Add agenda items that participants will see in the event info sheet.
+								</p>
+								<button
+									type="button"
+									onClick={addScheduleItem}
+									className="bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 text-sm transition-colors"
+								>
+									+ Add Item
+								</button>
+							</div>
+
+							{scheduleItems.length === 0 ? (
+								<div className="border-2 border-dashed border-gray-200 rounded-lg p-10 text-center text-gray-400">
+									<p className="mb-2">No schedule items yet.</p>
+									<p className="text-sm">Click "Add Item" to build the event agenda.</p>
+								</div>
+							) : (
+								<div className="space-y-3">
+									{scheduleItems.map((item, index) => (
+										<div key={item.id} className="border border-gray-200 rounded-lg p-4">
+											<div className="flex items-start gap-3">
+												{/* Reorder buttons */}
+												<div className="flex flex-col gap-1 pt-1 flex-shrink-0">
+													<button
+														type="button"
+														onClick={() => moveScheduleItem(index, "up")}
+														disabled={index === 0}
+														className="text-gray-300 hover:text-gray-600 disabled:opacity-20 disabled:cursor-not-allowed leading-none"
+													>
+														▲
+													</button>
+													<button
+														type="button"
+														onClick={() => moveScheduleItem(index, "down")}
+														disabled={index === scheduleItems.length - 1}
+														className="text-gray-300 hover:text-gray-600 disabled:opacity-20 disabled:cursor-not-allowed leading-none"
+													>
+														▼
+													</button>
+												</div>
+
+												{/* Item content */}
+												<div className="flex-1 space-y-2">
+													<input
+														type="text"
+														value={item.title}
+														onChange={(e) => updateScheduleItem(item.id, { title: e.target.value })}
+														placeholder="Title (required, e.g. Keynote Address)"
+														className="w-full p-2 border rounded-lg text-sm"
+													/>
+													<div className="grid grid-cols-2 gap-2">
+														<input
+															type="text"
+															value={item.time}
+															onChange={(e) => updateScheduleItem(item.id, { time: e.target.value })}
+															placeholder="Time (e.g. 10:30 AM)"
+															className="w-full p-2 border rounded-lg text-sm text-gray-600"
+														/>
+														<input
+															type="text"
+															value={item.duration}
+															onChange={(e) => updateScheduleItem(item.id, { duration: e.target.value })}
+															placeholder="Duration (e.g. 30 min)"
+															className="w-full p-2 border rounded-lg text-sm text-gray-600"
+														/>
+													</div>
+													<input
+														type="text"
+														value={item.description}
+														onChange={(e) => updateScheduleItem(item.id, { description: e.target.value })}
+														placeholder="Description (optional)"
+														className="w-full p-2 border rounded-lg text-sm text-gray-500"
+													/>
+												</div>
+
+												{/* Remove */}
+												<button
+													type="button"
+													onClick={() => removeScheduleItem(item.id)}
+													className="text-red-400 hover:text-red-600 text-sm flex-shrink-0 mt-1"
+												>
+													Remove
+												</button>
+											</div>
+										</div>
+									))}
+								</div>
+							)}
 						</div>
 					)}
 

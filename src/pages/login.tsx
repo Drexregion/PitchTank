@@ -1,39 +1,54 @@
 import React, { useState } from "react";
 import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
-import { Navbar } from "../components/Navbar";
 import { useAuth } from "../hooks/useAuth";
+import { supabase } from "../lib/supabaseClient";
 
-const LoginPage: React.FC = () => {
+const AuthPage: React.FC = () => {
+	const [searchParams] = useSearchParams();
+	const location = useLocation();
+	const [ssoError, setSsoError] = useState<string | null>(null);
+
+	// Start on sign-up tab if arriving from /signup route
+	const initialTab = location.pathname === "/signup" ? "signup" : "login";
+	const [tab, setTab] = useState<"login" | "signup">(initialTab);
+
+	// Shared fields
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [success, setSuccess] = useState<string | null>(null);
 
-	const { signIn, user } = useAuth();
-	const location = useLocation();
-	const [searchParams] = useSearchParams();
+	// Sign-up only fields
+	const [name, setName] = useState("");
+	const [confirmPassword, setConfirmPassword] = useState("");
 
-	// If ?id= is present it's a claim token → land on /profile after login
+	const { signIn, signUp, user } = useAuth();
+
+	// Redirect params
 	const claimId = searchParams.get("id");
 	const redirectPath = claimId
 		? `/profile?id=${claimId}`
 		: searchParams.get("redirect") || location.state?.from || "/";
 
-	// If already logged in, redirect to intended destination
-	if (user) {
-		return <Navigate to={redirectPath} replace />;
-	}
+	const eventIdMatch = redirectPath?.match(/\/events?\/([^/]+)/);
+	const eventId = eventIdMatch ? eventIdMatch[1] : undefined;
+	const redirectMissing = tab === "signup" && !searchParams.get("redirect") && !claimId;
 
-	const handleSubmit = async (e: React.FormEvent) => {
+	if (user) return <Navigate to={redirectPath} replace />;
+
+	const switchTab = (t: "login" | "signup") => {
+		setTab(t);
+		setError(null);
+		setSuccess(null);
+	};
+
+	const handleLogin = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setError(null);
 		setIsSubmitting(true);
-
 		try {
-			if (!email || !password) {
-				throw new Error("Please enter both email and password");
-			}
-
+			if (!email || !password) throw new Error("Please enter both email and password");
 			await signIn(email, password);
 		} catch (err: any) {
 			setError(err.message || "Failed to sign in");
@@ -42,135 +57,290 @@ const LoginPage: React.FC = () => {
 		}
 	};
 
+	const handleSignup = async (e: React.FormEvent) => {
+		e.preventDefault();
+		setError(null);
+		setSuccess(null);
+		setIsSubmitting(true);
+		try {
+			if (!redirectPath) throw new Error("Registration requires a redirect destination.");
+			if (!name || !email || !password || !confirmPassword) throw new Error("Please fill in all fields");
+			if (password !== confirmPassword) throw new Error("Passwords do not match");
+			if (password.length < 8) throw new Error("Password must be at least 8 characters long");
+
+			const { user: newUser, error: signUpError } = await signUp(email, password, name);
+			if (signUpError) throw signUpError;
+
+			if (eventId && newUser?.id) {
+				try {
+					const { error: investorError } = await supabase
+						.from("investors")
+						.insert({
+							event_id: eventId,
+							name: name || email.split("@")[0],
+							email,
+							user_id: newUser.id,
+							initial_balance: 1000000,
+							current_balance: 1000000,
+						})
+						.select()
+						.single();
+					if (!investorError) {
+						await supabase.from("user_roles").insert({ user_id: newUser.id, role: "investor", event_id: eventId });
+					}
+				} catch { /* non-fatal */ }
+			}
+
+			setSuccess("Account created! Check your email to confirm.");
+			setName(""); setEmail(""); setPassword(""); setConfirmPassword("");
+		} catch (err: any) {
+			setError(err.message || "Failed to create account");
+		} finally {
+			setIsSubmitting(false);
+		}
+	};
+
+	const handleSSOLogin = async (provider: "google" | "linkedin_oidc") => {
+		setSsoError(null);
+		const { error } = await supabase.auth.signInWithOAuth({
+			provider,
+			options: {
+				redirectTo: `${window.location.origin}${redirectPath}`,
+				scopes: provider === "linkedin_oidc" ? "openid profile email" : undefined,
+			},
+		});
+		if (error) setSsoError(error.message);
+	};
+
+	const inputBase = "w-full px-4 py-3.5 rounded-xl text-white text-sm placeholder-white/20 outline-none transition-all";
+	const inputStyle = { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" };
+	const onFocus = (e: React.FocusEvent<HTMLInputElement>) => (e.currentTarget.style.border = "1px solid rgba(99,102,241,0.6)");
+	const onBlur  = (e: React.FocusEvent<HTMLInputElement>) => (e.currentTarget.style.border = "1px solid rgba(255,255,255,0.08)");
+
 	return (
-		<div className="min-h-screen relative overflow-hidden">
-			{/* Fancy dark background */}
-			<div className="fixed inset-0 bg-gradient-to-br from-dark-950 via-dark-900 to-dark-950">
-				<div className="absolute top-0 right-1/4 w-96 h-96 bg-primary-600/30 rounded-full blur-3xl animate-pulse" />
-				<div className="absolute bottom-0 left-1/4 w-96 h-96 bg-accent-cyan/20 rounded-full blur-3xl animate-pulse delay-1000" />
-				<div className="absolute inset-0 bg-[linear-gradient(rgba(0,82,179,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(0,82,179,0.05)_1px,transparent_1px)] bg-[size:50px_50px]" />
+		<div className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center px-4 py-12" style={{ background: "#080a14" }}>
+			{/* Leaderboard background image */}
+			<div
+				aria-hidden="true"
+				className="fixed inset-0 bg-cover bg-center bg-no-repeat"
+				style={{ backgroundImage: "url('/leaderboard/leaderboard-bg.webp')" }}
+			/>
+			{/* Dark overlay — keeps the bg subtle */}
+			<div
+				className="fixed inset-0"
+				style={{
+					background:
+						"linear-gradient(160deg, rgba(8,6,20,0.87) 0%, rgba(10,8,28,0.80) 50%, rgba(6,8,16,0.88) 100%)",
+				}}
+			/>
+			{/* Ambient glows on top */}
+			<div className="fixed inset-0 pointer-events-none overflow-hidden">
+				<div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[140vw] h-[60vh] rounded-full opacity-60"
+					style={{ background: "radial-gradient(ellipse at center, #2d1b69 0%, #1a0e4a 35%, transparent 70%)" }} />
+				<div className="absolute top-1/4 -left-20 w-72 h-72 rounded-full opacity-25"
+					style={{ background: "radial-gradient(circle, #4f46e5 0%, transparent 70%)", filter: "blur(40px)" }} />
+				<div className="absolute top-1/3 -right-20 w-72 h-72 rounded-full opacity-20"
+					style={{ background: "radial-gradient(circle, #0ea5e9 0%, transparent 70%)", filter: "blur(50px)" }} />
 			</div>
 
-			<div className="relative z-10">
-				<Navbar />
+			<div className="relative z-10 w-full max-w-sm">
+				{/* Wordmark */}
+				<div className="text-center mb-8">
+					<h1 className="font-black text-4xl tracking-tight"
+						style={{
+							background: "linear-gradient(180deg, #ffffff 0%, #a78bfa 50%, #6366f1 100%)",
+							WebkitBackgroundClip: "text",
+							WebkitTextFillColor: "transparent",
+							backgroundClip: "text",
+							filter: "drop-shadow(0 0 20px rgba(139,92,246,0.5))",
+						}}>
+						PitchTank
+					</h1>
+					<p className="text-white/30 text-xs mt-2">The founder trading platform</p>
+				</div>
 
-				<div className="container mx-auto px-4 py-16 flex justify-center">
-					<div className="card-dark w-full max-w-md p-8 border border-primary-500/30 shadow-glow">
-						<h1 className="text-3xl font-bold mb-6 text-center bg-gradient-to-r from-accent-cyan to-primary-400 bg-clip-text text-transparent">
-							Log In
-						</h1>
+				<div>
+					{/* Tab toggle */}
+					<div className="flex mb-6 p-1 rounded-xl gap-1"
+						style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+						{(["login", "signup"] as const).map((t) => (
+							<button key={t} type="button" onClick={() => switchTab(t)}
+								className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all"
+								style={tab === t ? {
+									background: "linear-gradient(135deg, rgba(34,211,238,0.15), rgba(99,102,241,0.15))",
+									border: "1px solid rgba(99,102,241,0.3)",
+									color: "#e0e7ff",
+								} : { color: "rgba(255,255,255,0.3)", border: "1px solid transparent" }}
+							>
+								{t === "login" ? "Sign In" : "Create Account"}
+							</button>
+						))}
+					</div>
 
-						{error && (
-							<div className="bg-red-500/20 border border-red-500/50 p-4 mb-6 rounded-lg">
-								<div className="flex">
-									<div className="flex-shrink-0">
-										<svg
-											className="h-5 w-5 text-red-400"
-											xmlns="http://www.w3.org/2000/svg"
-											viewBox="0 0 20 20"
-											fill="currentColor"
-										>
-											<path
-												fillRule="evenodd"
-												d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-												clipRule="evenodd"
-											/>
-										</svg>
-									</div>
-									<div className="ml-3">
-										<p className="text-sm text-red-400">{error}</p>
-									</div>
+					{/* Banners */}
+					{redirectMissing && (
+						<div className="mb-4 px-4 py-3 rounded-xl flex items-start gap-3"
+							style={{ background: "rgba(234,179,8,0.1)", border: "1px solid rgba(234,179,8,0.25)" }}>
+							<svg className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+								<path fillRule="evenodd" d="M8.257 3.099c.366-.73 1.42-.73 1.786 0l6.518 13.002A1 1 0 0115.66 18H4.34a1 1 0 01-.9-1.45L9.957 3.1zM11 14a1 1 0 10-2 0 1 1 0 002 0zm-1-2a1 1 0 01-1-1V8a1 1 0 112 0v3a1 1 0 01-1 1z" clipRule="evenodd" />
+							</svg>
+							<p className="text-yellow-300 text-xs leading-relaxed">Please start from an event page and tap Sign Up so we can set up your investor profile.</p>
+						</div>
+					)}
+					{error && (
+						<div className="mb-4 px-4 py-3 rounded-xl flex items-center gap-3"
+							style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)" }}>
+							<svg className="w-4 h-4 text-red-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+								<path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+							</svg>
+							<p className="text-red-400 text-sm">{error}</p>
+						</div>
+					)}
+					{success && (
+						<div className="mb-4 px-4 py-3 rounded-xl flex items-center gap-3"
+							style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)" }}>
+							<svg className="w-4 h-4 text-green-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+								<path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+							</svg>
+							<p className="text-green-400 text-sm">{success}</p>
+						</div>
+					)}
+
+					{/* ── LOGIN FORM ── */}
+					{tab === "login" && (
+						<form onSubmit={handleLogin} className="space-y-4">
+							<div>
+								<label htmlFor="login-email" className="block text-white/40 text-xs font-semibold uppercase tracking-widest mb-2">Email</label>
+								<input id="login-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+									placeholder="you@example.com" required className={inputBase} style={inputStyle} onFocus={onFocus} onBlur={onBlur} />
+							</div>
+							<div>
+								<div className="flex items-center justify-between mb-2">
+									<label htmlFor="login-password" className="text-white/40 text-xs font-semibold uppercase tracking-widest">Password</label>
+									<Link to="/forgot-password" className="text-xs text-indigo-400 hover:text-cyan-400 transition-colors">Forgot?</Link>
 								</div>
+								<input id="login-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+									placeholder="••••••••" required className={inputBase} style={inputStyle} onFocus={onFocus} onBlur={onBlur} />
 							</div>
-						)}
-
-						<form onSubmit={handleSubmit}>
-							<div className="mb-4">
-								<label
-									htmlFor="email"
-									className="block text-white font-medium mb-2"
-								>
-									Email Address
-								</label>
-								<input
-									type="email"
-									id="email"
-									value={email}
-									onChange={(e) => setEmail(e.target.value)}
-									className="input-dark w-full"
-									placeholder="your@email.com"
-									required
-								/>
-							</div>
-
-							<div className="mb-6">
-								<div className="flex justify-between mb-2">
-									<label
-										htmlFor="password"
-										className="block text-white font-medium"
-									>
-										Password
-									</label>
-									<Link
-										to="/forgot-password"
-										className="text-sm text-primary-400 hover:text-accent-cyan transition-colors"
-									>
-										Forgot Password?
-									</Link>
-								</div>
-								<input
-									type="password"
-									id="password"
-									value={password}
-									onChange={(e) => setPassword(e.target.value)}
-									className="input-dark w-full"
-									placeholder="••••••••"
-									required
-								/>
-							</div>
-
-							<button
-								type="submit"
-								disabled={isSubmitting}
-								className={`w-full py-3 px-4 bg-gradient-to-r from-accent-cyan to-primary-500 hover:from-accent-cyan/90 hover:to-primary-600 text-white font-medium rounded-lg transition-all shadow-lg ${
-									isSubmitting
-										? "opacity-70 cursor-not-allowed"
-										: "hover:shadow-accent-cyan/50"
-								}`}
+							<p className="text-white/20 text-[11px] text-center leading-relaxed pt-1">
+								By signing in you agree to our{" "}
+								<Link to="/terms" className="text-white/35 hover:text-white/60 underline underline-offset-2 transition-colors">Terms</Link>
+								{" "}&{" "}
+								<Link to="/privacy" className="text-white/35 hover:text-white/60 underline underline-offset-2 transition-colors">Privacy Policy</Link>
+							</p>
+							<button type="submit" disabled={isSubmitting}
+								className="w-full py-4 rounded-xl font-bold text-white text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 active:scale-[0.98]"
+								style={{ background: "linear-gradient(135deg, #22d3ee 0%, #6366f1 100%)", boxShadow: isSubmitting ? "none" : "0 0 20px rgba(34,211,238,0.3), 0 4px 15px rgba(0,0,0,0.3)" }}
 							>
 								{isSubmitting ? "Signing in..." : "Sign In"}
 							</button>
-						</form>
 
-						<div className="mt-6 text-center space-y-2">
-							<p className="text-dark-300">
-								Don't have an account?{" "}
-								<Link
-									to={`/signup${
-										searchParams.get("redirect")
-											? `?redirect=${searchParams.get("redirect")}`
-											: ""
-									}`}
-									className="text-accent-cyan hover:text-primary-400 font-medium transition-colors"
+							{/* SSO */}
+							<div className="flex items-center gap-3 mt-5">
+								<div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.07)" }} />
+								<span className="text-white/25 text-xs">or sign in with</span>
+								<div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.07)" }} />
+							</div>
+							{ssoError && <p className="text-red-400 text-xs text-center mt-2">{ssoError}</p>}
+							<div className="flex gap-3 mt-3">
+								<button type="button" onClick={() => handleSSOLogin("google")}
+									className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-white/60 text-sm font-medium transition-all hover:bg-white/10 active:scale-[0.98]"
+									style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
 								>
-									Sign Up
-								</Link>
+									<svg className="w-4 h-4" viewBox="0 0 24 24">
+										<path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+										<path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+										<path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+										<path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+									</svg>
+									Google
+								</button>
+								<button type="button" onClick={() => handleSSOLogin("linkedin_oidc")}
+									className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-white/60 text-sm font-medium transition-all hover:bg-white/10 active:scale-[0.98]"
+									style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+								>
+									<svg className="w-4 h-4" viewBox="0 0 24 24" fill="#0A66C2">
+										<path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+									</svg>
+									LinkedIn
+								</button>
+							</div>
+						</form>
+					)}
+
+					{/* ── SIGN UP FORM ── */}
+					{tab === "signup" && (
+						<form onSubmit={handleSignup} className="space-y-4">
+							<div>
+								<label htmlFor="signup-name" className="block text-white/40 text-xs font-semibold uppercase tracking-widest mb-2">Full Name</label>
+								<input id="signup-name" type="text" value={name} onChange={(e) => setName(e.target.value)}
+									placeholder="Alex Chen" required className={inputBase} style={inputStyle} onFocus={onFocus} onBlur={onBlur} />
+							</div>
+							<div>
+								<label htmlFor="signup-email" className="block text-white/40 text-xs font-semibold uppercase tracking-widest mb-2">Email</label>
+								<input id="signup-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+									placeholder="you@example.com" required className={inputBase} style={inputStyle} onFocus={onFocus} onBlur={onBlur} />
+							</div>
+							<div>
+								<label htmlFor="signup-password" className="block text-white/40 text-xs font-semibold uppercase tracking-widest mb-2">Password</label>
+								<input id="signup-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+									placeholder="min. 8 characters" required minLength={8} className={inputBase} style={inputStyle} onFocus={onFocus} onBlur={onBlur} />
+							</div>
+							<div>
+								<label htmlFor="signup-confirm" className="block text-white/40 text-xs font-semibold uppercase tracking-widest mb-2">Confirm Password</label>
+								<input id="signup-confirm" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+									placeholder="••••••••" required className={inputBase} style={inputStyle} onFocus={onFocus} onBlur={onBlur} />
+							</div>
+							<p className="text-white/20 text-[11px] text-center leading-relaxed pt-1">
+								By creating an account you agree to our{" "}
+								<Link to="/terms" className="text-white/35 hover:text-white/60 underline underline-offset-2 transition-colors">Terms</Link>
+								{" "}&{" "}
+								<Link to="/privacy" className="text-white/35 hover:text-white/60 underline underline-offset-2 transition-colors">Privacy Policy</Link>
 							</p>
-						</div>
-            <p className="text-sm text-gray-500">
-              Are you a founder?{' '}
-              <Link
-                to="/founder-login"
-                className="text-blue-600 hover:text-blue-800 font-medium"
-              >
-                Founder Login
-              </Link>
-            </p>
-					</div>
+							<button type="submit" disabled={isSubmitting || redirectMissing}
+								className="w-full py-4 rounded-xl font-bold text-white text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 active:scale-[0.98]"
+								style={{ background: "linear-gradient(135deg, #22d3ee 0%, #6366f1 100%)", boxShadow: isSubmitting || redirectMissing ? "none" : "0 0 20px rgba(34,211,238,0.3), 0 4px 15px rgba(0,0,0,0.3)" }}
+							>
+								{redirectMissing ? "Start from an event to sign up" : isSubmitting ? "Creating account..." : "Create Account"}
+							</button>
+
+							{/* SSO */}
+							<div className="flex items-center gap-3 mt-5">
+								<div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.07)" }} />
+								<span className="text-white/25 text-xs">or sign up with</span>
+								<div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.07)" }} />
+							</div>
+							{ssoError && <p className="text-red-400 text-xs text-center mt-2">{ssoError}</p>}
+							<div className="flex gap-3 mt-3">
+								<button type="button" onClick={() => handleSSOLogin("google")}
+									className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-white/60 text-sm font-medium transition-all hover:bg-white/10 active:scale-[0.98]"
+									style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+								>
+									<svg className="w-4 h-4" viewBox="0 0 24 24">
+										<path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+										<path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+										<path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+										<path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+									</svg>
+									Google
+								</button>
+								<button type="button" onClick={() => handleSSOLogin("linkedin_oidc")}
+									className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-white/60 text-sm font-medium transition-all hover:bg-white/10 active:scale-[0.98]"
+									style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+								>
+									<svg className="w-4 h-4" viewBox="0 0 24 24" fill="#0A66C2">
+										<path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+									</svg>
+									LinkedIn
+								</button>
+							</div>
+						</form>
+					)}
+
 				</div>
 			</div>
 		</div>
 	);
 };
 
-export default LoginPage;
+export default AuthPage;
