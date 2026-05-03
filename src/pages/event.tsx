@@ -4,12 +4,13 @@ import { useParams, useNavigate } from "react-router-dom";
 import { TradeModal } from "../components/TradeModal";
 import { LeaderboardPanel } from "../components/LeaderboardPanel";
 import { QRShareModal } from "../components/QRShareModal";
+import { ScannerModal } from "../components/ScannerModal";
 import { FounderPriceChart } from "../components/FounderPriceChart";
 import { FounderMarketCapChart } from "../components/FounderMarketCapChart";
 import { SparklineWithButton } from "../components/SparklineChart";
 import { PortfolioChart } from "../components/PortfolioChart";
 import { ChatPanel } from "../components/ChatPanel";
-import { ProfilePanel } from "../components/ProfilePanel";
+import { SchedulePanel } from "../components/SchedulePanel";
 import { SettingsPanel } from "../components/SettingsPanel";
 import { useAuth } from "../hooks/useAuth";
 import { usePortfolioHistory } from "../hooks/usePortfolioHistory";
@@ -351,6 +352,105 @@ const HelpSheet: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 	);
 };
 
+// Loading skeleton shown while event data is fetching
+const EventLoadingScreen: React.FC = () => (
+	<>
+		<style>{`
+			@keyframes shimmer-sweep {
+				0% { background-position: -600px 0; }
+				100% { background-position: 600px 0; }
+			}
+			@keyframes ev-spin {
+				from { transform: rotate(0deg); }
+				to { transform: rotate(360deg); }
+			}
+			@keyframes ev-fade-up {
+				from { opacity: 0; transform: translateY(8px); }
+				to { opacity: 1; transform: translateY(0); }
+			}
+			@keyframes ev-pulse-dot {
+				0%, 100% { opacity: 0.2; transform: scale(0.8); }
+				50% { opacity: 1; transform: scale(1.2); }
+			}
+			.ev-shimmer {
+				background: linear-gradient(90deg,
+					rgba(255,255,255,0.04) 0%,
+					rgba(255,255,255,0.11) 40%,
+					rgba(255,255,255,0.04) 80%
+				);
+				background-size: 600px 100%;
+				animation: shimmer-sweep 1.8s ease-in-out infinite;
+				border-radius: 10px;
+			}
+		`}</style>
+
+		{/* Spinner */}
+		<div className="flex flex-col items-center pt-16 pb-8" style={{ animation: "ev-fade-up 0.4s ease both" }}>
+			<div className="relative w-[72px] h-[72px]">
+				<div className="absolute inset-0 rounded-full" style={{ animation: "ev-spin 3s linear infinite", background: "conic-gradient(from 0deg, transparent 75%, rgba(34,211,238,0.45) 90%, transparent 100%)" }} />
+				<div className="absolute inset-2 rounded-full" style={{ animation: "ev-spin 0.85s linear infinite", background: "conic-gradient(from 0deg, transparent 55%, #22d3ee 78%, #6366f1 94%, transparent 100%)" }} />
+				<div className="absolute inset-3 rounded-full" style={{ background: "var(--bg-base, #080616)" }} />
+				<div className="absolute inset-4 rounded-full" style={{ background: "radial-gradient(circle, rgba(99,102,241,0.6) 0%, rgba(34,211,238,0.1) 70%, transparent 100%)" }} />
+			</div>
+			<p className="mt-4 text-[10px] font-bold tracking-[0.3em] uppercase" style={{ color: "rgba(255,255,255,0.25)", animation: "ev-fade-up 0.5s ease 0.15s both" }}>
+				Loading Event
+			</p>
+			<div className="flex gap-1.5 mt-3">
+				{[0, 0.3, 0.6].map((delay, i) => (
+					<div key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: "#22d3ee", animation: `ev-pulse-dot 1.2s ease-in-out ${delay}s infinite` }} />
+				))}
+			</div>
+		</div>
+
+		{/* Skeleton content */}
+		<div className="px-5 space-y-7" style={{ animation: "ev-fade-up 0.5s ease 0.1s both" }}>
+			<div className="flex items-center gap-3">
+				<div className="w-12 h-12 rounded-full ev-shimmer flex-shrink-0" />
+				<div className="space-y-2 flex-1">
+					<div className="h-2.5 w-16 ev-shimmer" />
+					<div className="h-4 w-32 ev-shimmer" />
+				</div>
+				<div className="w-6 h-6 rounded-full ev-shimmer" />
+				<div className="w-6 h-6 rounded-full ev-shimmer" />
+			</div>
+			<div className="space-y-2.5">
+				<div className="h-2 w-20 ev-shimmer" />
+				<div className="h-12 w-52 ev-shimmer" style={{ borderRadius: "14px" }} />
+				<div className="h-3 w-28 ev-shimmer" />
+			</div>
+			<div className="space-y-2.5">
+				<div className="h-2 w-28 ev-shimmer" />
+				<div className="h-48 w-full ev-shimmer" style={{ borderRadius: "18px" }} />
+			</div>
+			<div className="flex items-end justify-between">
+				<div className="space-y-2">
+					<div className="h-10 w-44 ev-shimmer" style={{ borderRadius: "10px" }} />
+					<div className="h-10 w-36 ev-shimmer" style={{ borderRadius: "10px" }} />
+				</div>
+				<div className="flex gap-2 pb-1">
+					<div className="h-7 w-16 ev-shimmer" style={{ borderRadius: "99px" }} />
+					<div className="h-7 w-12 ev-shimmer" style={{ borderRadius: "99px" }} />
+				</div>
+			</div>
+			<div className="space-y-3">
+				{[0, 0.08, 0.16].map((delay, i) => (
+					<div key={i} className="rounded-2xl p-4 flex items-center gap-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", animation: `ev-fade-up 0.4s ease ${0.2 + delay}s both` }}>
+						<div className="w-12 h-12 rounded-full ev-shimmer flex-shrink-0" />
+						<div className="flex-1 space-y-2">
+							<div className="h-4 ev-shimmer" style={{ width: `${52 + i * 14}%` }} />
+							<div className="h-2.5 w-24 ev-shimmer" />
+						</div>
+						<div className="flex flex-col items-end gap-1.5">
+							<div className="h-5 w-16 ev-shimmer" style={{ borderRadius: "8px" }} />
+							<div className="h-8 w-20 ev-shimmer" style={{ borderRadius: "10px" }} />
+						</div>
+					</div>
+				))}
+			</div>
+		</div>
+	</>
+);
+
 // ── Shell: mounts the provider, then renders the inner page ──────────────────
 const EventPage: React.FC = () => {
 	const { eventId } = useParams<{ eventId: string }>();
@@ -397,6 +497,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const [activeTab, setActiveTab] = useState<"trade" | "admin-analytics">("trade");
 	const [showLeaderboard, setShowLeaderboard] = useState(false);
 	const [showQRModal, setShowQRModal] = useState(false);
+	const [showScanner, setShowScanner] = useState(false);
 	const [showEventInfoModal, setShowEventInfoModal] = useState(false);
 	const [showHelpModal, setShowHelpModal] = useState(false);
 	const [showSignInNotification, setShowSignInNotification] = useState(false);
@@ -413,7 +514,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const [expandedFounderId, setExpandedFounderId] = useState<string | null>(null);
 	const [showPortfolioDropdown, setShowPortfolioDropdown] = useState(false);
 	const [showChat, setShowChat] = useState(false);
-	const [showProfile, setShowProfile] = useState(false);
+	const [showSchedule, setShowSchedule] = useState(false);
 	const [showSettings, setShowSettings] = useState(false);
 	const portfolioDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -706,9 +807,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 
 			<div className="relative z-10">
 				{isLoading ? (
-					<div className="flex justify-center items-center min-h-[60vh]">
-						<div className="text-white/60 text-lg">Loading event...</div>
-					</div>
+					<EventLoadingScreen />
 				) : error ? (
 					<div className="mx-4 mt-6 bg-red-500/20 border border-red-500/50 text-red-400 p-4 rounded-2xl">
 						{error}
@@ -722,19 +821,26 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 						{/* Hero greeting */}
 						<div className="px-5 pt-6 pb-2 flex items-center justify-between">
 							<div className="flex items-center gap-3">
-								<div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white/20 flex-shrink-0 shadow-lg shadow-purple-500/30">
+								<button
+									onClick={() => navigate(user ? "/profile" : `/signup?redirect=/events/${eventId}`)}
+									className="w-12 h-12 rounded-full overflow-hidden border-2 border-white/20 flex-shrink-0 shadow-lg shadow-purple-500/30 transition-all active:scale-90 hover:border-white/40"
+								>
 									{user ? (
-										<div className="w-full h-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white font-bold text-lg">
-											{(displayName ?? "G").charAt(0).toUpperCase()}
-										</div>
+										user.founderUser?.profile_picture_url ? (
+											<img src={user.founderUser.profile_picture_url} alt={displayName ?? ""} className="w-full h-full object-cover" />
+										) : (
+											<div className="w-full h-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white font-bold text-lg">
+												{(displayName ?? "G").charAt(0).toUpperCase()}
+											</div>
+										)
 									) : (
 										<div className="w-full h-full bg-white/10 flex items-center justify-center">
-											<svg className="w-6 h-3 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<svg className="w-6 h-6 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
 											</svg>
 										</div>
 									)}
-								</div>
+								</button>
 								<div>
 									<p className="text-white/50 text-xs font-medium">{greeting}</p>
 									<p className="text-white text-xl font-bold leading-tight">{displayName ?? "Guest"}</p>
@@ -1078,23 +1184,21 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 
 			{/* Floating bottom nav */}
 			<div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-3 py-2 rounded-full" style={{ background: "rgba(16, 14, 35, 0.92)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04), inset 0 1px 0 rgba(255,255,255,0.08)" }}>
-				{!simpleMode && (
-					<button onClick={() => setShowLeaderboard(true)} className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-full transition-all ${showLeaderboard ? "text-cyan-400" : "text-white/35 hover:text-white/60"}`}>
-						<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-						<span className="text-[9px] font-medium">Rankings</span>
-					</button>
-				)}
+				<button onClick={() => setShowLeaderboard(true)} className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-full transition-all ${showLeaderboard ? "text-cyan-400" : "text-white/35 hover:text-white/60"}`}>
+					<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+					<span className="text-[9px] font-medium">Leaderboard</span>
+				</button>
 				<button onClick={() => setShowChat(true)} className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-full transition-all ${showChat ? "text-cyan-400" : "text-white/35 hover:text-white/60"}`}>
 					<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
 					<span className="text-[9px] font-medium">Chat</span>
 				</button>
-				<button onClick={() => setActiveTab("trade")} className="relative -mt-6 w-14 h-14 rounded-full flex items-center justify-center transition-transform hover:scale-105 active:scale-95 mx-1" style={{ background: "linear-gradient(140deg, #22d3ee 0%, #6366f1 100%)", boxShadow: "0 0 20px rgba(34,211,238,0.6), 0 0 40px rgba(99,102,241,0.4), 0 4px 15px rgba(0,0,0,0.5)", border: "2px solid rgba(255,255,255,0.2)" }}>
-					<svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
-					{activeTab === "trade" && <span className="absolute inset-0 rounded-full animate-ping opacity-20" style={{ background: "linear-gradient(140deg, #22d3ee, #6366f1)" }} />}
+				<button onClick={() => setShowScanner(true)} className="relative -mt-6 w-14 h-14 rounded-full flex items-center justify-center transition-transform hover:scale-105 active:scale-95 mx-1" style={{ background: "linear-gradient(140deg, #22d3ee 0%, #6366f1 100%)", boxShadow: "0 0 20px rgba(34,211,238,0.6), 0 0 40px rgba(99,102,241,0.4), 0 4px 15px rgba(0,0,0,0.5)", border: "2px solid rgba(255,255,255,0.2)" }}>
+					<svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+					<span className="absolute inset-0 rounded-full animate-ping opacity-20" style={{ background: "linear-gradient(140deg, #22d3ee, #6366f1)" }} />
 				</button>
-				<button onClick={() => setShowProfile(true)} className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-full transition-all ${showProfile ? "text-cyan-400" : "text-white/35 hover:text-white/60"}`}>
-					<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-					<span className="text-[9px] font-medium">Profile</span>
+				<button onClick={() => setShowSchedule(true)} className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-full transition-all ${showSchedule ? "text-cyan-400" : "text-white/35 hover:text-white/60"}`}>
+					<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+					<span className="text-[9px] font-medium">Schedule</span>
 				</button>
 				<button onClick={() => setShowSettings(true)} className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-full transition-all ${showSettings ? "text-cyan-400" : "text-white/35 hover:text-white/60"}`}>
 					<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
@@ -1312,11 +1416,27 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				</div>
 			)}
 
-			<ProfilePanel isOpen={showProfile} onClose={() => setShowProfile(false)} userId={user?.id ?? null} userEmail={user?.email ?? null} />
+			<SchedulePanel
+				isOpen={showSchedule}
+				onClose={() => setShowSchedule(false)}
+				eventName={event?.name ?? ""}
+				schedule={event?.schedule ?? []}
+				eventStart={event?.start_time ?? ""}
+				eventEnd={event?.end_time ?? ""}
+			/>
 			<SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} onSignOut={async () => { await import("../lib/supabaseClient").then(m => m.supabase.auth.signOut()); setShowSettings(false); }} isAdmin={isAdmin} onOpenAdminAnalytics={() => setActiveTab("admin-analytics")} />
 			<QRShareModal eventId={eventId} eventName={event?.name || ""} isOpen={showQRModal} onClose={() => setShowQRModal(false)} />
+			<ScannerModal
+				isOpen={showScanner}
+				onClose={() => setShowScanner(false)}
+				profileUrl={user?.founderUser?.id
+					? `${window.location.origin}/profile?id=${user.founderUser.id}`
+					: `${window.location.origin}/profile`}
+				profileName={displayName ?? undefined}
+				profileAvatarUrl={user?.founderUser?.profile_picture_url ?? undefined}
+			/>
 			<ChatPanel isOpen={showChat} onClose={() => setShowChat(false)} eventId={eventId} userId={user?.id ?? null} displayName={displayName ?? "Guest"} />
-			<LeaderboardPanel isOpen={showLeaderboard} onClose={() => setShowLeaderboard(false)} eventId={eventId} founders={founders} allInvestors={allInvestors} currentInvestorId={investorId ?? undefined} eventDate={event?.start_time} />
+			<LeaderboardPanel isOpen={showLeaderboard} onClose={() => setShowLeaderboard(false)} eventId={eventId} founders={founders} allInvestors={allInvestors} currentInvestorId={investorId ?? undefined} eventDate={event?.start_time} simpleMode={simpleMode} />
 
 			{selectedFounder && investorId && investor && (
 				<TradeModal

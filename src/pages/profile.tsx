@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { useSearchParams, Navigate, Link } from "react-router-dom";
-import { QRCodeCanvas } from "qrcode.react";
+import { useSearchParams, Navigate, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../hooks/useAuth";
+import { ScannerModal } from "../components/ScannerModal";
 
 interface ApplicationData {
 	id: string;
@@ -59,10 +59,10 @@ const BgGlow: React.FC = () => (
 
 // ─── Public view ──────────────────────────────────────────────────────────────
 const PublicProfileView: React.FC<{ founderUserId: string }> = ({ founderUserId }) => {
+	const navigate = useNavigate();
 	const [profile, setProfile] = useState<ProfileData | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
-	const [copied, setCopied] = useState(false);
-	const [showQR, setShowQR] = useState(false);
+	const [showScanner, setShowScanner] = useState(false);
 
 	const profileUrl = `${window.location.origin}/profile?id=${founderUserId}`;
 
@@ -89,12 +89,6 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({ founderUserId 
 			});
 	}, [founderUserId]);
 
-	const handleCopy = () => {
-		navigator.clipboard.writeText(profileUrl);
-		setCopied(true);
-		setTimeout(() => setCopied(false), 2000);
-	};
-
 	if (isLoading) {
 		return (
 			<div className="min-h-screen flex items-center justify-center" style={{ background: "#080a14" }}>
@@ -117,62 +111,33 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({ founderUserId 
 			: "?";
 
 	return (
+		<>
 		<div className="min-h-screen relative" style={{ background: "#080a14" }}>
 			<BgGlow />
 			<div className="relative z-10 max-w-lg mx-auto px-5 pt-10 pb-20">
 				{/* Back + share row */}
 				<div className="flex items-center justify-between mb-8">
-					<Link
-						to="/"
+					<button
+						onClick={() => navigate(-1)}
 						className="flex items-center gap-1.5 text-white/40 hover:text-white/70 text-sm transition-colors"
 					>
 						<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
 						</svg>
 						Back
-					</Link>
+					</button>
 					<button
-						onClick={() => setShowQR(!showQR)}
+						onClick={() => setShowScanner(true)}
 						className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold text-white/70 hover:text-white transition-all"
 						style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}
 					>
 						<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-								d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+								d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
 						</svg>
 						Share
 					</button>
 				</div>
-
-				{/* QR card */}
-				{showQR && (
-					<div
-						className="mb-6 rounded-2xl p-5 flex flex-col items-center gap-4"
-						style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
-					>
-						<div className="rounded-xl overflow-hidden bg-white p-3">
-							<QRCodeCanvas value={profileUrl} size={160} level="H" includeMargin={false} />
-						</div>
-						<p className="text-white/30 text-xs">Scan to view this profile</p>
-						<div
-							className="w-full flex items-center gap-2 rounded-xl px-3 py-2"
-							style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
-						>
-							<p className="flex-1 text-white/40 text-xs truncate">{profileUrl}</p>
-							<button
-								onClick={handleCopy}
-								className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-								style={
-									copied
-										? { background: "rgba(34,197,94,0.15)", color: "#86efac" }
-										: { background: "rgba(34,211,238,0.12)", color: "#67e8f9" }
-								}
-							>
-								{copied ? "Copied!" : "Copy"}
-							</button>
-						</div>
-					</div>
-				)}
 
 				{/* Avatar + name */}
 				<div className="flex items-center gap-5 mb-6">
@@ -247,18 +212,28 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({ founderUserId 
 				)}
 			</div>
 		</div>
+		<ScannerModal
+			isOpen={showScanner}
+			onClose={() => setShowScanner(false)}
+			profileUrl={profileUrl}
+			profileName={profile ? `${profile.first_name} ${profile.last_name}`.trim() || undefined : undefined}
+			profileAvatarUrl={profile?.profile_picture_url || undefined}
+		/>
+		</>
 	);
 };
 
 // ─── Own profile page ─────────────────────────────────────────────────────────
 const ProfilePage: React.FC = () => {
+	const navigate = useNavigate();
 	const { user, isLoading: authLoading } = useAuth();
 	const [searchParams] = useSearchParams();
 	const claimId = searchParams.get("id");
 
 	const isLikelyProfileId = !!claimId && /^[0-9a-f-]{36}$/i.test(claimId);
 
-	const [tab, setTab] = useState<"view" | "edit" | "qr">("view");
+	const [tab, setTab] = useState<"view" | "edit">("view");
+	const [showScanner, setShowScanner] = useState(false);
 	const [application, setApplication] = useState<ApplicationData | null>(null);
 	const [claimed, setClaimed] = useState(false);
 	const [claimError, setClaimError] = useState<string | null>(null);
@@ -278,7 +253,6 @@ const ProfilePage: React.FC = () => {
 	const [isSaving, setIsSaving] = useState(false);
 	const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
 	const [isLoadingProfile, setIsLoadingProfile] = useState(true);
-	const [copied, setCopied] = useState(false);
 
 	// Load own profile
 	useEffect(() => {
@@ -424,21 +398,6 @@ const ProfilePage: React.FC = () => {
 		? `${window.location.origin}/profile?id=${profile.id}`
 		: `${window.location.origin}/profile`;
 
-	const handleCopy = () => {
-		navigator.clipboard.writeText(profileUrl);
-		setCopied(true);
-		setTimeout(() => setCopied(false), 2000);
-	};
-
-	const handleDownloadQR = () => {
-		const canvas = document.getElementById("profile-qr-canvas") as HTMLCanvasElement;
-		if (!canvas) return;
-		const link = document.createElement("a");
-		link.download = "my-profile-qr.png";
-		link.href = canvas.toDataURL("image/png");
-		link.click();
-	};
-
 	// Public view (no auth required)
 	if (!authLoading && !user && isLikelyProfileId) {
 		return <PublicProfileView founderUserId={claimId!} />;
@@ -471,21 +430,22 @@ const ProfilePage: React.FC = () => {
 	};
 
 	return (
+		<>
 		<div className="min-h-screen relative" style={{ background: "#080a14" }}>
 			<BgGlow />
 
 			<div className="relative z-10 max-w-lg mx-auto px-5 pt-8 pb-20">
 				{/* Top bar */}
 				<div className="flex items-center justify-between mb-6">
-					<Link
-						to="/"
+					<button
+						onClick={() => navigate(-1)}
 						className="flex items-center gap-1.5 text-white/40 hover:text-white/70 text-sm transition-colors"
 					>
 						<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
 						</svg>
 						Back
-					</Link>
+					</button>
 					<div>
 						<p className="text-white/30 text-[10px] font-semibold uppercase tracking-widest text-right">Account</p>
 						<h1 className="text-xl font-black text-white">My Profile</h1>
@@ -512,7 +472,7 @@ const ProfilePage: React.FC = () => {
 
 				{/* Tab bar */}
 				<div className="flex gap-2 mb-5">
-					{(["view", "edit", "qr"] as const).map((t) => (
+					{(["view", "edit"] as const).map((t) => (
 						<button
 							key={t}
 							onClick={() => setTab(t)}
@@ -523,9 +483,16 @@ const ProfilePage: React.FC = () => {
 									: { background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.45)" }
 							}
 						>
-							{t === "view" ? "Profile" : t === "edit" ? "Edit" : "Share QR"}
+							{t === "view" ? "Profile" : "Edit"}
 						</button>
 					))}
+					<button
+						onClick={() => setShowScanner(true)}
+						className="px-4 py-1.5 rounded-full text-xs font-bold transition-all border"
+						style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.45)" }}
+					>
+						Share QR
+					</button>
 				</div>
 
 				{isLoadingProfile ? (
@@ -825,80 +792,18 @@ const ProfilePage: React.FC = () => {
 							</form>
 						)}
 
-						{/* ── QR TAB ── */}
-						{tab === "qr" && (
-							<div className="flex flex-col items-center gap-5 pb-4">
-								{/* Profile preview strip */}
-								<div
-									className="w-full flex items-center gap-3 rounded-2xl px-4 py-3"
-									style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
-								>
-									<div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
-										{profile.profile_picture_url ? (
-											<img src={profile.profile_picture_url} alt="" className="w-full h-full object-cover" />
-										) : (
-											<div className="w-full h-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white font-black text-base">
-												{initials}
-											</div>
-										)}
-									</div>
-									<div>
-										<p className="text-white font-bold text-sm leading-tight">
-											{profile.first_name || profile.last_name
-												? `${profile.first_name} ${profile.last_name}`.trim()
-												: "Your Profile"}
-										</p>
-										<p className="text-white/40 text-xs">{user.email}</p>
-									</div>
-								</div>
-
-								{/* QR code */}
-								<div
-									className="rounded-2xl p-4"
-									style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
-								>
-									<div className="rounded-xl overflow-hidden bg-white p-3">
-										<QRCodeCanvas id="profile-qr-canvas" value={profileUrl} size={200} level="H" includeMargin={false} />
-									</div>
-									<p className="text-white/30 text-[10px] text-center mt-2 font-medium">Scan to view profile</p>
-								</div>
-
-								{/* URL row */}
-								<div
-									className="w-full flex items-center gap-2 rounded-2xl px-4 py-3"
-									style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
-								>
-									<p className="flex-1 text-white/50 text-xs truncate">{profileUrl}</p>
-									<button
-										onClick={handleCopy}
-										className="flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95"
-										style={
-											copied
-												? { background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.35)", color: "#86efac" }
-												: { background: "rgba(34,211,238,0.12)", border: "1px solid rgba(34,211,238,0.3)", color: "#67e8f9" }
-										}
-									>
-										{copied ? "Copied!" : "Copy"}
-									</button>
-								</div>
-
-								{/* Download */}
-								<button
-									onClick={handleDownloadQR}
-									className="w-full py-4 rounded-2xl font-bold text-white text-sm flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all"
-									style={{ background: "linear-gradient(135deg, #22d3ee 0%, #6366f1 100%)", boxShadow: "0 0 20px rgba(34,211,238,0.2)" }}
-								>
-									<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-									</svg>
-									Download QR
-								</button>
-							</div>
-						)}
 					</>
 				)}
 			</div>
 		</div>
+		<ScannerModal
+			isOpen={showScanner}
+			onClose={() => setShowScanner(false)}
+			profileUrl={profileUrl}
+			profileName={(profile.first_name || profile.last_name) ? `${profile.first_name} ${profile.last_name}`.trim() : undefined}
+			profileAvatarUrl={profile.profile_picture_url || undefined}
+		/>
+		</>
 	);
 };
 
