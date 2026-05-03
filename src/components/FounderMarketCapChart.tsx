@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
 	LineChart,
 	Line,
@@ -9,7 +9,7 @@ import {
 	CartesianGrid,
 	ReferenceLine,
 } from "recharts";
-import { usePriceHistory } from "../hooks/usePriceHistory";
+import { useEventData } from "../contexts/EventDataContext";
 
 interface FounderMarketCapChartProps {
 	founderId: string;
@@ -34,32 +34,12 @@ export const FounderMarketCapChart: React.FC<FounderMarketCapChartProps> = ({
 	maxPoints = 500,
 	initialShares = INITIAL_SHARES,
 }) => {
-	const { points, isLoading, error } = usePriceHistory({
-		founderId,
-		maxPoints,
-	});
+	const { priceHistoryMap } = useEventData();
 
-	if (isLoading) {
-		return (
-			<div
-				className="flex items-center justify-center bg-dark-800/30 rounded-lg"
-				style={{ height }}
-			>
-				<span className="text-sm text-dark-400">Loading chart…</span>
-			</div>
-		);
-	}
-
-	if (error) {
-		return (
-			<div
-				className="flex items-center justify-center bg-dark-800/30 rounded-lg"
-				style={{ height }}
-			>
-				<span className="text-sm text-red-400">Error: {error}</span>
-			</div>
-		);
-	}
+	const points = useMemo(() => {
+		const pts = priceHistoryMap.get(founderId) ?? [];
+		return pts.length > maxPoints ? pts.slice(-maxPoints) : pts;
+	}, [priceHistoryMap, founderId, maxPoints]);
 
 	if (!points.length) {
 		return (
@@ -141,7 +121,6 @@ export const FounderMarketCapChart: React.FC<FounderMarketCapChartProps> = ({
 								color: "#fff",
 							}}
 						/>
-						{/* Reference line at peak */}
 						<ReferenceLine
 							y={peakMarketCap}
 							stroke="#06b6d4"

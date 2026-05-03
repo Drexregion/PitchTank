@@ -29,6 +29,18 @@ export interface FounderWithUserDetails extends Founder {
   };
 }
 
+export interface FounderUserEmbed {
+  id: string;
+  first_name: string;
+  last_name: string;
+  profile_picture_url: string | null;
+  bio: string | null;
+}
+
+export interface FounderWithPriceAndUser extends FounderWithPrice {
+  founder_user: FounderUserEmbed | null;
+}
+
 export interface CreateFounderProjectRequest {
   event_id: string;
   founder_user_id: string;

@@ -22,15 +22,16 @@
 		"admin:export-event-users": "node internal/admin/exportEventUsers.js"
 	},
 	"dependencies": {
-		"@gradio/client": "^2.2.0",
 		"@supabase/supabase-js": "^2.32.0",
+		"canvas": "^3.2.3",
+		"gif-encoder-2": "^1.0.5",
+		"lucide-react": "^1.14.0",
 		"qrcode.react": "^4.2.0",
 		"react": "^18.2.0",
 		"react-dom": "^18.2.0",
 		"react-markdown": "^10.1.0",
 		"react-router-dom": "^6.15.0",
-		"recharts": "^2.7.3",
-		"verifalia": "^5.0.0"
+		"recharts": "^2.7.3"
 	},
 	"devDependencies": {
 		"@tailwindcss/typography": "^0.5.19",

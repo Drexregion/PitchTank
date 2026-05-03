@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 400px; height: 400px;
+    background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .scene {
+    width: 300px; height: 300px;
+    perspective: 800px;
+    perspective-origin: 50% 50%;
+  }
+  .coin {
+    width: 100%; height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    animation: spin 3s linear infinite;
+  }
+  @keyframes spin {
+    from { transform: rotateY(0deg); }
+    to   { transform: rotateY(360deg); }
+  }
+  .face {
+    position: absolute;
+    width: 100%; height: 100%;
+    border-radius: 50%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    backface-visibility: visible;
+  }
+  .front {
+    background: radial-gradient(circle at 35% 35%,
+      #FFFACD 0%,
+      #FFD700 30%,
+      #FFA500 65%,
+      #B8860B 100%
+    );
+    box-shadow:
+      0 0 0 6px #8B6914,
+      0 0 0 10px #B8860B,
+      0 0 40px 10px rgba(255, 200, 50, 0.6),
+      inset 0 2px 8px rgba(255,255,255,0.4),
+      inset 0 -2px 6px rgba(0,0,0,0.3);
+    transform: translateZ(8px);
+  }
+  .back {
+    background: radial-gradient(circle at 65% 65%,
+      #FFA500 0%,
+      #B8860B 50%,
+      #8B6914 100%
+    );
+    box-shadow:
+      0 0 0 6px #8B6914,
+      0 0 0 10px #B8860B,
+      0 0 30px 8px rgba(255, 200, 50, 0.6);
+    transform: translateZ(-8px) rotateY(180deg);
+  }
+  .edge-ring {
+    position: absolute;
+    width: 100%; height: 100%;
+    border-radius: 50%;
+    background: transparent;
+    border: 16px solid #B8860B;
+    box-shadow:
+      inset 0 0 10px rgba(0,0,0,0.4),
+      0 0 20px 4px rgba(255, 200, 50, 0.6);
+    transform: translateZ(0px);
+  }
+
+  /* Front face content */
+  .pt-logo {
+    font-family: 'Georgia', serif;
+    font-size: 52px;
+    font-weight: 900;
+    color: #8B6914;
+    text-shadow:
+      1px 1px 0 rgba(255,255,255,0.5),
+      -1px -1px 0 rgba(0,0,0,0.3),
+      0 0 20px rgba(255,255,255,0.3);
+    letter-spacing: -2px;
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+  .pt-label {
+    font-family: 'Arial Narrow', 'Arial', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: #8B6914;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    opacity: 0.85;
+    margin-bottom: 10px;
+  }
+  .event-divider {
+    width: 60px;
+    height: 1px;
+    background: linear-gradient(to right, transparent, #8B6914, transparent);
+    margin: 4px 0 8px;
+    opacity: 0.7;
+  }
+  .event-name {
+    font-family: 'Georgia', serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: #8B6914;
+    text-align: center;
+    letter-spacing: 1px;
+    padding: 0 20px;
+    line-height: 1.3;
+    text-shadow: 0 1px 2px rgba(255,255,255,0.4);
+  }
+  .event-subtitle {
+    font-family: 'Arial', sans-serif;
+    font-size: 9px;
+    font-weight: 600;
+    color: #8B6914;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    opacity: 0.7;
+    margin-top: 4px;
+  }
+
+  /* Shine overlay sweep */
+  .front::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 60%; height: 100%;
+    background: linear-gradient(
+      105deg,
+      transparent 40%,
+      rgba(255,255,255,0.25) 50%,
+      transparent 60%
+    );
+    border-radius: 50%;
+    animation: shine-sweep 3s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes shine-sweep {
+    0%   { left: -100%; opacity: 1; }
+    45%  { left: 150%;  opacity: 1; }
+    46%  { opacity: 0; }
+    100% { left: 150%;  opacity: 0; }
+  }
+
+  /* Back face — stamp pattern */
+  .back-pattern {
+    width: 160px; height: 160px;
+    border: 2px solid #FFA500;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0.6;
+  }
+  .back-pt {
+    font-family: 'Georgia', serif;
+    font-size: 60px;
+    font-weight: 900;
+    color: #FFA500;
+    opacity: 0.5;
+  }
+</style>
+</head>
+<body>
+<div class="scene">
+  <div class="coin" id="coin">
+    <div class="face front">
+      <div class="pt-logo">PT</div>
+      <div class="pt-label">PitchTank</div>
+      <div class="event-divider"></div>
+      <div class="event-name">Demo Day S1</div>
+      <div class="event-subtitle">Season 1 · 2025</div>
+    </div>
+    <div class="edge-ring"></div>
+    <div class="face back">
+      <div class="back-pattern">
+        <div class="back-pt">PT</div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

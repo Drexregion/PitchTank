@@ -1,38 +1,404 @@
 import React, { useState, useEffect, useRef } from "react";
+import { Info, CircleHelp } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabaseClient";
 import { TradeModal } from "../components/TradeModal";
-import { Leaderboard } from "../components/Leaderboard";
+import { LeaderboardPanel } from "../components/LeaderboardPanel";
 import { QRShareModal } from "../components/QRShareModal";
 import { FounderPriceChart } from "../components/FounderPriceChart";
 import { FounderMarketCapChart } from "../components/FounderMarketCapChart";
+import { SparklineWithButton } from "../components/SparklineChart";
+import { PortfolioChart } from "../components/PortfolioChart";
+import { ChatPanel } from "../components/ChatPanel";
+import { ProfilePanel } from "../components/ProfilePanel";
+import { SettingsPanel } from "../components/SettingsPanel";
 import { useAuth } from "../hooks/useAuth";
-import { usePortfolio } from "../hooks/usePortfolio";
-import { Event, EventSettings } from "../types/Event";
-import { FounderWithPrice } from "../types/Founder";
-import { FounderUser } from "../types/FounderUser";
-import { calculateCurrentPrice, calculateMarketCap } from "../lib/ammEngine";
+import { usePortfolioHistory } from "../hooks/usePortfolioHistory";
+import { Event } from "../types/Event";
+import { FounderWithPriceAndUser } from "../types/Founder";
+import { EventDataProvider, useEventData } from "../contexts/EventDataContext";
 
-// Extended interface to include founder user details
-interface FounderWithPriceAndUser extends FounderWithPrice {
-	founder_user: FounderUser | null;
+// Reusable top-sheet with slide-in animation and drag-to-close
+function useTopSheet(onClose: () => void) {
+	const [visible, setVisible] = React.useState(false);
+	const [dragY, setDragY] = React.useState(0);
+	const dragStart = React.useRef<number | null>(null);
+
+	// Trigger enter animation on mount
+	React.useEffect(() => {
+		requestAnimationFrame(() => setVisible(true));
+	}, []);
+
+	const close = React.useCallback(() => {
+		setVisible(false);
+		setTimeout(onClose, 300);
+	}, [onClose]);
+
+	const onPointerDown = (e: React.PointerEvent) => {
+		dragStart.current = e.clientY;
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+	};
+	const onPointerMove = (e: React.PointerEvent) => {
+		if (dragStart.current === null) return;
+		const dy = e.clientY - dragStart.current;
+		if (dy < 0) setDragY(dy);
+	};
+	const onPointerUp = (e: React.PointerEvent) => {
+		if (dragStart.current === null) return;
+		const dy = e.clientY - dragStart.current;
+		dragStart.current = null;
+		if (dy < -60) close();
+		else setDragY(0);
+	};
+
+	const sheetStyle: React.CSSProperties = {
+		transform: visible ? `translateY(${dragY}px)` : "translateY(-100%)",
+		transition:
+			dragY !== 0 ? "none" : "transform 0.32s cubic-bezier(0.22,1,0.36,1)",
+		willChange: "transform",
+	};
+
+	return {
+		close,
+		sheetStyle,
+		onPointerDown,
+		onPointerMove,
+		onPointerUp,
+		visible,
+	};
 }
 
+// Top-sheet: Event info
+const EventInfoSheet: React.FC<{
+	event: Event;
+	founders: FounderWithPriceAndUser[];
+	statusBadge: (e: Event) => React.ReactNode;
+	formatEventDate: (d: string) => string;
+	onClose: () => void;
+	onShare: () => void;
+}> = ({ event, founders, statusBadge, formatEventDate, onClose, onShare }) => {
+	const {
+		close,
+		sheetStyle,
+		onPointerDown,
+		onPointerMove,
+		onPointerUp,
+		visible,
+	} = useTopSheet(onClose);
+
+	return (
+		<div
+			className="fixed inset-0 z-50 flex items-start justify-center"
+			onClick={close}
+		>
+			<div
+				className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+				style={{ opacity: visible ? 1 : 0, transition: "opacity 0.3s" }}
+			/>
+			<div
+				className="relative w-full max-w-lg rounded-b-3xl overflow-hidden"
+				style={{
+					...sheetStyle,
+					background: "linear-gradient(180deg, #13102e 0%, #0d0b22 100%)",
+					border: "1px solid rgba(255,255,255,0.08)",
+					borderTop: "none",
+				}}
+				onClick={(e) => e.stopPropagation()}
+				onPointerDown={onPointerDown}
+				onPointerMove={onPointerMove}
+				onPointerUp={onPointerUp}
+			>
+				<div className="px-6 pt-6 pb-4">
+					<div className="flex items-start justify-between gap-4">
+						<div className="flex-1 min-w-0">
+							<p className="text-white/40 text-[10px] font-semibold uppercase tracking-widest mb-1">
+								Event
+							</p>
+							<h2 className="text-xl font-black text-white leading-tight">
+								{event.name}
+							</h2>
+							{event.description && (
+								<p className="text-white/45 text-sm mt-1.5 leading-relaxed">
+									{event.description}
+								</p>
+							)}
+						</div>
+						<div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
+							{statusBadge(event)}
+							<button
+								onClick={close}
+								className="w-7 h-7 rounded-full flex items-center justify-center"
+								style={{
+									background: "rgba(255,255,255,0.06)",
+									border: "1px solid rgba(255,255,255,0.1)",
+								}}
+							>
+								<svg
+									className="w-3.5 h-3.5 text-white/50"
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
+								>
+									<path
+										strokeLinecap="round"
+										strokeLinejoin="round"
+										strokeWidth={2}
+										d="M6 18L18 6M6 6l12 12"
+									/>
+								</svg>
+							</button>
+						</div>
+					</div>
+				</div>
+
+				<div className="px-6 pb-4">
+					<div className="grid grid-cols-2 gap-2">
+						{[
+							{ label: "Starts", value: formatEventDate(event.start_time) },
+							{ label: "Ends", value: formatEventDate(event.end_time) },
+						].map(({ label, value }) => (
+							<div
+								key={label}
+								className="rounded-2xl px-4 py-3"
+								style={{
+									background: "rgba(255,255,255,0.04)",
+									border: "1px solid rgba(255,255,255,0.06)",
+								}}
+							>
+								<p className="text-white/35 text-[10px] font-semibold uppercase tracking-wider mb-1">
+									{label}
+								</p>
+								<p className="text-white font-semibold text-sm leading-snug">
+									{value}
+								</p>
+							</div>
+						))}
+						<div
+							className="col-span-2 rounded-2xl px-4 py-3"
+							style={{
+								background: "rgba(255,255,255,0.04)",
+								border: "1px solid rgba(255,255,255,0.06)",
+							}}
+						>
+							<p className="text-white/35 text-[10px] font-semibold uppercase tracking-wider mb-1">
+								Companies
+							</p>
+							<p className="text-white font-semibold text-sm">
+								{founders.length} founder{founders.length !== 1 ? "s" : ""}{" "}
+								competing
+							</p>
+						</div>
+					</div>
+				</div>
+
+				<div className="px-6 pb-6">
+					<button
+						onClick={onShare}
+						className="w-full py-4 rounded-2xl font-bold text-white text-sm flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all"
+						style={{
+							background: "linear-gradient(135deg, #22d3ee 0%, #6366f1 100%)",
+							boxShadow: "0 0 20px rgba(34,211,238,0.25)",
+						}}
+					>
+						<svg
+							className="w-4 h-4"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								strokeLinecap="round"
+								strokeLinejoin="round"
+								strokeWidth={2}
+								d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+							/>
+						</svg>
+						Share Event
+					</button>
+				</div>
+
+				<div className="flex justify-center pb-3">
+					<div className="w-10 h-1 rounded-full bg-white/15" />
+				</div>
+			</div>
+		</div>
+	);
+};
+
+// Top-sheet: Help guide
+const HelpSheet: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+	const {
+		close,
+		sheetStyle,
+		onPointerDown,
+		onPointerMove,
+		onPointerUp,
+		visible,
+	} = useTopSheet(onClose);
+
+	const steps = [
+		{
+			icon: "💰",
+			title: "Your balance",
+			body: "You start with $1,000,000 in virtual money. It's shown at the top of the screen.",
+		},
+		{
+			icon: "📋",
+			title: "The market",
+			body: "Scroll down to see all the founders pitching today. Each card shows their current share price and a mini price chart.",
+		},
+		{
+			icon: "📈",
+			title: "Buying shares",
+			body: "Tap a founder card to expand it, then press BUY. Choose how much to invest. Their price goes up the more people buy.",
+		},
+		{
+			icon: "📉",
+			title: "Selling shares",
+			body: "Already own shares? Tap SELL to cash out. Selling lowers the price for others.",
+		},
+		{
+			icon: "🏆",
+			title: "Winning",
+			body: "The investor whose portfolio is worth the most at the end of the event wins. Track your rank on the Leaderboard tab.",
+		},
+		{
+			icon: "📊",
+			title: "Event Performance",
+			body: "The chart at the top tracks how your total portfolio value has moved over time during the event.",
+		},
+	];
+
+	return (
+		<div
+			className="fixed inset-0 z-50 flex items-start justify-center"
+			onClick={close}
+		>
+			<div
+				className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+				style={{ opacity: visible ? 1 : 0, transition: "opacity 0.3s" }}
+			/>
+			<div
+				className="relative w-full max-w-lg rounded-b-3xl overflow-y-auto"
+				style={{
+					...sheetStyle,
+					maxHeight: "85vh",
+					background: "linear-gradient(180deg, #13102e 0%, #0d0b22 100%)",
+					border: "1px solid rgba(255,255,255,0.08)",
+					borderTop: "none",
+				}}
+				onClick={(e) => e.stopPropagation()}
+				onPointerDown={onPointerDown}
+				onPointerMove={onPointerMove}
+				onPointerUp={onPointerUp}
+			>
+				<div className="px-6 pt-6 pb-4 flex items-center justify-between">
+					<div>
+						<p className="text-white/40 text-[10px] font-semibold uppercase tracking-widest mb-0.5">
+							Guide
+						</p>
+						<h2 className="text-xl font-black text-white">How to play</h2>
+					</div>
+					<button
+						onClick={close}
+						className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+						style={{
+							background: "rgba(255,255,255,0.06)",
+							border: "1px solid rgba(255,255,255,0.1)",
+						}}
+					>
+						<svg
+							className="w-3.5 h-3.5 text-white/50"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								strokeLinecap="round"
+								strokeLinejoin="round"
+								strokeWidth={2}
+								d="M6 18L18 6M6 6l12 12"
+							/>
+						</svg>
+					</button>
+				</div>
+
+				<div className="px-6 pb-6 space-y-2.5">
+					{steps.map(({ icon, title, body }) => (
+						<div
+							key={title}
+							className="rounded-2xl px-4 py-3.5 flex items-start gap-3.5"
+							style={{
+								background: "rgba(255,255,255,0.04)",
+								border: "1px solid rgba(255,255,255,0.06)",
+							}}
+						>
+							<span className="text-xl flex-shrink-0 leading-none mt-0.5">
+								{icon}
+							</span>
+							<div>
+								<p className="text-white font-bold text-sm mb-0.5">{title}</p>
+								<p className="text-white/50 text-sm leading-relaxed">{body}</p>
+							</div>
+						</div>
+					))}
+				</div>
+
+				<div className="flex justify-center pb-3">
+					<div className="w-10 h-1 rounded-full bg-white/15" />
+				</div>
+			</div>
+		</div>
+	);
+};
+
+// ── Shell: mounts the provider, then renders the inner page ──────────────────
 const EventPage: React.FC = () => {
 	const { eventId } = useParams<{ eventId: string }>();
-	const navigate = useNavigate();
-	const [event, setEvent] = useState<Event | null>(null);
-	const [founders, setFounders] = useState<FounderWithPriceAndUser[]>([]);
-	const [isLoading, setIsLoading] = useState<boolean>(true);
-	const [error, setError] = useState<string | null>(null);
-	const [activeTab, setActiveTab] = useState<
-		"trade" | "leaderboard" | "admin-analytics"
-	>("trade");
-	const [eventSettings, setEventSettings] = useState<EventSettings | null>(
-		null,
+	const { user } = useAuth();
+
+	if (!eventId) {
+		return (
+			<div className="mx-4 mt-6 bg-red-500/20 border border-red-500/50 text-red-400 p-4 rounded-2xl">
+				No event ID provided.
+			</div>
+		);
+	}
+
+	return (
+		<EventDataProvider eventId={eventId} userId={user?.id ?? null}>
+			<EventPageInner eventId={eventId} />
+		</EventDataProvider>
 	);
+};
+
+// ── Inner page: consumes context ──────────────────────────────────────────────
+const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
+	const navigate = useNavigate();
+	const { user, isAdmin } = useAuth();
+
+	const {
+		event,
+		eventSettings,
+		founders,
+		investor,
+		holdings,
+		investorId,
+		allInvestors,
+		portfolioValue,
+		roiPercent,
+		isLoading,
+		error,
+		closingAt,
+		tradingJustStarted,
+		registerForEvent,
+	} = useEventData();
+
+	// ── UI-only state ────────────────────────────────────────────────────────
+	const [activeTab, setActiveTab] = useState<"trade" | "admin-analytics">("trade");
+	const [showLeaderboard, setShowLeaderboard] = useState(false);
 	const [showQRModal, setShowQRModal] = useState(false);
 	const [showEventInfoModal, setShowEventInfoModal] = useState(false);
+	const [showHelpModal, setShowHelpModal] = useState(false);
 	const [showSignInNotification, setShowSignInNotification] = useState(false);
 	const [showRegisterNotification, setShowRegisterNotification] = useState(false);
 	const [isRegistering, setIsRegistering] = useState(false);
@@ -41,256 +407,73 @@ const EventPage: React.FC = () => {
 		useState<FounderWithPriceAndUser | null>(null);
 	const [selectedFounder, setSelectedFounder] =
 		useState<FounderWithPriceAndUser | null>(null);
-	const [tradeModalInitialType, setTradeModalInitialType] = useState<
-		"buy" | "sell"
-	>("buy");
-	const [investorId, setInvestorId] = useState<string | null>(null);
+	const [tradeModalInitialType, setTradeModalInitialType] = useState<"buy" | "sell">("buy");
 	const [sortBy, setSortBy] = useState<"price" | "alphabetical">("price");
-	const [showSortOptions, setShowSortOptions] = useState(false);
-	const [expandedFounderId, setExpandedFounderId] = useState<string | null>(
-		null,
-	);
+	const [_showSortOptions, setShowSortOptions] = useState(false);
+	const [expandedFounderId, setExpandedFounderId] = useState<string | null>(null);
 	const [showPortfolioDropdown, setShowPortfolioDropdown] = useState(false);
+	const [showChat, setShowChat] = useState(false);
+	const [showProfile, setShowProfile] = useState(false);
+	const [showSettings, setShowSettings] = useState(false);
 	const portfolioDropdownRef = useRef<HTMLDivElement>(null);
-	const eventSettingsRef = useRef<EventSettings | null>(null);
-	const { user, isAdmin } = useAuth();
 
-	// Keep ref in sync for use inside realtime callback
-	useEffect(() => {
-		eventSettingsRef.current = eventSettings;
-	}, [eventSettings]);
-	const [showTradingClosedNotification, setShowTradingClosedNotification] =
-		useState(false);
+	// Closing countdown UI state (driven by context's closingAt signal)
+	const [showTradingClosedNotification, setShowTradingClosedNotification] = useState(false);
 	const [showClosingCountdown, setShowClosingCountdown] = useState(false);
 	const [closingSecondsLeft, setClosingSecondsLeft] = useState(0);
 	const [totalClosingSeconds, setTotalClosingSeconds] = useState(60);
 	const [showTradingStartedToast, setShowTradingStartedToast] = useState(false);
-	const prevEventRef = useRef<Event | null>(null);
+	const prevClosingAtRef = useRef<string | null | undefined>(undefined);
 
-	// Get investor portfolio if logged in
-	const { investor, holdings, roiPercent } = usePortfolio({
-		investorId: investorId || undefined,
-		eventId: eventId || undefined,
-	});
-
-	// Close portfolio dropdown when clicking outside
+	// Watch context.closingAt to drive countdown UI
 	useEffect(() => {
-		const handleClickOutside = (event: MouseEvent) => {
-			if (
-				portfolioDropdownRef.current &&
-				!portfolioDropdownRef.current.contains(event.target as Node)
-			) {
-				setShowPortfolioDropdown(false);
-			}
-		};
-
-		if (showPortfolioDropdown) {
-			document.addEventListener("mousedown", handleClickOutside);
-		}
-
-		return () => {
-			document.removeEventListener("mousedown", handleClickOutside);
-		};
-	}, [showPortfolioDropdown]);
-
-	// Fetch event, event_settings, founders once on load (eventId only - no auth dependency)
-	useEffect(() => {
-		const fetchEventDetails = async () => {
-			if (!eventId) {
-				setError("No event ID provided");
-				setIsLoading(false);
-				return;
-			}
-
-			try {
-				setIsLoading(true);
-				setError(null);
-
-				// Fetch event details
-				const { data: eventData, error: eventError } = await supabase
-					.from("events")
-					.select("*")
-					.eq("id", eventId)
-					.maybeSingle();
-
-				if (eventError) throw eventError;
-				if (!eventData) throw new Error("Event not found");
-				setEvent(eventData);
-				prevEventRef.current = eventData;
-
-				// Fetch event settings (simple mode toggle etc.)
-				const { data: settingsData } = await supabase
-					.from("event_settings")
-					.select("*")
-					.eq("event_id", eventId)
-					.maybeSingle();
-				if (settingsData) setEventSettings(settingsData);
-
-				// Fetch founders for this event with founder_users data
-				const { data: foundersData, error: foundersError } = await supabase
-					.from("founders")
-					.select(
-						`
-						*,
-						founder_users:founder_user_id (
-							id,
-							auth_user_id,
-							email,
-							first_name,
-							last_name,
-							profile_picture_url,
-							bio,
-							created_at,
-							updated_at
-						)
-					`,
-					)
-					.eq("event_id", eventId);
-
-				if (foundersError) throw foundersError;
-
-				// Calculate current price and market cap for each founder
-				const foundersWithPrice: FounderWithPriceAndUser[] = (foundersData ?? []).map(
-					(founder: any) => ({
-						...founder,
-						founder_user: founder.founder_users || null,
-						current_price: calculateCurrentPrice(founder),
-						market_cap: calculateMarketCap(founder),
-					}),
+		// Skip on first render (undefined sentinel)
+		if (prevClosingAtRef.current === undefined) {
+			prevClosingAtRef.current = closingAt;
+			// If closingAt is already set on load, start countdown
+			if (closingAt) {
+				const secs = Math.max(
+					0,
+					Math.round((new Date(closingAt).getTime() - Date.now()) / 1000)
 				);
-
-				// Sort by market cap (highest first) — skip in simple mode to preserve DB order
-				const isSimpleMode = settingsData?.hide_leaderboard_and_prices ?? false;
-				if (!isSimpleMode) {
-					foundersWithPrice.sort((a, b) => b.market_cap - a.market_cap);
+				if (secs > 0) {
+					setTotalClosingSeconds(secs);
+					setClosingSecondsLeft(secs);
+					setShowClosingCountdown(true);
 				}
-
-				setFounders(foundersWithPrice);
-				setIsLoading(false);
-			} catch (err: any) {
-				setError(err.message || "Failed to load event details");
-				setIsLoading(false);
 			}
-		};
-
-		fetchEventDetails();
-
-		// Set up realtime subscription for founders updates
-		if (eventId) {
-			const foundersChannel = supabase
-				.channel(`founders_event_${eventId}`)
-				.on(
-					"postgres_changes",
-					{
-						event: "UPDATE",
-						schema: "public",
-						table: "founders",
-						filter: `event_id=eq.${eventId}`,
-					},
-					async () => {
-						// Refetch founders when there's an update
-						const { data: foundersData } = await supabase
-							.from("founders")
-							.select(
-								`
-								*,
-								founder_users:founder_user_id (
-									id,
-									auth_user_id,
-									email,
-									first_name,
-									last_name,
-									profile_picture_url,
-									bio,
-									created_at,
-									updated_at
-								)
-							`,
-							)
-							.eq("event_id", eventId);
-
-						if (foundersData) {
-							const updated: FounderWithPriceAndUser[] = foundersData.map(
-								(founder: any) => ({
-									...founder,
-									founder_user: founder.founder_users || null,
-									current_price: calculateCurrentPrice(founder),
-									market_cap: calculateMarketCap(founder),
-								}),
-							);
-
-							// Sort by market cap (highest first) — skip in simple mode to preserve DB order
-							const isSimpleMode =
-								eventSettingsRef.current?.hide_leaderboard_and_prices ?? false;
-							if (!isSimpleMode) {
-								updated.sort((a, b) => b.market_cap - a.market_cap);
-							}
-
-							setFounders(updated);
-						}
-					},
-				)
-				.subscribe();
-
-			return () => {
-				supabase.removeChannel(foundersChannel);
-			};
+			return;
 		}
-	}, [eventId]);
+		const prev = prevClosingAtRef.current;
+		prevClosingAtRef.current = closingAt;
 
-	// Realtime subscription for event status changes (start/end detection + countdown)
+		if (closingAt && !prev) {
+			const secs = Math.max(
+				0,
+				Math.round((new Date(closingAt).getTime() - Date.now()) / 1000)
+			);
+			if (secs > 0) {
+				setTotalClosingSeconds(secs);
+				setClosingSecondsLeft(secs);
+				setShowClosingCountdown(true);
+			}
+		}
+		if (!closingAt && prev) {
+			setShowClosingCountdown(false);
+			setClosingSecondsLeft(0);
+		}
+	}, [closingAt]);
+
+	// Watch context.tradingJustStarted to show toast
 	useEffect(() => {
-		if (!eventId) return;
-		const eventChannel = supabase
-			.channel(`event_status_${eventId}`)
-			.on(
-				"postgres_changes",
-				{
-					event: "UPDATE",
-					schema: "public",
-					table: "events",
-					filter: `id=eq.${eventId}`,
-				},
-				(payload) => {
-					const updated = payload.new as Event;
-					const prev = prevEventRef.current;
-					prevEventRef.current = updated;
-					setEvent(updated);
+		if (tradingJustStarted) {
+			setShowTradingStartedToast(true);
+			const t = setTimeout(() => setShowTradingStartedToast(false), 4000);
+			return () => clearTimeout(t);
+		}
+	}, [tradingJustStarted]);
 
-					// Closing countdown: closing_at just got set
-					if (updated.closing_at && !prev?.closing_at) {
-						const secs = Math.max(
-							0,
-							Math.round(
-								(new Date(updated.closing_at).getTime() - Date.now()) / 1000,
-							),
-						);
-						if (secs > 0) {
-							setTotalClosingSeconds(secs);
-							setClosingSecondsLeft(secs);
-							setShowClosingCountdown(true);
-						}
-					}
-					// Closing countdown cancelled by admin
-					if (!updated.closing_at && prev?.closing_at) {
-						setShowClosingCountdown(false);
-						setClosingSecondsLeft(0);
-					}
-
-					// "Trading started" toast when status flips to active
-					if (updated.status === "active" && prev?.status !== "active") {
-						setShowTradingStartedToast(true);
-						setTimeout(() => setShowTradingStartedToast(false), 4000);
-					}
-				},
-			)
-			.subscribe();
-		return () => {
-			supabase.removeChannel(eventChannel);
-		};
-	}, [eventId]);
-
-	// Countdown tick for closing countdown
+	// Countdown tick
 	useEffect(() => {
 		if (!showClosingCountdown || closingSecondsLeft <= 0) return;
 		const t = setTimeout(() => {
@@ -301,84 +484,23 @@ const EventPage: React.FC = () => {
 		return () => clearTimeout(t);
 	}, [showClosingCountdown, closingSecondsLeft]);
 
-	// Fetch investor record only when user is known (separate from main fetch to avoid re-fetching event/founders on auth load)
+	// Close portfolio dropdown on outside click
 	useEffect(() => {
-		if (!eventId || !user?.id) {
-			setInvestorId(null);
-			return;
-		}
-
-		const fetchInvestor = async () => {
-			const { data: investorData } = await supabase
-				.from("investors")
-				.select("*")
-				.eq("user_id", user.id)
-				.eq("event_id", eventId)
-				.maybeSingle();
-
-			if (investorData) {
-				setInvestorId(investorData.id);
-			} else {
-				setInvestorId(null);
+		const handleClickOutside = (e: MouseEvent) => {
+			if (
+				portfolioDropdownRef.current &&
+				!portfolioDropdownRef.current.contains(e.target as Node)
+			) {
+				setShowPortfolioDropdown(false);
 			}
 		};
-
-		fetchInvestor();
-	}, [eventId, user?.id]);
-
-	const handleSignIn = () => {
-		navigate(`/signup?redirect=/events/${eventId}`);
-		setShowSignInNotification(false);
-	};
-
-	const handleRegisterForEvent = async () => {
-		if (!user || !eventId) return;
-		setIsRegistering(true);
-		try {
-			const STARTING_CASH = 500000;
-			const SHARES_POOL_BUDGET = 500000;
-			const INITIAL_PRICE_PER_SHARE = 10;
-
-			const { data: newInvestor, error: investorError } = await supabase
-				.from("investors")
-				.insert({
-					event_id: eventId,
-					name: user.email?.split("@")[0] || "Investor",
-					email: user.email || "",
-					user_id: user.id,
-					initial_balance: 1000000,
-					current_balance: STARTING_CASH,
-				})
-				.select()
-				.single();
-			if (investorError) throw investorError;
-
-			if (newInvestor && founders.length > 0) {
-				const sharesPerFounder = Math.floor(
-					SHARES_POOL_BUDGET / founders.length / INITIAL_PRICE_PER_SHARE,
-				);
-				const holdingsToInsert = founders.map((founder) => ({
-					investor_id: newInvestor.id,
-					founder_id: founder.id,
-					shares: sharesPerFounder,
-					cost_basis: INITIAL_PRICE_PER_SHARE,
-				}));
-				const { error: holdingsError } = await supabase
-					.from("investor_holdings")
-					.insert(holdingsToInsert);
-				if (holdingsError) throw holdingsError;
-			}
-
-			setInvestorId(newInvestor.id);
-			setShowRegisterNotification(false);
-		} catch (err: any) {
-			console.error("Failed to register for event:", err);
-		} finally {
-			setIsRegistering(false);
+		if (showPortfolioDropdown) {
+			document.addEventListener("mousedown", handleClickOutside);
 		}
-	};
+		return () => document.removeEventListener("mousedown", handleClickOutside);
+	}, [showPortfolioDropdown]);
 
-	// Format date for display
+	// ── Helpers ──────────────────────────────────────────────────────────────
 	const formatEventDate = (dateString: string) => {
 		const date = new Date(dateString);
 		return date.toLocaleDateString(undefined, {
@@ -390,1907 +512,797 @@ const EventPage: React.FC = () => {
 		});
 	};
 
-	// Format date for badge (shorter version)
 	const formatEventDateShort = (dateString: string) => {
 		const date = new Date(dateString);
 		const now = new Date();
 		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-		const eventDate = new Date(
-			date.getFullYear(),
-			date.getMonth(),
-			date.getDate(),
-		);
+		const eventDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
-		// If today, just show time
 		if (eventDate.getTime() === today.getTime()) {
-			return `Today ${date.toLocaleTimeString(undefined, {
-				hour: "2-digit",
-				minute: "2-digit",
-			})}`;
+			return `Today ${date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
 		}
-
-		// If tomorrow
 		const tomorrow = new Date(today);
 		tomorrow.setDate(tomorrow.getDate() + 1);
 		if (eventDate.getTime() === tomorrow.getTime()) {
-			return `Tomorrow ${date.toLocaleTimeString(undefined, {
-				hour: "2-digit",
-				minute: "2-digit",
-			})}`;
+			return `Tomorrow ${date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
 		}
-
-		// Otherwise show month and day
-		return date.toLocaleDateString(undefined, {
-			month: "short",
-			day: "numeric",
-			hour: "2-digit",
-			minute: "2-digit",
-		});
+		return date.toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 	};
 
-	// Check if event is currently active
-	const isEventActive = (event: Event) => {
-		return event.status === "active";
+	const isEventActive = (ev: Event) => ev.status === "active";
+
+	const isEventNotStarted = (ev: Event) => new Date() < new Date(ev.start_time);
+
+	const handleSignIn = () => {
+		navigate(`/signup?redirect=/events/${eventId}`);
+		setShowSignInNotification(false);
 	};
 
-	// Check if event hasn't started yet
-	const isEventNotStarted = (event: Event) => {
-		const now = new Date();
-		const startTime = new Date(event.start_time);
-		return now < startTime;
+	const handleRegisterForEvent = async () => {
+		if (!user || !eventId) return;
+		setIsRegistering(true);
+		try {
+			await registerForEvent();
+			setShowRegisterNotification(false);
+		} catch (err: any) {
+			console.error("Failed to register for event:", err);
+		} finally {
+			setIsRegistering(false);
+		}
 	};
 
-	// Verify with backend that the event is still active before allowing trades
-	const verifyEventIsActiveLatest = async (): Promise<boolean> => {
-		if (!eventId) return false;
-		const { data: latest, error: latestError } = await supabase
-			.from("events")
-			.select("*")
-			.eq("id", eventId)
-			.maybeSingle();
-		if (latestError || !latest) return false;
-		setEvent(latest);
-		return isEventActive(latest);
-	};
-
-	const handleBuyClick = async (founder: FounderWithPriceAndUser) => {
-		if (!user) {
-			setShowSignInNotification(true);
-			return;
-		}
-		if (!investorId) {
-			setShowRegisterNotification(true);
-			return;
-		}
-		const canTradeNow = await verifyEventIsActiveLatest();
-		if (!canTradeNow) {
-			setShowTradingClosedNotification(true);
-			return;
-		}
+	const handleBuyClick = (founder: FounderWithPriceAndUser) => {
+		if (!user) { setShowSignInNotification(true); return; }
+		if (!investorId) { setShowRegisterNotification(true); return; }
+		if (event?.status !== "active") { setShowTradingClosedNotification(true); return; }
 		setTradeModalInitialType("buy");
 		setSelectedFounder(founder);
 	};
 
-	const handleSellClick = async (founder: FounderWithPriceAndUser) => {
-		if (!user) {
-			setShowSignInNotification(true);
-			return;
-		}
-		if (!investorId) {
-			setShowRegisterNotification(true);
-			return;
-		}
-		const canTradeNow = await verifyEventIsActiveLatest();
-		if (!canTradeNow) {
-			setShowTradingClosedNotification(true);
-			return;
-		}
+	const handleSellClick = (founder: FounderWithPriceAndUser) => {
+		if (!user) { setShowSignInNotification(true); return; }
+		if (!investorId) { setShowRegisterNotification(true); return; }
+		if (event?.status !== "active") { setShowTradingClosedNotification(true); return; }
 		setTradeModalInitialType("sell");
 		setSelectedFounder(founder);
 	};
 
-	const handleFounderProfileClick = (
-		founder: FounderWithPriceAndUser,
-		e: React.MouseEvent,
-	) => {
+	const handleFounderProfileClick = (founder: FounderWithPriceAndUser, e: React.MouseEvent) => {
 		e.stopPropagation();
 		setSelectedFounderForModal(founder);
 		setShowFounderModal(true);
 	};
 
-	// Get owned shares for a founder
 	const getOwnedShares = (founderId: string) => {
 		const holding = holdings.find((h) => h.founder_id === founderId);
 		return holding ? holding.shares : 0;
 	};
 
-	// Format currency
-	const formatCurrency = (value: number) => {
-		return value.toLocaleString("en-US", {
+	const formatCurrency = (value: number) =>
+		value.toLocaleString("en-US", {
 			style: "currency",
 			currency: "USD",
 			minimumFractionDigits: 0,
 			maximumFractionDigits: 0,
 		});
-	};
 
 	const canTrade = event ? isEventActive(event) : false;
 	const simpleMode = eventSettings?.hide_leaderboard_and_prices ?? false;
 
-	// Sort founders based on selected sort option — in simple mode, preserve order (no auto-sort)
-	const sortedFounders = simpleMode
-		? founders
-		: [...founders].sort((a, b) => {
-				if (sortBy === "alphabetical") {
-					return a.name.localeCompare(b.name);
-				} else {
-					// Sort by price (highest first)
-					return b.current_price - a.current_price;
-				}
-			});
-	console.log(eventSettings);
+	const displayName = user
+		? user.founderUser?.first_name
+			? user.founderUser.first_name
+			: (user.email?.split("@")[0] ?? "Trader")
+		: null;
 
-	// Tabs available in current mode
-	const availableTabs: Array<{
-		id: "trade" | "leaderboard" | "admin-analytics";
-		label: string;
-	}> = [
-		{ id: "trade", label: "Trade" },
-		...(!simpleMode
-			? [{ id: "leaderboard" as const, label: "Leaderboard" }]
-			: []),
-		...(isAdmin
-			? [{ id: "admin-analytics" as const, label: "Analytics" }]
-			: []),
+	const hour = new Date().getHours();
+	const greeting = hour < 12 ? "Good Morning," : hour < 17 ? "Good Afternoon," : "Good Evening,";
+
+	const isDemo = founders.length === 0;
+
+	const demoFounders: FounderWithPriceAndUser[] = [
+		{
+			id: "demo-1", event_id: eventId, founder_user_id: "", name: "Maya Kapoor",
+			bio: null, logo_url: null, pitch_summary: "LunaWorks AI", pitch_url: null,
+			shares_in_pool: 8000, cash_in_pool: 190000, k_constant: 1520000000,
+			min_reserve_shares: 1000, created_at: "", updated_at: "",
+			current_price: 23.75, market_cap: 99900, founder_user: null,
+		},
+		{
+			id: "demo-2", event_id: eventId, founder_user_id: "", name: "Arjun Reyes",
+			bio: null, logo_url: null, pitch_summary: "NebulaPay", pitch_url: null,
+			shares_in_pool: 9200, cash_in_pool: 169300, k_constant: 1557760000,
+			min_reserve_shares: 1000, created_at: "", updated_at: "",
+			current_price: 18.4, market_cap: 73600, founder_user: null,
+		},
+		{
+			id: "demo-3", event_id: eventId, founder_user_id: "", name: "Priya Wen",
+			bio: null, logo_url: null, pitch_summary: "OrbitMesh", pitch_url: null,
+			shares_in_pool: 9500, cash_in_pool: 150300, k_constant: 1427850000,
+			min_reserve_shares: 1000, created_at: "", updated_at: "",
+			current_price: 15.82, market_cap: 63280, founder_user: null,
+		},
+		{
+			id: "demo-4", event_id: eventId, founder_user_id: "", name: "Diego Marín",
+			bio: null, logo_url: null, pitch_summary: "GreenCore", pitch_url: null,
+			shares_in_pool: 9700, cash_in_pool: 120200, k_constant: 1165940000,
+			min_reserve_shares: 1000, created_at: "", updated_at: "",
+			current_price: 12.39, market_cap: 49560, founder_user: null,
+		},
+		{
+			id: "demo-5", event_id: eventId, founder_user_id: "", name: "Sofia Nakamura",
+			bio: null, logo_url: null, pitch_summary: "VoltStack", pitch_url: null,
+			shares_in_pool: 9800, cash_in_pool: 98000, k_constant: 960400000,
+			min_reserve_shares: 1000, created_at: "", updated_at: "",
+			current_price: 10.0, market_cap: 40000, founder_user: null,
+		},
 	];
 
-	return (
-		<div className="min-h-screen relative overflow-hidden">
-			{/* Fancy animated background */}
-			<div className="fixed inset-0 bg-gradient-to-br from-dark-950 via-dark-900 to-dark-950">
-				{/* Animated gradient orbs */}
-				<div className="absolute top-0 left-1/4 w-96 h-96 bg-primary-600/30 rounded-full blur-3xl animate-pulse" />
-				<div className="absolute bottom-0 right-1/4 w-96 h-96 bg-accent-cyan/20 rounded-full blur-3xl animate-pulse delay-1000" />
-				<div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary-500/10 rounded-full blur-3xl" />
+	const displayFounders = founders.length > 0 ? founders : demoFounders;
+	const sortedFounders = simpleMode
+		? displayFounders
+		: [...displayFounders].sort((a, b) => {
+				if (sortBy === "alphabetical") return a.name.localeCompare(b.name);
+				return b.current_price - a.current_price;
+			});
 
-				{/* Grid pattern overlay */}
-				<div className="absolute inset-0 bg-[linear-gradient(rgba(0,82,179,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(0,82,179,0.05)_1px,transparent_1px)] bg-[size:50px_50px]" />
+	const top5Holdings = [...holdings]
+		.sort((a, b) => b.current_value - a.current_value)
+		.slice(0, 5);
+
+	const statusBadge = (ev: Event) => {
+		if (ev.status === "active" && isEventActive(ev)) {
+			return (
+				<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-300 border border-green-500/40 flex-shrink-0">
+					Active
+				</span>
+			);
+		}
+		if (isEventNotStarted(ev)) {
+			return (
+				<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/40 flex-shrink-0">
+					Starts {formatEventDateShort(ev.start_time)}
+				</span>
+			);
+		}
+		if (ev.status === "completed" || (ev.status === "active" && !isEventActive(ev))) {
+			return (
+				<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/20 text-red-300 border border-red-500/40 flex-shrink-0">
+					Ended
+				</span>
+			);
+		}
+		return (
+			<span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 flex-shrink-0">
+				{ev.status.charAt(0).toUpperCase() + ev.status.slice(1)}
+			</span>
+		);
+	};
+
+	// Portfolio history (unchanged — already selective, no realtime)
+	const { points: portfolioPoints } = usePortfolioHistory({
+		investorId: investorId || undefined,
+		initialBalance: investor?.initial_balance ?? 1000000,
+	});
+
+	// ── Render ────────────────────────────────────────────────────────────────
+	return (
+		<div className="min-h-screen relative" style={{ background: "var(--bg-base)" }}>
+			{/* Background glows */}
+			<div className="fixed inset-0 pointer-events-none overflow-hidden">
+				<div
+					className="absolute -top-32 left-1/2 -translate-x-1/2 w-[140vw] h-[60vh] rounded-full opacity-70"
+					style={{ background: "radial-gradient(ellipse at center, #2d1b69 0%, #1a0e4a 35%, transparent 70%)" }}
+				/>
+				<div
+					className="absolute top-1/4 -left-20 w-72 h-72 rounded-full opacity-30"
+					style={{ background: "radial-gradient(circle, #4f46e5 0%, transparent 70%)", filter: "blur(40px)" }}
+				/>
+				<div
+					className="absolute top-1/3 -right-20 w-72 h-72 rounded-full opacity-25"
+					style={{ background: "radial-gradient(circle, #0ea5e9 0%, transparent 70%)", filter: "blur(50px)" }}
+				/>
 			</div>
 
-			{/* Content */}
 			<div className="relative z-10">
-				{/* Custom Header with Back Button, Event Name, and Status */}
-				{!isLoading && event && (
-					<div className="bg-dark-900/95 backdrop-blur-sm border-b border-primary-500/20 sticky top-0 z-50">
-						<div className="px-4 py-4">
-							<div className="flex items-center justify-between gap-4">
-								{/* Back Button */}
-								<button
-									onClick={() => navigate("/")}
-									className="p-2 hover:bg-dark-800 rounded-lg transition-colors flex-shrink-0"
-								>
-									<svg
-										className="w-6 h-6 text-white"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											strokeLinecap="round"
-											strokeLinejoin="round"
-											strokeWidth={2}
-											d="M10 19l-7-7m0 0l7-7m-7 7h18"
-										/>
-									</svg>
-								</button>
-
-								{/* Event Name and Status */}
-								<div className="flex-1 min-w-0 flex items-center gap-3">
-									<h1 className="text-xl md:text-2xl font-bold text-white truncate">
-										{event.name}
-									</h1>
-									<div
-										className={`px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
-											event.status === "active" && isEventActive(event)
-												? "bg-green-500/20 text-green-300 border border-green-500/50"
-												: isEventNotStarted(event)
-													? "bg-blue-500/20 text-blue-300 border border-blue-500/50"
-													: event.status === "completed" ||
-														  (event.status === "active" &&
-																!isEventActive(event))
-														? "bg-red-500/20 text-red-300 border border-red-500/50"
-														: "bg-yellow-500/20 text-yellow-300 border border-yellow-500/50"
-										}`}
-									>
-										{event.status === "active" && isEventActive(event)
-											? "Active"
-											: isEventNotStarted(event)
-												? `Starts ${formatEventDateShort(event.start_time)}`
-												: event.status === "active" && !isEventActive(event)
-													? "Ended"
-													: event.status === "completed"
-														? "Ended"
-														: event.status.charAt(0).toUpperCase() +
-															event.status.slice(1)}
-									</div>
-								</div>
-
-								{/* Info Icon */}
-								<button
-									onClick={() => setShowEventInfoModal(true)}
-									className="p-2 hover:bg-dark-800 rounded-lg transition-colors flex-shrink-0"
-								>
-									<svg
-										className="w-6 h-6 text-primary-400"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											strokeLinecap="round"
-											strokeLinejoin="round"
-											strokeWidth={2}
-											d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-										/>
-									</svg>
-								</button>
-							</div>
-						</div>
-
-						{/* Tabs - only render bar when there are multiple tabs */}
-						{availableTabs.length > 1 && (
-							<div className="px-4 pb-2 flex gap-2">
-								{availableTabs.map((tab) => (
-									<button
-										key={tab.id}
-										onClick={() => setActiveTab(tab.id)}
-										className={`flex-1 py-3 rounded-lg font-medium transition-all ${
-											activeTab === tab.id
-												? "bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-glow"
-												: "bg-dark-800 text-dark-400 hover:text-white border border-dark-700"
-										} ${tab.id === "admin-analytics" ? "relative" : ""}`}
-									>
-										{tab.label}
-										{tab.id === "admin-analytics" && (
-											<span className="ml-1.5 text-xs bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30 rounded px-1 py-0.5">
-												Admin
-											</span>
-										)}
-									</button>
-								))}
-							</div>
-						)}
-
-						{/* Slim closing banner - shown when the bottom widget is dismissed */}
-						{!showClosingCountdown && closingSecondsLeft > 0 && (
-							<div className="px-4 py-1.5 bg-yellow-500/10 border-t border-yellow-500/20 flex items-center justify-between">
-								<span className="text-yellow-300 text-xs font-medium">
-									⏱ Trading closes in{" "}
-									<span className="tabular-nums font-bold">
-										{Math.floor(closingSecondsLeft / 60)}:{String(closingSecondsLeft % 60).padStart(2, "0")}
-									</span>
-								</span>
-								<button
-									onClick={() => setShowClosingCountdown(true)}
-									className="text-yellow-400 text-xs hover:text-yellow-200 transition-colors"
-								>
-									Expand
-								</button>
-							</div>
-						)}
+				{isLoading ? (
+					<div className="flex justify-center items-center min-h-[60vh]">
+						<div className="text-white/60 text-lg">Loading event...</div>
 					</div>
-				)}
-
-				<div className={"md:px-8 py-5 max-w-[1600px] mx-auto" + (showClosingCountdown && closingSecondsLeft > 0 ? " pb-24" : "")}>
-					{isLoading ? (
-						<div className="flex justify-center py-12">
-							<div className="text-lg text-white">Loading event details...</div>
-						</div>
-					) : error ? (
-						<div className="bg-red-500/20 border border-red-500/50 text-red-400 p-4 rounded-lg mb-4">
-							{error}
-						</div>
-					) : !event ? (
-						<div className="bg-yellow-500/20 border border-yellow-500/50 text-yellow-400 p-4 rounded-lg mb-4">
-							Event not found.
-						</div>
-					) : (
-						<>
-							{/* Tab Content */}
-							{activeTab === "trade" ? (
-								<>
-									{/* Balance Display - simpleMode: compact balance only */}
-									{user && investor && simpleMode && (
-										<div className="mb-4 md:mb-6">
-											<div className="card-dark border border-accent-cyan/30 shadow-glow overflow-hidden">
-												<div className="p-5 md:p-6 flex items-center justify-between gap-4">
-													<div className="flex items-center gap-4">
-														<div className="w-12 h-12 bg-gradient-to-br from-accent-cyan to-primary-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
-															<svg
-																className="w-6 h-6 text-white"
-																fill="none"
-																stroke="currentColor"
-																viewBox="0 0 24 24"
-															>
-																<path
-																	strokeLinecap="round"
-																	strokeLinejoin="round"
-																	strokeWidth={2}
-																	d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-																/>
-															</svg>
-														</div>
-														<div>
-															<p className="text-xs font-medium text-dark-400 uppercase tracking-wide mb-1">
-																Your Balance
-															</p>
-															<p className="text-2xl md:text-3xl font-bold text-accent-cyan">
-																{formatCurrency(investor.current_balance)}
-															</p>
-														</div>
-													</div>
-												</div>
-											</div>
+				) : error ? (
+					<div className="mx-4 mt-6 bg-red-500/20 border border-red-500/50 text-red-400 p-4 rounded-2xl">
+						{error}
+					</div>
+				) : !event ? (
+					<div className="mx-4 mt-6 bg-yellow-500/20 border border-yellow-500/50 text-yellow-400 p-4 rounded-2xl">
+						Event not found.
+					</div>
+				) : (
+					<>
+						{/* Hero greeting */}
+						<div className="px-5 pt-6 pb-2 flex items-center justify-between">
+							<div className="flex items-center gap-3">
+								<div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white/20 flex-shrink-0 shadow-lg shadow-purple-500/30">
+									{user ? (
+										<div className="w-full h-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white font-bold text-lg">
+											{(displayName ?? "G").charAt(0).toUpperCase()}
+										</div>
+									) : (
+										<div className="w-full h-full bg-white/10 flex items-center justify-center">
+											<svg className="w-6 h-3 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+											</svg>
 										</div>
 									)}
-									{/* Compact Portfolio Display - Mobile (hidden in simpleMode) */}
-									{user && investor && !simpleMode && (
-										<div
-											className="mb-4 md:mb-6 relative"
-											ref={portfolioDropdownRef}
-										>
-											{/* Mobile: Compact horizontal layout */}
-											<div
-												className="card-dark  border border-accent-cyan/30 md:hidden cursor-pointer hover:bg-dark-800/50 transition-all hover:border-accent-cyan/50 hover:shadow-glow"
-												onClick={() =>
-													setShowPortfolioDropdown(!showPortfolioDropdown)
-												}
-												title="Click to view portfolio holdings"
-											>
-												<div className="flex items-center justify-between gap-2 text-center">
-													<div className="flex-1 border-r border-dark-700">
-														<p className="text-xs text-dark-400 mb-1">Liquid</p>
-														<p className="text-sm font-bold text-accent-cyan">
-															{formatCurrency(investor.current_balance)}
-														</p>
-													</div>
+								</div>
+								<div>
+									<p className="text-white/50 text-xs font-medium">{greeting}</p>
+									<p className="text-white text-xl font-bold leading-tight">{displayName ?? "Guest"}</p>
+								</div>
+							</div>
+							<div className="flex items-center gap-1">
+								<button onClick={() => setShowEventInfoModal(true)} className="flex items-center justify-center transition-all active:scale-90">
+									<Info className="w-6 h-6 text-white/50" />
+								</button>
+								<button onClick={() => setShowHelpModal(true)} className="flex items-center justify-center transition-all active:scale-90">
+									<CircleHelp className="w-6 h-6 text-white/50" />
+								</button>
+							</div>
+						</div>
 
-													<div className="flex-1">
-														<p className="text-xs text-dark-400 mb-1">ROI</p>
-														<p
-															className={`text-sm font-bold ${
-																roiPercent >= 0
-																	? "text-green-400"
-																	: "text-red-400"
-															}`}
-														>
-															{roiPercent >= 0 ? "+" : ""}
-															{roiPercent.toFixed(1)}%
-														</p>
-													</div>
-													<div className="flex-shrink-0 pl-2">
-														<svg
-															className={`w-4 h-4 text-dark-400 transition-transform ${
-																showPortfolioDropdown ? "rotate-180" : ""
-															}`}
-															fill="none"
-															stroke="currentColor"
-															viewBox="0 0 24 24"
-														>
-															<path
-																strokeLinecap="round"
-																strokeLinejoin="round"
-																strokeWidth={2}
-																d="M19 9l-7 7-7-7"
-															/>
-														</svg>
-													</div>
-												</div>
-											</div>
-
-											{/* Desktop: Full layout */}
-											<div
-												className="card-dark border border-accent-cyan/30 shadow-glow hidden md:block overflow-hidden cursor-pointer hover:bg-dark-800/30 transition-all hover:border-accent-cyan/50 hover:shadow-xl relative group"
-												onClick={() =>
-													setShowPortfolioDropdown(!showPortfolioDropdown)
-												}
-												title="Click to view portfolio holdings"
-											>
-												{/* Click hint that appears on hover */}
-												<div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-													<div className="bg-accent-cyan/90 text-dark-950 text-xs font-medium px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5">
-														<svg
-															className={`w-3.5 h-3.5 transition-transform ${
-																showPortfolioDropdown ? "rotate-180" : ""
-															}`}
-															fill="none"
-															stroke="currentColor"
-															viewBox="0 0 24 24"
-														>
-															<path
-																strokeLinecap="round"
-																strokeLinejoin="round"
-																strokeWidth={2}
-																d="M19 9l-7 7-7-7"
-															/>
-														</svg>
-														{showPortfolioDropdown ? "Hide" : "View"} Holdings
-													</div>
-												</div>
-												<div className="grid grid-cols-2 divide-x divide-dark-700">
-													{/* Liquid Capital */}
-													<div className="p-6 bg-gradient-to-br from-accent-cyan/5 to-transparent">
-														<div className="flex items-start gap-4">
-															<div className="w-14 h-14 bg-gradient-to-br from-accent-cyan to-primary-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
-																<svg
-																	className="w-7 h-7 text-white"
-																	fill="none"
-																	stroke="currentColor"
-																	viewBox="0 0 24 24"
-																>
-																	<path
-																		strokeLinecap="round"
-																		strokeLinejoin="round"
-																		strokeWidth={2}
-																		d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-																	/>
-																</svg>
-															</div>
-															<div className="flex-1 min-w-0">
-																<p className="text-xs font-medium text-dark-400 uppercase tracking-wide mb-2">
-																	Liquid Capital
-																</p>
-																<p className="text-3xl font-bold text-accent-cyan truncate">
-																	{formatCurrency(investor.current_balance)}
-																</p>
-															</div>
-														</div>
-													</div>
-
-													{/* ROI */}
-													<div
-														className={`p-6 bg-gradient-to-br ${
-															roiPercent >= 0
-																? "from-green-500/5"
-																: "from-red-500/5"
-														} to-transparent`}
-													>
-														<div className="flex items-start gap-4">
-															<div
-																className={`w-14 h-14 bg-gradient-to-br ${
-																	roiPercent >= 0
-																		? "from-green-600 to-green-500"
-																		: "from-red-600 to-red-500"
-																} rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg`}
-															>
-																<svg
-																	className="w-7 h-7 text-white"
-																	fill="none"
-																	stroke="currentColor"
-																	viewBox="0 0 24 24"
-																>
-																	<path
-																		strokeLinecap="round"
-																		strokeLinejoin="round"
-																		strokeWidth={2}
-																		d={
-																			roiPercent >= 0
-																				? "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-																				: "M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"
-																		}
-																	/>
-																</svg>
-															</div>
-															<div className="flex-1 min-w-0">
-																<p className="text-xs font-medium text-dark-400 uppercase tracking-wide mb-2">
-																	Return on Investment
-																</p>
-																<p
-																	className={`text-3xl font-bold truncate ${
-																		roiPercent >= 0
-																			? "text-green-400"
-																			: "text-red-400"
-																	}`}
-																>
-																	{roiPercent >= 0 ? "+" : ""}
-																	{roiPercent.toFixed(2)}%
-																</p>
-															</div>
-														</div>
-													</div>
-												</div>
-											</div>
-
-											{/* Portfolio Holdings Dropdown */}
-											{showPortfolioDropdown && (
-												<div className="mt-3 card-dark border border-accent-cyan/30 shadow-xl animate-in fade-in slide-in-from-top-2 duration-200">
-													<div className="p-4 border-b border-dark-700 flex items-center justify-between">
-														<h3 className="text-lg font-bold text-white">
-															Your Holdings
-														</h3>
-														<button
-															onClick={() => setShowPortfolioDropdown(false)}
-															className="p-1 hover:bg-dark-800 rounded transition-colors"
-														>
-															<svg
-																className="w-5 h-5 text-dark-400"
-																fill="none"
-																stroke="currentColor"
-																viewBox="0 0 24 24"
-															>
-																<path
-																	strokeLinecap="round"
-																	strokeLinejoin="round"
-																	strokeWidth={2}
-																	d="M6 18L18 6M6 6l12 12"
-																/>
+						{/* Balance block */}
+						{user && investor && (
+							<div className="px-5 mt-5">
+								<p className="text-white/40 text-[10px] font-semibold uppercase tracking-widest mb-1">
+									Your Balance
+								</p>
+								<div className="flex items-start justify-between gap-3">
+									<div>
+										<p className="text-white text-5xl font-black tabular-nums leading-none">
+											{formatCurrency(investor.current_balance)}
+										</p>
+										<div className="flex items-center gap-2 mt-2">
+											{!simpleMode && (
+												<>
+													<span className={`text-sm font-semibold flex items-center gap-1 ${roiPercent >= 0 ? "text-cyan-400" : "text-red-400"}`}>
+														{roiPercent >= 0 ? (
+															<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
 															</svg>
-														</button>
-													</div>
-													<div className="max-h-96 overflow-y-auto">
-														{holdings.length === 0 ? (
-															<div className="p-8 text-center">
-																<div className="w-16 h-16 bg-dark-800 rounded-full flex items-center justify-center mx-auto mb-3">
-																	<svg
-																		className="w-8 h-8 text-dark-500"
-																		fill="none"
-																		stroke="currentColor"
-																		viewBox="0 0 24 24"
-																	>
-																		<path
-																			strokeLinecap="round"
-																			strokeLinejoin="round"
-																			strokeWidth={2}
-																			d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
-																		/>
-																	</svg>
-																</div>
-																<p className="text-dark-400 text-sm">
-																	No holdings yet. Start trading to build your
-																	portfolio!
-																</p>
-															</div>
 														) : (
-															<div className="divide-y divide-dark-700">
-																{holdings.map((holding) => {
-																	const founder = founders.find(
-																		(f) => f.id === holding.founder_id,
-																	);
-																	if (!founder) return null;
+															<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+															</svg>
+														)}
+														<span className={roiPercent >= 0 ? "text-cyan-400" : "text-red-400"}>
+															{roiPercent >= 0 ? "+" : ""}{roiPercent.toFixed(1)}%
+														</span>
+													</span>
+													<span className="text-white/30 text-xs">·</span>
+												</>
+											)}
+											<span className="text-white/30 text-xs">
+												{new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+											</span>
+										</div>
+									</div>
+									{showClosingCountdown && closingSecondsLeft > 0 && (
+										<button
+											onClick={() => setShowClosingCountdown(false)}
+											className="mt-1 px-3 py-2 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-semibold flex-shrink-0 tabular-nums flex items-center gap-1.5 hover:bg-amber-500/25 transition-colors"
+										>
+											<svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+											</svg>
+											Trading closes in {Math.floor(closingSecondsLeft / 60)}:
+											{String(closingSecondsLeft % 60).padStart(2, "0")}
+										</button>
+									)}
+								</div>
+							</div>
+						)}
 
-																	const currentValue =
-																		holding.shares * founder.current_price;
-																	const totalInvested =
-																		holding.shares * holding.cost_basis;
-																	const profitLoss =
-																		currentValue - totalInvested;
-																	const profitLossPercent =
-																		totalInvested > 0
-																			? (profitLoss / totalInvested) * 100
-																			: 0;
+						{/* Portfolio Performance chart */}
+						{!simpleMode && (
+							<div className="mt-5">
+								<p className="text-white/40 text-[10px] font-semibold uppercase tracking-widest mb-2 px-5">
+									Event Performance
+								</p>
+								<div className="relative pt-2 pb-1" style={{ borderTop: "1px solid rgba(255,255,255,0.05)", overflow: "visible" }}>
+									<PortfolioChart
+										points={portfolioPoints}
+										height={190}
+										initialBalance={investor?.initial_balance ?? 1000000}
+									/>
+								</div>
+							</div>
+						)}
 
-																	return (
-																		<div
-																			key={holding.id}
-																			className="p-4 hover:bg-dark-800/30 transition-colors"
-																		>
-																			<div className="flex items-start justify-between gap-4">
-																				<div className="flex-1 min-w-0">
-																					<div className="flex items-center gap-2 mb-2">
-																						<div className="w-8 h-8 bg-gradient-to-br from-accent-cyan/20 to-primary-500/20 rounded-lg flex items-center justify-center border border-accent-cyan/30 flex-shrink-0">
-																							<span className="text-sm font-bold text-accent-cyan">
-																								{founder.name.charAt(0)}
-																							</span>
-																						</div>
-																						<h4 className="font-semibold text-white truncate">
-																							{founder.name}
-																						</h4>
-																					</div>
-																					<div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-																						<div>
-																							<span className="text-dark-400">
-																								Shares:
-																							</span>
-																							<span className="text-white font-medium ml-1">
-																								{holding.shares.toLocaleString()}
-																							</span>
-																						</div>
-																						{!simpleMode && (
-																							<>
-																								<div>
-																									<span className="text-dark-400">
-																										Avg Price:
-																									</span>
-																									<span className="text-white font-medium ml-1">
-																										${holding.cost_basis.toFixed(2)}
-																									</span>
-																								</div>
-																								<div>
-																									<span className="text-dark-400">
-																										Current:
-																									</span>
-																									<span className="text-white font-medium ml-1">
-																										$
-																										{founder.current_price.toFixed(
-																											2,
-																										)}
-																									</span>
-																								</div>
-																								<div>
-																									<span className="text-dark-400">
-																										Value:
-																									</span>
-																									<span className="text-accent-cyan font-medium ml-1">
-																										{formatCurrency(currentValue)}
-																									</span>
-																								</div>
-																							</>
-																						)}
-																					</div>
-																				</div>
-																				{!simpleMode && (
-																					<div className="text-right flex-shrink-0">
-																						<div
-																							className={`text-sm font-bold ${
-																								profitLoss >= 0
-																									? "text-green-400"
-																									: "text-red-400"
-																							}`}
-																						>
-																							{profitLoss >= 0 ? "+" : ""}
-																							{formatCurrency(profitLoss)}
-																						</div>
-																						<div
-																							className={`text-xs font-medium ${
-																								profitLoss >= 0
-																									? "text-green-400"
-																									: "text-red-400"
-																							}`}
-																						>
-																							{profitLoss >= 0 ? "+" : ""}
-																							{profitLossPercent.toFixed(1)}%
-																						</div>
-																					</div>
-																				)}
-																			</div>
-																		</div>
-																	);
-																})}
+						<div style={{ background: "rgba(255,255,255,0.03)", borderTop: "1px solid rgba(255,255,255,0.06)", paddingBottom: "120px", minHeight: "100vh" }}>
+							{/* Your Holdings */}
+							{user && investor && holdings.length > 0 && !simpleMode && portfolioValue > 0 && (
+								<div className="px-5 mt-6">
+									<div className="flex items-center justify-between mb-3">
+										<p className="text-white/40 text-[10px] font-semibold uppercase tracking-widest">Your Holdings</p>
+										<p className="text-white font-bold text-base tabular-nums">{formatCurrency(portfolioValue)}</p>
+									</div>
+									<div className="flex gap-1.5 h-14 items-stretch">
+										{top5Holdings.map((h, i) => {
+											const pct = portfolioValue > 0 ? Math.round((h.current_value / portfolioValue) * 100) : 0;
+											const segColors = ["bg-[#2a4fd6]", "bg-[#1a9e8f]", "bg-[#7c3dce]", "bg-[#b8326a]", "bg-[#c87a1a]"];
+											return (
+												<div
+													key={h.founder_id}
+													className={`${segColors[i % segColors.length]} rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}
+													style={{ width: `${(h.current_value / portfolioValue) * 100}%`, minWidth: pct > 3 ? undefined : "2rem" }}
+												>
+													{pct >= 6 ? `${pct}%` : ""}
+												</div>
+											);
+										})}
+									</div>
+									<div className="flex mt-3 gap-3">
+										{top5Holdings.map((h, i) => {
+											const founder = founders.find((f) => f.id === h.founder_id);
+											const avatarBorders = ["border-[#2a4fd6]", "border-[#1a9e8f]", "border-[#7c3dce]", "border-[#b8326a]", "border-[#c87a1a]"];
+											return (
+												<div key={h.founder_id} className="flex flex-col items-center gap-1 flex-1 min-w-0">
+													<button
+														onClick={(e) => founder && handleFounderProfileClick(founder, e)}
+														className={`w-11 h-11 rounded-full overflow-hidden border-2 ${avatarBorders[i % avatarBorders.length]} flex-shrink-0`}
+													>
+														{founder?.founder_user?.profile_picture_url ? (
+															<img src={founder.founder_user.profile_picture_url} alt={founder.name} className="w-full h-full object-cover" />
+														) : (
+															<div className="w-full h-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
+																{founder?.name.charAt(0) ?? "?"}
 															</div>
 														)}
-													</div>
+													</button>
 												</div>
-											)}
-										</div>
-									)}
+											);
+										})}
+									</div>
+								</div>
+							)}
 
-									{/* If signed in but not registered for this event, show register CTA */}
-									{user && !investorId && !isLoading && (
-										<div className="mb-4 md:mb-6">
-											<div className="card-dark border border-primary-500/30 shadow-glow overflow-hidden">
-												<div className="p-5 md:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-													<div className="flex items-start gap-3">
-														<div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-600/30 to-accent-cyan/30 flex items-center justify-center flex-shrink-0 border border-primary-500/40">
-															<svg
-																className="w-6 h-6 text-primary-400"
-																fill="none"
-																stroke="currentColor"
-																viewBox="0 0 24 24"
-															>
-																<path
-																	strokeLinecap="round"
-																	strokeLinejoin="round"
-																	strokeWidth={2}
-																	d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
-																/>
-															</svg>
-														</div>
-														<div>
-															<h3 className="text-white font-semibold">
-																Register for this event
-															</h3>
-															<p className="text-sm text-dark-300 mt-1">
-																You're signed in but haven't joined this event yet. Register to start trading.
-															</p>
-														</div>
-													</div>
-													<button
-														onClick={handleRegisterForEvent}
-														disabled={isRegistering}
-														className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary-600 to-primary-500 text-white hover:from-primary-700 hover:to-primary-600 transition-all shadow-lg disabled:opacity-70 disabled:cursor-not-allowed whitespace-nowrap"
-													>
-														{isRegistering ? "Registering..." : "Register for Event"}
+							{/* Sign in CTA */}
+							{!user && (
+								<div className="mx-4 mt-5 rounded-2xl p-5" style={{ background: "linear-gradient(135deg, rgba(30,20,70,0.8) 0%, rgba(20,15,55,0.9) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
+									<h3 className="text-white font-bold text-lg mb-1">Sign in to start trading</h3>
+									<p className="text-white/50 text-sm mb-5 leading-relaxed">Create an account or sign in to trade founders in this event.</p>
+									<div className="flex gap-3">
+										<button onClick={() => navigate(`/signup?redirect=/events/${eventId}`)} className="flex-1 py-3.5 rounded-xl font-semibold text-sm text-white transition-colors" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}>
+											Sign In
+										</button>
+										<button onClick={() => navigate(`/signup?redirect=/events/${eventId}`)} className="flex-1 py-3.5 rounded-xl font-semibold text-sm text-white transition-opacity hover:opacity-90" style={{ background: "linear-gradient(135deg, #22d3ee, #3b82f6)", boxShadow: "0 4px 15px rgba(34,211,238,0.25)" }}>
+											Create Account
+										</button>
+									</div>
+								</div>
+							)}
+
+							{/* Register CTA */}
+							{user && !investorId && !isLoading && (
+								<div className="mx-4 mt-5 rounded-2xl p-5" style={{ background: "linear-gradient(135deg, rgba(30,20,70,0.8) 0%, rgba(20,15,55,0.9) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
+									<h3 className="text-white font-bold text-lg mb-1">Register for this event</h3>
+									<p className="text-white/50 text-sm mb-5">You're signed in but haven't joined this event yet.</p>
+									<button onClick={handleRegisterForEvent} disabled={isRegistering} className="w-full py-3.5 rounded-xl font-semibold text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-50" style={{ background: "linear-gradient(135deg, #22d3ee, #3b82f6)", boxShadow: "0 4px 15px rgba(34,211,238,0.25)" }}>
+										{isRegistering ? "Registering..." : "Register for Event"}
+									</button>
+								</div>
+							)}
+
+							{/* Trade tab */}
+							{activeTab === "trade" && (
+								<div className="mt-6 px-4">
+									<div className="flex items-end justify-between mb-5">
+										<div>
+											<p className="font-black leading-none tracking-tight" style={{ fontSize: "clamp(2.5rem, 10vw, 3.5rem)", background: "linear-gradient(180deg, #ffffff 0%, #a78bfa 40%, #7c3aed 70%, #4f46e5 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", filter: "drop-shadow(0 0 20px rgba(139,92,246,0.6))", textShadow: "none" }}>
+												TRADING
+											</p>
+											<p className="font-black leading-none tracking-tight" style={{ fontSize: "clamp(2.5rem, 10vw, 3.5rem)", background: "linear-gradient(180deg, #ffffff 0%, #a78bfa 40%, #7c3aed 70%, #4f46e5 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", filter: "drop-shadow(0 0 20px rgba(139,92,246,0.6))", textShadow: "none" }}>
+												MARKET
+											</p>
+										</div>
+										{!simpleMode && (
+											<div className="flex flex-col items-end gap-1.5 pb-1">
+												<span className="text-white/30 text-[10px] uppercase tracking-widest">sort by</span>
+												<div className="flex gap-2">
+													<button onClick={() => { setSortBy("price"); setShowSortOptions(false); }} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all border ${sortBy === "price" ? "bg-[#7c3aed] border-[#7c3aed] text-white shadow-[0_0_12px_rgba(124,58,237,0.5)]" : "bg-transparent border-white/20 text-white/60 hover:border-white/40"}`}>
+														PRICE {sortBy === "price" ? "↑" : ""}
+													</button>
+													<button onClick={() => { setSortBy("alphabetical"); setShowSortOptions(false); }} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all border ${sortBy === "alphabetical" ? "bg-[#7c3aed] border-[#7c3aed] text-white shadow-[0_0_12px_rgba(124,58,237,0.5)]" : "bg-transparent border-white/20 text-white/60 hover:border-white/40"}`}>
+														A-Z
 													</button>
 												</div>
 											</div>
-										</div>
-									)}
-
-									{/* If not signed in, show CTA instead of portfolio */}
-									{!user && (
-										<div className="mb-4 md:mb-6">
-											<div className="card-dark border border-accent-cyan/30 shadow-glow overflow-hidden">
-												<div className="p-5 md:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-													<div className="flex items-start gap-3">
-														<div className="w-10 h-10 rounded-lg bg-gradient-to-br from-accent-cyan/30 to-primary-500/30 flex items-center justify-center flex-shrink-0 border border-accent-cyan/40">
-															<svg
-																className="w-6 h-6 text-accent-cyan"
-																fill="none"
-																stroke="currentColor"
-																viewBox="0 0 24 24"
-															>
-																<path
-																	strokeLinecap="round"
-																	strokeLinejoin="round"
-																	strokeWidth={2}
-																	d="M12 11c0 1.657-1.79 3-4 3s-4-1.343-4-3 1.79-3 4-3 4 1.343 4 3z"
-																/>
-																<path
-																	strokeLinecap="round"
-																	strokeLinejoin="round"
-																	strokeWidth={2}
-																	d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"
-																/>
-															</svg>
-														</div>
-														<div>
-															<h3 className="text-white font-semibold">
-																Sign in to start trading
-															</h3>
-															<p className="text-sm text-dark-300 mt-1">
-																Create an account or sign in to start trading
-																founders in this event.
-															</p>
-														</div>
-													</div>
-													<div className="flex gap-3">
-														<button
-															onClick={() =>
-																navigate(`/signup?redirect=/events/${eventId}`)
-															}
-															className="px-5 py-2.5 rounded-lg bg-dark-800 border border-dark-700 text-white hover:bg-dark-700 transition-all"
-														>
-															Sign In
-														</button>
-														<button
-															onClick={() =>
-																navigate(`/signup?redirect=/events/${eventId}`)
-															}
-															className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-accent-cyan to-primary-500 text-white hover:from-accent-cyan/90 hover:to-primary-600 transition-all shadow-lg"
-														>
-															Create Account
-														</button>
-													</div>
-												</div>
-											</div>
-										</div>
-									)}
-
-									{/* Trading status banner */}
-									{event &&
-										(event.status === "completed" ||
-											(event.status === "active" && !isEventActive(event))) && (
-											<div className="mb-4">
-												<div className="bg-red-500/20 border border-red-500/50 text-red-300 p-4 rounded-lg">
-													Trading has closed for this event.
-												</div>
-											</div>
-										)}
-
-									{/* Sort/Filter Options */}
-									<div className="mb-6 flex justify-between items-center">
-										<div className="hidden md:block">
-											<h2 className="text-2xl font-bold text-white">
-												Trading Market
-											</h2>
-											<p className="text-sm text-dark-400 mt-1">
-												Buy and sell founder shares in real-time
-											</p>
-										</div>
-
-										{/* Mobile: Dropdown button — hidden in simple mode */}
-										{!simpleMode && (
-											<div className="relative md:hidden ml-auto">
-												<button
-													onClick={() => setShowSortOptions(!showSortOptions)}
-													className="px-4 py-2 bg-dark-800 border border-dark-700 text-white rounded-lg text-sm font-medium transition-all flex items-center gap-2"
-												>
-													<span>
-														{sortBy === "price" ? "Highest Price" : "A-Z"}
-													</span>
-													<svg
-														className="w-4 h-4"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															strokeLinecap="round"
-															strokeLinejoin="round"
-															strokeWidth={2}
-															d="M19 9l-7 7-7-7"
-														/>
-													</svg>
-												</button>
-												{showSortOptions && (
-													<div className="absolute right-0 mt-2 w-48 bg-dark-800 border border-dark-700 rounded-lg shadow-lg z-10">
-														<button
-															onClick={() => {
-																setSortBy("price");
-																setShowSortOptions(false);
-															}}
-															className={`w-full px-4 py-3 text-left text-sm transition-colors rounded-t-lg ${
-																sortBy === "price"
-																	? "bg-primary-600 text-white"
-																	: "text-dark-300 hover:bg-dark-700"
-															}`}
-														>
-															Highest Price
-														</button>
-														<button
-															onClick={() => {
-																setSortBy("alphabetical");
-																setShowSortOptions(false);
-															}}
-															className={`w-full px-4 py-3 text-left text-sm transition-colors rounded-b-lg ${
-																sortBy === "alphabetical"
-																	? "bg-primary-600 text-white"
-																	: "text-dark-300 hover:bg-dark-700"
-															}`}
-														>
-															A-Z
-														</button>
-													</div>
-												)}
-											</div>
-										)}
-
-										{/* Desktop: Full buttons — hidden in simple mode */}
-										{!simpleMode && (
-											<div className="hidden md:flex items-center gap-3">
-												<span className="text-sm text-dark-400 mr-2">
-													Sort by:
-												</span>
-												<button
-													onClick={() => setSortBy("price")}
-													className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-														sortBy === "price"
-															? "bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-lg shadow-primary-500/30"
-															: "bg-dark-800 text-dark-300 hover:text-white hover:bg-dark-700 border border-dark-700"
-													}`}
-												>
-													<div className="flex items-center gap-2">
-														<svg
-															className="w-4 h-4"
-															fill="none"
-															stroke="currentColor"
-															viewBox="0 0 24 24"
-														>
-															<path
-																strokeLinecap="round"
-																strokeLinejoin="round"
-																strokeWidth={2}
-																d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-															/>
-														</svg>
-														Highest Price
-													</div>
-												</button>
-												<button
-													onClick={() => setSortBy("alphabetical")}
-													className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-														sortBy === "alphabetical"
-															? "bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-lg shadow-primary-500/30"
-															: "bg-dark-800 text-dark-300 hover:text-white hover:bg-dark-700 border border-dark-700"
-													}`}
-												>
-													<div className="flex items-center gap-2">
-														<svg
-															className="w-4 h-4"
-															fill="none"
-															stroke="currentColor"
-															viewBox="0 0 24 24"
-														>
-															<path
-																strokeLinecap="round"
-																strokeLinejoin="round"
-																strokeWidth={2}
-																d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"
-															/>
-														</svg>
-														A-Z
-													</div>
-												</button>
-											</div>
 										)}
 									</div>
 
-									{/* Founders Trading Table - Mobile & Desktop */}
-									<div className="card-dark mx-1 overflow-hidden shadow-glow border border-primary-500/20 md:border-2 md:rounded-2xl">
-										{sortedFounders.length === 0 ? (
-											<div className="p-8 text-center">
-												<p className="text-dark-400">
-													No founders available for this event.
-												</p>
-											</div>
-										) : (
-											<>
-												{/* Mobile View */}
-												<div className="overflow-x-auto md:hidden">
-													<table className="w-full">
-														<tbody className="divide-y divide-dark-700">
-															{sortedFounders.map((founder) => (
-																<React.Fragment key={founder.id}>
-																	{/* Founder Name Row - Full Width */}
-																	<tr
-																		className={`bg-dark-800/30 transition-colors ${
-																			simpleMode
-																				? ""
-																				: "cursor-pointer hover:bg-dark-800/50"
-																		}`}
-																		onClick={() => {
-																			if (!simpleMode)
-																				setExpandedFounderId(
-																					expandedFounderId === founder.id
-																						? null
-																						: founder.id,
-																				);
-																		}}
-																	>
-																		<td colSpan={4} className="py-2 px-4">
-																			<div className="flex items-center justify-between">
-																				<div className="flex items-center gap-2">
-																					{!simpleMode && (
-																						<svg
-																							className={`w-4 h-4 text-dark-400 transition-transform ${
-																								expandedFounderId === founder.id
-																									? "rotate-180"
-																									: ""
-																							}`}
-																							fill="none"
-																							stroke="currentColor"
-																							viewBox="0 0 24 24"
-																						>
-																							<path
-																								strokeLinecap="round"
-																								strokeLinejoin="round"
-																								strokeWidth={2}
-																								d="M19 9l-7 7-7-7"
-																							/>
-																						</svg>
-																					)}
-																					<h3 className="text-base font-bold text-white">
-																						{founder.name}
-																					</h3>
-																				</div>
-																				{!simpleMode && (
-																					<span className="text-xs text-dark-400">
-																						Cap:{" "}
-																						{formatCurrency(founder.market_cap)}
-																					</span>
-																				)}
-																			</div>
-																		</td>
-																	</tr>
-																	{/* Founder Details Row */}
-																	<tr className="hover:bg-dark-800/50 transition-colors">
-																		{/* Profile Picture */}
-																		<td className="py-3 px-4 w-1/4">
-																			<div className="flex flex-col items-center">
-																				<button
-																					onClick={(e) =>
-																						handleFounderProfileClick(
-																							founder,
-																							e,
-																						)
-																					}
-																					className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center border-2 border-accent-cyan/30 hover:border-accent-cyan transition-all mb-1"
-																				>
-																					{founder.founder_user
-																						?.profile_picture_url ? (
-																						<img
-																							src={
-																								founder.founder_user
-																									.profile_picture_url
-																							}
-																							alt={founder.name}
-																							className="w-full h-full object-cover"
-																						/>
-																					) : (
-																						<div className="w-full h-full bg-gradient-to-br from-primary-600 to-accent-cyan flex items-center justify-center text-white font-bold text-lg">
-																							{founder.name.charAt(0)}
-																						</div>
-																					)}
-																				</button>
-																				<p className="text-xs text-dark-400">
-																					Profile
-																				</p>
-																			</div>
-																		</td>
-																		{/* Current Price — hidden in simpleMode */}
-																		{!simpleMode && (
-																			<td className="py-3 px-4 w-1/4">
-																				<div className="flex flex-col items-center">
-																					<span className="text-lg font-bold text-accent-cyan mb-1">
-																						${founder.current_price.toFixed(2)}
-																					</span>
-																					<p className="text-xs text-dark-400">
-																						Price
-																					</p>
-																				</div>
-																			</td>
-																		)}
-																		{/* Owned Shares */}
-																		<td className="py-3 px-4 w-1/4">
-																			<div className="flex flex-col items-center">
-																				<span className="text-base font-medium text-white mb-1">
-																					{user
-																						? getOwnedShares(
-																								founder.id,
-																							).toLocaleString()
-																						: "-"}
-																				</span>
-																				<p className="text-xs text-dark-400">
-																					Owned
-																				</p>
-																			</div>
-																		</td>
-																		{/* Buy/Sell Buttons */}
-																		<td className="py-3 px-4 w-1/4">
-																			<div className="flex flex-col gap-1.5">
-																				<button
-																					onClick={() =>
-																						handleBuyClick(founder)
-																					}
-																					disabled={!canTrade}
-																					className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shadow-md w-full ${
-																						!canTrade
-																							? "bg-dark-700 text-dark-500 cursor-not-allowed"
-																							: "bg-green-600 hover:bg-green-700 text-white hover:shadow-glow-sm"
-																					}`}
-																				>
-																					Buy
-																				</button>
-																				<button
-																					onClick={() =>
-																						handleSellClick(founder)
-																					}
-																					disabled={
-																						!canTrade ||
-																						!user ||
-																						getOwnedShares(founder.id) === 0
-																					}
-																					className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all w-full ${
-																						!canTrade ||
-																						!user ||
-																						getOwnedShares(founder.id) === 0
-																							? "bg-dark-700 text-dark-500 cursor-not-allowed"
-																							: "bg-red-600 hover:bg-red-700 text-white shadow-md hover:shadow-glow-sm"
-																					}`}
-																				>
-																					Sell
-																				</button>
-																			</div>
-																		</td>
-																	</tr>
-																	{/* Price Chart Row - Expandable (hidden in simpleMode) */}
-																	{!simpleMode &&
-																		expandedFounderId === founder.id && (
-																			<tr>
-																				<td
-																					colSpan={4}
-																					className="py-4 px-4 bg-dark-800/20"
-																				>
-																					<div className="text-xs text-dark-400 mb-2 font-medium">
-																						Price History
-																					</div>
-																					<FounderPriceChart
-																						founderId={founder.id}
-																						height={200}
-																						maxPoints={50}
-																					/>
-																				</td>
-																			</tr>
-																		)}
-																</React.Fragment>
-															))}
-														</tbody>
-													</table>
-												</div>
-
-												{/* Desktop View */}
-												<div className="hidden md:block overflow-x-auto">
-													<table className="w-full">
-														<thead>
-															<tr className="bg-dark-800/50 border-b-2 border-primary-500/30">
-																<th className="py-4 px-6 text-left">
-																	<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
-																		Profile
-																	</span>
-																</th>
-																<th className="py-4 px-6 text-left">
-																	<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
-																		Founder
-																	</span>
-																</th>
-																{!simpleMode && (
-																	<th className="py-4 px-6 text-right">
-																		<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
-																			Price
-																		</span>
-																	</th>
-																)}
-																{!simpleMode && (
-																	<th className="py-4 px-6 text-right">
-																		<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
-																			Market Cap
-																		</span>
-																	</th>
-																)}
-																<th className="py-4 px-6 text-right">
-																	<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
-																		Your Shares
-																	</span>
-																</th>
-																<th className="py-4 px-6 text-right">
-																	<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
-																		Value
-																	</span>
-																</th>
-																<th className="py-4 px-6 text-center">
-																	<span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">
-																		Actions
-																	</span>
-																</th>
-															</tr>
-														</thead>
-														<tbody className="divide-y divide-dark-700/50">
-															{sortedFounders.map((founder) => {
-																const ownedShares = getOwnedShares(founder.id);
-																const ownedValue =
-																	ownedShares * founder.current_price;
-
-																return (
-																	<React.Fragment key={founder.id}>
-																		<tr
-																			className={`group hover:bg-gradient-to-r hover:from-dark-800/70 hover:to-dark-800/30 transition-all duration-200 ${
-																				simpleMode ? "" : "cursor-pointer"
-																			}`}
-																			onClick={() => {
-																				if (!simpleMode)
-																					setExpandedFounderId(
-																						expandedFounderId === founder.id
-																							? null
-																							: founder.id,
-																					);
-																			}}
-																		>
-																			{/* Profile Picture */}
-																			<td className="py-5 px-6">
-																				<button
-																					onClick={(e) =>
-																						handleFounderProfileClick(
-																							founder,
-																							e,
-																						)
-																					}
-																					className="w-14 h-14 rounded-full overflow-hidden flex items-center justify-center border-2 border-accent-cyan/30 hover:border-accent-cyan transition-all shadow-lg group-hover:shadow-primary-500/50"
-																				>
-																					{founder.founder_user
-																						?.profile_picture_url ? (
-																						<img
-																							src={
-																								founder.founder_user
-																									.profile_picture_url
-																							}
-																							alt={founder.name}
-																							className="w-full h-full object-cover"
-																						/>
-																					) : (
-																						<div className="w-full h-full bg-gradient-to-br from-primary-600 to-accent-cyan flex items-center justify-center text-white font-bold text-xl">
-																							{founder.name.charAt(0)}
-																						</div>
-																					)}
-																				</button>
-																			</td>
-																			{/* Founder Name */}
-																			<td className="py-5 px-6">
-																				<div className="flex items-center gap-3">
-																					{!simpleMode && (
-																						<svg
-																							className={`w-5 h-5 text-dark-400 transition-transform flex-shrink-0 ${
-																								expandedFounderId === founder.id
-																									? "rotate-180"
-																									: ""
-																							}`}
-																							fill="none"
-																							stroke="currentColor"
-																							viewBox="0 0 24 24"
-																						>
-																							<path
-																								strokeLinecap="round"
-																								strokeLinejoin="round"
-																								strokeWidth={2}
-																								d="M19 9l-7 7-7-7"
-																							/>
-																						</svg>
-																					)}
-																					<div className="w-10 h-10 bg-gradient-to-br from-accent-cyan/20 to-primary-500/20 rounded-lg flex items-center justify-center border border-accent-cyan/30">
-																						<span className="text-lg font-bold text-accent-cyan">
-																							{founder.name.charAt(0)}
-																						</span>
-																					</div>
-																					<h3 className="text-white font-semibold text-lg group-hover:text-accent-cyan transition-colors">
-																						{founder.name}
-																					</h3>
-																				</div>
-																			</td>
-																			{/* Price — hidden in simpleMode */}
-																			{!simpleMode && (
-																				<td className="py-5 px-6 text-right">
-																					<div className="inline-flex flex-col items-end">
-																						<span className="text-2xl font-bold text-accent-cyan">
-																							$
-																							{founder.current_price.toFixed(2)}
-																						</span>
-																						<span className="text-xs text-dark-400">
-																							per share
-																						</span>
-																					</div>
-																				</td>
-																			)}
-																			{/* Market Cap — hidden in simpleMode */}
-																			{!simpleMode && (
-																				<td className="py-5 px-6 text-right">
-																					<span className="text-white font-medium text-lg">
-																						{formatCurrency(founder.market_cap)}
-																					</span>
-																				</td>
-																			)}
-																			{/* Shares Owned */}
-																			<td className="py-5 px-6 text-right">
-																				<div className="inline-flex flex-col items-end">
-																					<span className="text-xl font-bold text-white">
-																						{user
-																							? ownedShares.toLocaleString()
-																							: "-"}
-																					</span>
-																					{user && ownedShares > 0 && (
-																						<span className="text-xs text-dark-400">
-																							shares
-																						</span>
-																					)}
-																				</div>
-																			</td>
-																			{/* Value of Owned Shares */}
-																			<td className="py-5 px-6 text-right">
-																				<span
-																					className={`text-lg font-bold ${
-																						user && ownedShares > 0
-																							? "text-green-400"
-																							: "text-dark-500"
-																					}`}
-																				>
-																					{user && ownedShares > 0
-																						? formatCurrency(ownedValue)
-																						: "-"}
-																				</span>
-																			</td>
-																			{/* Actions */}
-																			<td className="py-5 px-6">
-																				<div className="flex gap-3 justify-center">
-																					<button
-																						onClick={(e) => {
-																							e.stopPropagation();
-																							handleBuyClick(founder);
-																						}}
-																						disabled={!canTrade}
-																						className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-lg ${
-																							!canTrade
-																								? "bg-dark-700 text-dark-500 cursor-not-allowed opacity-50"
-																								: "bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white hover:shadow-green-500/50 hover:scale-105 active:scale-95"
-																						}`}
-																					>
-																						Buy
-																					</button>
-																					<button
-																						onClick={(e) => {
-																							e.stopPropagation();
-																							handleSellClick(founder);
-																						}}
-																						disabled={
-																							!canTrade ||
-																							!user ||
-																							ownedShares === 0
-																						}
-																						className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-lg ${
-																							!canTrade ||
-																							!user ||
-																							ownedShares === 0
-																								? "bg-dark-700 text-dark-500 cursor-not-allowed opacity-50"
-																								: "bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-white hover:shadow-red-500/50 hover:scale-105 active:scale-95"
-																						}`}
-																					>
-																						Sell
-																					</button>
-																				</div>
-																			</td>
-																		</tr>
-																		{/* Price Chart Row - Expandable (hidden in simpleMode) */}
-																		{!simpleMode &&
-																			expandedFounderId === founder.id && (
-																				<tr>
-																					<td
-																						colSpan={7}
-																						className="py-6 px-6 bg-dark-800/30"
-																					>
-																						<div className="max-w-4xl mx-auto">
-																							<div className="text-sm text-dark-400 mb-3 font-medium">
-																								Price History - {founder.name}
-																							</div>
-																							<FounderPriceChart
-																								founderId={founder.id}
-																								height={300}
-																								maxPoints={100}
-																							/>
-																						</div>
-																					</td>
-																				</tr>
-																			)}
-																	</React.Fragment>
-																);
-															})}
-														</tbody>
-													</table>
-												</div>
-											</>
-										)}
-									</div>
-								</>
-							) : activeTab === "leaderboard" ? (
-								/* Leaderboard Tab */
-								<div className="space-y-6">
-									<div className="hidden md:block">
-										<h2 className="text-2xl font-bold text-white">
-											Event Leaderboard
-										</h2>
-										<p className="text-sm text-dark-400 mt-1">
-											Top performers ranked by portfolio value
-										</p>
-									</div>
-									<div className="w-full max-w-4xl mx-auto">
-										<Leaderboard eventId={eventId || ""} founders={founders} className="w-full" />
-									</div>
-								</div>
-							) : (
-								/* Admin Analytics Tab (simpleMode only) */
-								<div className="space-y-6">
-									<div>
-										<h2 className="text-2xl font-bold text-white flex items-center gap-3">
-											Market Cap Analytics
-											<span className="text-sm bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30 rounded-lg px-2 py-1 font-medium">
-												Admin Only
-											</span>
-										</h2>
-										<p className="text-sm text-dark-400 mt-1">
-											Market cap history and peak values per founder — hidden
-											from participants
-										</p>
-									</div>
-
-									{founders.length === 0 ? (
-										<div className="card-dark p-8 text-center text-dark-400">
-											No founders for this event.
-										</div>
+									{sortedFounders.length === 0 ? (
+										<div className="text-center py-12 text-white/40">No founders available for this event.</div>
 									) : (
-										<div className="space-y-6">
-											{/* Peak market cap summary */}
-											<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-												{founders.map((founder) => (
+										<div className="space-y-3">
+											{sortedFounders.map((founder) => {
+												const isExpanded = expandedFounderId === founder.id;
+												const ownedShares = getOwnedShares(founder.id);
+												const ownedValue = ownedShares * founder.current_price;
+
+												return (
 													<div
 														key={founder.id}
-														className="card-dark p-4 border border-dark-700"
+														className="rounded-2xl overflow-hidden"
+														style={{ background: "linear-gradient(135deg, rgba(20,15,50,0.9) 0%, rgba(15,10,40,0.95) 100%)", border: isExpanded ? "1px solid rgba(124,58,237,0.4)" : "1px solid rgba(255,255,255,0.07)", boxShadow: isExpanded ? "0 0 30px rgba(124,58,237,0.15), inset 0 1px 0 rgba(255,255,255,0.05)" : "0 2px 8px rgba(0,0,0,0.3)" }}
 													>
-														<div className="flex items-center gap-3 mb-3">
-															<div className="w-10 h-10 rounded-full overflow-hidden border border-accent-cyan/30 flex-shrink-0">
+														<div
+															className={`flex items-center gap-3 px-4 py-3.5 ${!simpleMode ? "cursor-pointer" : ""}`}
+															onClick={() => { if (!simpleMode) setExpandedFounderId(isExpanded ? null : founder.id); }}
+														>
+															<button onClick={(e) => handleFounderProfileClick(founder, e)} className="w-12 h-12 rounded-full overflow-hidden border-2 border-white/15 hover:border-violet-400/60 transition-all flex-shrink-0 shadow-md">
 																{founder.founder_user?.profile_picture_url ? (
-																	<img
-																		src={
-																			founder.founder_user.profile_picture_url
-																		}
-																		alt={founder.name}
-																		className="w-full h-full object-cover"
-																	/>
+																	<img src={founder.founder_user.profile_picture_url} alt={founder.name} className="w-full h-full object-cover" />
 																) : (
-																	<div className="w-full h-full bg-gradient-to-br from-primary-600 to-accent-cyan flex items-center justify-center text-white font-bold">
+																	<div className="w-full h-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white font-bold text-lg">
 																		{founder.name.charAt(0)}
 																	</div>
 																)}
+															</button>
+															<div className="flex-1 min-w-0">
+																<p className="text-white font-bold text-base truncate">{founder.name}</p>
+																{founder.pitch_summary && (
+																	<p className="text-white/40 text-xs truncate mt-0.5">{founder.pitch_summary}</p>
+																)}
 															</div>
-															<h3 className="text-white font-semibold truncate">
-																{founder.name}
-															</h3>
+															<div className="flex items-center gap-2.5 flex-shrink-0">
+																{!simpleMode && !isExpanded && (
+																	<SparklineWithButton
+																		founderId={isDemo ? "" : founder.id}
+																		price={founder.current_price}
+																		canTrade={canTrade}
+																		onTrade={() => handleBuyClick(founder)}
+																		formatCurrency={formatCurrency}
+																	/>
+																)}
+																{simpleMode && (
+																	<div className="flex gap-1.5">
+																		<button onClick={(e) => { e.stopPropagation(); handleBuyClick(founder); }} disabled={!canTrade} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${!canTrade ? "bg-white/5 text-white/20 cursor-not-allowed" : "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30"}`}>Buy</button>
+																		<button onClick={(e) => { e.stopPropagation(); handleSellClick(founder); }} disabled={!canTrade || ownedShares === 0} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${!canTrade || ownedShares === 0 ? "bg-white/5 text-white/20 cursor-not-allowed" : "bg-orange-500/20 text-orange-300 border border-orange-500/30 hover:bg-orange-500/30"}`}>Sell</button>
+																	</div>
+																)}
+															</div>
+														</div>
+
+														{!simpleMode && isExpanded && (
+															<div className="px-4 pb-5 border-t border-white/5">
+																{!isDemo && (
+																	<div className="mt-3 -mx-1">
+																		<FounderPriceChart founderId={founder.id} height={160} maxPoints={60} showGrid={false} />
+																	</div>
+																)}
+																<div className="grid grid-cols-3 gap-2 mt-4 py-3 border-t border-b border-white/5">
+																	<div className="text-center">
+																		<p className="text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-1">Market Cap.</p>
+																		<p className="text-white font-bold text-sm tabular-nums">{formatCurrency(founder.market_cap)}</p>
+																	</div>
+																	<div className="text-center border-x border-white/5">
+																		<p className="text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-1">Your Shares</p>
+																		<p className="text-white font-bold text-sm tabular-nums">{user ? ownedShares.toLocaleString() : "—"}</p>
+																	</div>
+																	<div className="text-center">
+																		<p className="text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-1">Your Value</p>
+																		<p className="text-white font-bold text-sm tabular-nums">{user && ownedShares > 0 ? formatCurrency(ownedValue) : "—"}</p>
+																	</div>
+																</div>
+																<div className="flex gap-3 mt-4">
+																	<button onClick={(e) => { e.stopPropagation(); handleBuyClick(founder); }} disabled={!canTrade} className={`flex-1 py-4 rounded-2xl font-bold text-base transition-all ${!canTrade ? "bg-white/5 text-white/20 cursor-not-allowed" : "text-white"}`} style={canTrade ? { background: "linear-gradient(135deg, #06b6d4, #3b82f6)", boxShadow: "0 0 20px rgba(6,182,212,0.3)" } : {}}>
+																		BUY
+																	</button>
+																	<button onClick={(e) => { e.stopPropagation(); handleSellClick(founder); }} disabled={!canTrade || ownedShares === 0} className={`flex-1 py-4 rounded-2xl font-bold text-base transition-all ${!canTrade || ownedShares === 0 ? "bg-white/5 text-white/20 cursor-not-allowed" : "text-white"}`} style={canTrade && ownedShares > 0 ? { background: "linear-gradient(135deg, #f97316, #ef4444)", boxShadow: "0 0 20px rgba(249,115,22,0.3)" } : {}}>
+																		SELL
+																	</button>
+																</div>
+															</div>
+														)}
+													</div>
+												);
+											})}
+										</div>
+									)}
+								</div>
+							)}
+
+							{/* Admin analytics tab */}
+							{activeTab === "admin-analytics" && (
+								<div className="mt-6 px-4 space-y-6">
+									<div>
+										<h2 className="text-2xl font-bold text-white flex items-center gap-3">
+											Market Cap Analytics
+											<span className="text-sm bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg px-2 py-1 font-medium">Admin Only</span>
+										</h2>
+										<p className="text-sm text-white/40 mt-1">Market cap history and peak values per founder — hidden from participants</p>
+									</div>
+									{founders.length === 0 ? (
+										<div className="rounded-2xl bg-white/5 border border-white/5 p-8 text-center text-white/40">No founders for this event.</div>
+									) : (
+										<div className="space-y-6">
+											<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+												{founders.map((founder) => (
+													<div key={founder.id} className="rounded-2xl bg-white/5 border border-white/5 p-4">
+														<div className="flex items-center gap-3 mb-3">
+															<div className="w-10 h-10 rounded-full overflow-hidden border border-white/10 flex-shrink-0">
+																{founder.founder_user?.profile_picture_url ? (
+																	<img src={founder.founder_user.profile_picture_url} alt={founder.name} className="w-full h-full object-cover" />
+																) : (
+																	<div className="w-full h-full bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-white font-bold">{founder.name.charAt(0)}</div>
+																)}
+															</div>
+															<h3 className="text-white font-semibold truncate">{founder.name}</h3>
 														</div>
 														<div className="grid grid-cols-2 gap-2 text-sm">
 															<div>
-																<p className="text-dark-400 text-xs">
-																	Current Price
-																</p>
-																<p className="text-accent-cyan font-bold">
-																	${founder.current_price.toFixed(2)}
-																</p>
+																<p className="text-white/40 text-xs">Current Price</p>
+																<p className="text-cyan-400 font-bold">${founder.current_price.toFixed(2)}</p>
 															</div>
 															<div>
-																<p className="text-dark-400 text-xs">
-																	Current Market Cap
-																</p>
-																<p className="text-white font-bold">
-																	{formatCurrency(founder.market_cap)}
-																</p>
+																<p className="text-white/40 text-xs">Market Cap</p>
+																<p className="text-white font-bold">{formatCurrency(founder.market_cap)}</p>
 															</div>
 														</div>
 													</div>
 												))}
 											</div>
-
-											{/* Market cap history per founder */}
 											{founders.map((founder) => (
-												<div
-													key={founder.id}
-													className="card-dark border border-dark-700 p-5"
-												>
+												<div key={founder.id} className="rounded-2xl bg-white/5 border border-white/5 p-5">
 													<h3 className="text-white font-semibold text-lg mb-4 flex items-center gap-2">
-														<div className="w-8 h-8 rounded-full overflow-hidden border border-accent-cyan/30 flex-shrink-0">
+														<div className="w-8 h-8 rounded-full overflow-hidden border border-white/10 flex-shrink-0">
 															{founder.founder_user?.profile_picture_url ? (
-																<img
-																	src={founder.founder_user.profile_picture_url}
-																	alt={founder.name}
-																	className="w-full h-full object-cover"
-																/>
+																<img src={founder.founder_user.profile_picture_url} alt={founder.name} className="w-full h-full object-cover" />
 															) : (
-																<div className="w-full h-full bg-gradient-to-br from-primary-600 to-accent-cyan flex items-center justify-center text-white font-bold text-sm">
-																	{founder.name.charAt(0)}
-																</div>
+																<div className="w-full h-full bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-white font-bold text-sm">{founder.name.charAt(0)}</div>
 															)}
 														</div>
 														{founder.name} — Market Cap History
 													</h3>
-													<FounderMarketCapChart
-														founderId={founder.id}
-														founderName={founder.name}
-														height={280}
-														maxPoints={500}
-													/>
+													<FounderMarketCapChart founderId={founder.id} founderName={founder.name} height={280} maxPoints={500} />
 												</div>
 											))}
 										</div>
 									)}
 								</div>
 							)}
-						</>
-					)}
-				</div>
+						</div>
+					</>
+				)}
 			</div>
 
-			{/* Floating notification for non-signed-in users */}
-			{!user && !isLoading && event && showSignInNotification && (
-				<div
-					className="fixed bottom-6 right-6 z-50 animate-bounce"
-					onClick={handleSignIn}
-				>
-					<div className="bg-red-500 text-white px-6 py-4 rounded-lg shadow-2xl flex items-center gap-3 max-w-sm">
-						<svg
-							className="w-6 h-6 flex-shrink-0"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								strokeWidth={2}
-								d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-							/>
-						</svg>
-						<p className="font-medium">Please sign in to start trading</p>
+			{/* Floating bottom nav */}
+			<div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-3 py-2 rounded-full" style={{ background: "rgba(16, 14, 35, 0.92)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04), inset 0 1px 0 rgba(255,255,255,0.08)" }}>
+				{!simpleMode && (
+					<button onClick={() => setShowLeaderboard(true)} className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-full transition-all ${showLeaderboard ? "text-cyan-400" : "text-white/35 hover:text-white/60"}`}>
+						<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+						<span className="text-[9px] font-medium">Rankings</span>
+					</button>
+				)}
+				<button onClick={() => setShowChat(true)} className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-full transition-all ${showChat ? "text-cyan-400" : "text-white/35 hover:text-white/60"}`}>
+					<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+					<span className="text-[9px] font-medium">Chat</span>
+				</button>
+				<button onClick={() => setActiveTab("trade")} className="relative -mt-6 w-14 h-14 rounded-full flex items-center justify-center transition-transform hover:scale-105 active:scale-95 mx-1" style={{ background: "linear-gradient(140deg, #22d3ee 0%, #6366f1 100%)", boxShadow: "0 0 20px rgba(34,211,238,0.6), 0 0 40px rgba(99,102,241,0.4), 0 4px 15px rgba(0,0,0,0.5)", border: "2px solid rgba(255,255,255,0.2)" }}>
+					<svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+					{activeTab === "trade" && <span className="absolute inset-0 rounded-full animate-ping opacity-20" style={{ background: "linear-gradient(140deg, #22d3ee, #6366f1)" }} />}
+				</button>
+				<button onClick={() => setShowProfile(true)} className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-full transition-all ${showProfile ? "text-cyan-400" : "text-white/35 hover:text-white/60"}`}>
+					<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+					<span className="text-[9px] font-medium">Profile</span>
+				</button>
+				<button onClick={() => setShowSettings(true)} className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-full transition-all ${showSettings ? "text-cyan-400" : "text-white/35 hover:text-white/60"}`}>
+					<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+					<span className="text-[9px] font-medium">Settings</span>
+				</button>
+			</div>
+
+			{/* Portfolio dropdown */}
+			{showPortfolioDropdown && user && investor && (
+				<div className="fixed bottom-20 left-0 right-0 z-40 mx-4 rounded-2xl bg-[#0d0e24] border border-white/10 shadow-2xl overflow-hidden" ref={portfolioDropdownRef}>
+					<div className="p-4 border-b border-white/5 flex items-center justify-between">
+						<h3 className="text-white font-bold text-lg">Your Holdings</h3>
+						<button onClick={() => setShowPortfolioDropdown(false)} className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+							<svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+						</button>
+					</div>
+					<div className="max-h-72 overflow-y-auto">
+						{holdings.length === 0 ? (
+							<div className="p-8 text-center text-white/40 text-sm">No holdings yet. Start trading to build your portfolio!</div>
+						) : (
+							<div className="divide-y divide-white/5">
+								{holdings.map((holding) => {
+									const founder = founders.find((f) => f.id === holding.founder_id);
+									if (!founder) return null;
+									const currentValue = holding.shares * founder.current_price;
+									const profitLoss = currentValue - holding.shares * holding.cost_basis;
+									return (
+										<div key={holding.id} className="px-4 py-3 flex items-center justify-between gap-4">
+											<div className="flex items-center gap-3">
+												<div className="w-8 h-8 rounded-full overflow-hidden border border-white/10 flex-shrink-0">
+													{founder.founder_user?.profile_picture_url ? (
+														<img src={founder.founder_user.profile_picture_url} alt={founder.name} className="w-full h-full object-cover" />
+													) : (
+														<div className="w-full h-full bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-white font-bold text-xs">{founder.name.charAt(0)}</div>
+													)}
+												</div>
+												<div>
+													<p className="text-white font-semibold text-sm">{founder.name}</p>
+													<p className="text-white/40 text-xs">{holding.shares.toLocaleString()} shares</p>
+												</div>
+											</div>
+											<div className="text-right">
+												{!simpleMode && (
+													<>
+														<p className="text-cyan-400 font-bold text-sm">{formatCurrency(currentValue)}</p>
+														<p className={`text-xs font-semibold ${profitLoss >= 0 ? "text-green-400" : "text-red-400"}`}>{profitLoss >= 0 ? "+" : ""}{formatCurrency(profitLoss)}</p>
+													</>
+												)}
+											</div>
+										</div>
+									);
+								})}
+							</div>
+						)}
+					</div>
+					<div className="p-4 border-t border-white/5 grid grid-cols-2 gap-3">
+						<div className="text-center">
+							<p className="text-white/40 text-xs">Liquid Cash</p>
+							<p className="text-cyan-400 font-bold">{formatCurrency(investor.current_balance)}</p>
+						</div>
+						<div className="text-center">
+							<p className="text-white/40 text-xs">ROI</p>
+							<p className={`font-bold ${roiPercent >= 0 ? "text-green-400" : "text-red-400"}`}>{roiPercent >= 0 ? "+" : ""}{roiPercent.toFixed(1)}%</p>
+						</div>
 					</div>
 				</div>
 			)}
 
-			{/* Floating notification for register */}
+			{/* Notifications */}
+			{!user && !isLoading && event && showSignInNotification && (
+				<div className="fixed bottom-24 right-4 z-50 animate-bounce" onClick={handleSignIn}>
+					<div className="bg-red-500 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 max-w-xs">
+						<svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+						<p className="font-medium text-sm">Please sign in to start trading</p>
+					</div>
+				</div>
+			)}
+
 			{user && !investorId && !isLoading && event && showRegisterNotification && (
-				<div className="fixed bottom-6 right-6 z-50 max-w-sm">
-					<div className="bg-dark-900 border border-primary-500/50 rounded-lg shadow-2xl p-4 flex items-start gap-3">
-						<svg className="w-6 h-6 text-primary-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-						</svg>
+				<div className="fixed bottom-24 right-4 z-50 max-w-xs">
+					<div className="bg-[#0d0e24] border border-blue-500/40 rounded-xl shadow-2xl p-4 flex items-start gap-3">
+						<svg className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
 						<div className="flex-1">
-							<p className="font-medium text-white">Register to trade</p>
-							<p className="text-sm text-dark-300 mt-0.5">You need to join this event before trading.</p>
-							<button
-								onClick={handleRegisterForEvent}
-								disabled={isRegistering}
-								className="mt-2 px-4 py-1.5 rounded-lg bg-gradient-to-r from-primary-600 to-primary-500 text-white text-sm font-medium hover:from-primary-700 hover:to-primary-600 transition-all disabled:opacity-70"
-							>
+							<p className="font-semibold text-white text-sm">Register to trade</p>
+							<p className="text-xs text-white/50 mt-0.5">You need to join this event before trading.</p>
+							<button onClick={handleRegisterForEvent} disabled={isRegistering} className="mt-2 px-4 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-xs font-semibold disabled:opacity-60">
 								{isRegistering ? "Registering..." : "Register for Event"}
 							</button>
 						</div>
-						<button onClick={() => setShowRegisterNotification(false)} className="text-dark-400 hover:text-white transition-colors flex-shrink-0">
-							<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-							</svg>
+						<button onClick={() => setShowRegisterNotification(false)} className="text-white/30 hover:text-white transition-colors flex-shrink-0">
+							<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
 						</button>
 					</div>
 				</div>
 			)}
 
-			{/* Floating notification for trading closed */}
 			{!isLoading && event && showTradingClosedNotification && (
-				<div
-					className="fixed bottom-6 right-6 z-50"
-					onClick={() => setShowTradingClosedNotification(false)}
-				>
-					<div className="bg-yellow-400 text-dark-950 px-6 py-4 rounded-lg shadow-2xl flex items-center gap-3 max-w-sm">
-						<svg
-							className="w-6 h-6 flex-shrink-0"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								strokeWidth={2}
-								d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-							/>
-						</svg>
-						<p className="font-medium">Trading has closed for this event</p>
+				<div className="fixed bottom-24 right-4 z-50" onClick={() => setShowTradingClosedNotification(false)}>
+					<div className="bg-amber-400 text-[#0a0b1a] px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 max-w-xs">
+						<svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+						<p className="font-semibold text-sm">Trading has closed for this event</p>
 					</div>
 				</div>
 			)}
 
-			{/* Closing countdown — bottom-right corner (dismissible) */}
+			{showTradingStartedToast && (
+				<div className="fixed bottom-24 left-4 z-50" onClick={() => setShowTradingStartedToast(false)}>
+					<div className="bg-green-500 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 max-w-xs">
+						<svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+						<p className="font-semibold text-sm">Trading has started!</p>
+					</div>
+				</div>
+			)}
+
 			{showClosingCountdown && closingSecondsLeft > 0 && (
-				<div className="fixed bottom-4 right-4 z-50 pointer-events-auto">
-					<div className="bg-dark-900 border border-yellow-500/50 rounded-lg shadow-xl px-3 py-2 w-40">
+				<div className="fixed bottom-24 right-4 z-50 pointer-events-auto">
+					<div className="bg-[#0d0e24] border border-amber-500/40 rounded-xl shadow-xl px-3 py-2.5 w-44">
 						<div className="flex items-center justify-between gap-2 mb-1.5">
-							<p className="text-yellow-300 font-medium text-xs">Closing soon</p>
-							<button
-								onClick={() => setShowClosingCountdown(false)}
-								className="text-dark-500 hover:text-white transition-colors flex-shrink-0"
-							>
-								<svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-								</svg>
+							<p className="text-amber-300 font-semibold text-xs">Closing soon</p>
+							<button onClick={() => setShowClosingCountdown(false)} className="text-white/30 hover:text-white transition-colors">
+								<svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
 							</button>
 						</div>
-						<span className="text-white font-bold tabular-nums text-base leading-none block mb-1.5">
+						<span className="text-white font-black tabular-nums text-xl leading-none block mb-2">
 							{Math.floor(closingSecondsLeft / 60)}:{String(closingSecondsLeft % 60).padStart(2, "0")}
 						</span>
-						<div className="h-1 bg-dark-700 rounded-full overflow-hidden">
-							<div
-								className="h-full bg-yellow-400 rounded-full transition-all duration-1000"
-								style={{ width: `${(closingSecondsLeft / totalClosingSeconds) * 100}%` }}
-							/>
+						<div className="h-1 bg-white/10 rounded-full overflow-hidden">
+							<div className="h-full bg-amber-400 rounded-full transition-all duration-1000" style={{ width: `${(closingSecondsLeft / totalClosingSeconds) * 100}%` }} />
 						</div>
 					</div>
 				</div>
 			)}
 
-			{/* Trading started toast */}
-			{showTradingStartedToast && (
-				<div
-					className="fixed bottom-6 left-6 z-50"
-					onClick={() => setShowTradingStartedToast(false)}
-				>
-					<div className="bg-green-500 text-white px-6 py-4 rounded-lg shadow-2xl flex items-center gap-3 max-w-sm">
-						<svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-						</svg>
-						<p className="font-medium">Trading has started!</p>
-					</div>
-				</div>
-			)}
-
-			{/* Event Info Modal */}
+			{/* Modals */}
 			{showEventInfoModal && event && (
-				<div
-					className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-					onClick={() => setShowEventInfoModal(false)}
-				>
-					<div
-						className="bg-dark-900 rounded-xl border border-primary-500/30 max-w-2xl w-full max-h-[80vh] overflow-y-auto"
-						onClick={(e) => e.stopPropagation()}
-					>
-						{/* Modal Header */}
-						<div className="sticky top-0 bg-dark-900 border-b border-dark-700 p-6">
-							<div className="flex items-center justify-between">
-								<h2 className="text-2xl font-bold text-white">Event Details</h2>
-								<button
-									onClick={() => setShowEventInfoModal(false)}
-									className="p-2 hover:bg-dark-800 rounded-lg transition-colors"
-								>
-									<svg
-										className="w-6 h-6 text-dark-400"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											strokeLinecap="round"
-											strokeLinejoin="round"
-											strokeWidth={2}
-											d="M6 18L18 6M6 6l12 12"
-										/>
-									</svg>
-								</button>
-							</div>
-						</div>
-
-						{/* Modal Content */}
-						<div className="p-6 space-y-6">
-							{/* Event Name */}
-							<div>
-								<h3 className="text-lg font-bold bg-gradient-to-r from-accent-cyan via-primary-400 to-accent-cyan bg-clip-text text-transparent mb-2">
-									{event.name}
-								</h3>
-								{event.description && (
-									<p className="text-dark-300">{event.description}</p>
-								)}
-							</div>
-
-							{/* Event Status */}
-							<div>
-								<p className="text-sm text-dark-400 mb-2">Status</p>
-								<div
-									className={`inline-block px-4 py-2 rounded-full text-sm font-medium ${
-										event.status === "active" && isEventActive(event)
-											? "bg-green-500/20 text-green-300 border border-green-500/50"
-											: isEventNotStarted(event)
-												? "bg-blue-500/20 text-blue-300 border border-blue-500/50"
-												: event.status === "completed" ||
-													  (event.status === "active" && !isEventActive(event))
-													? "bg-red-500/20 text-red-300 border border-red-500/50"
-													: event.status === "draft"
-														? "bg-yellow-500/20 text-yellow-300 border border-yellow-500/50"
-														: "bg-red-500/20 text-red-300 border border-red-500/50"
-									}`}
-								>
-									{event.status === "active" && isEventActive(event)
-										? "Active"
-										: isEventNotStarted(event)
-											? `Starts on ${formatEventDate(event.start_time)}`
-											: event.status === "active" && !isEventActive(event)
-												? "Ended"
-												: event.status === "completed"
-													? "Ended"
-													: event.status.charAt(0).toUpperCase() +
-														event.status.slice(1)}
-								</div>
-							</div>
-
-							{/* Event Times */}
-							<div className="space-y-3">
-								<div>
-									<p className="text-sm text-dark-400 mb-1">Start Time</p>
-									<p className="text-white font-medium">
-										{formatEventDate(event.start_time)}
-									</p>
-								</div>
-								<div>
-									<p className="text-sm text-dark-400 mb-1">End Time</p>
-									<p className="text-white font-medium">
-										{formatEventDate(event.end_time)}
-									</p>
-								</div>
-							</div>
-
-							{/* Action Buttons */}
-							<div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-dark-700">
-								<button
-									onClick={() => {
-										setShowEventInfoModal(false);
-										setShowQRModal(true);
-									}}
-									className="flex-1 px-4 py-3 bg-gradient-to-r from-accent-cyan to-primary-500 hover:from-accent-cyan/90 hover:to-primary-600 text-white rounded-lg font-medium transition-all shadow-lg hover:shadow-accent-cyan/50 flex items-center justify-center gap-2"
-								>
-									<svg
-										className="w-5 h-5"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											strokeLinecap="round"
-											strokeLinejoin="round"
-											strokeWidth={2}
-											d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-										/>
-									</svg>
-									Share Event
-								</button>
-							</div>
-						</div>
-					</div>
-				</div>
+				<EventInfoSheet event={event} founders={founders} statusBadge={statusBadge} formatEventDate={formatEventDate} onClose={() => setShowEventInfoModal(false)} onShare={() => { setShowEventInfoModal(false); setShowQRModal(true); }} />
 			)}
+			{showHelpModal && <HelpSheet onClose={() => setShowHelpModal(false)} />}
 
-			{/* Founder Details Modal */}
 			{showFounderModal && selectedFounderForModal && (
-				<div
-					className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-					onClick={() => setShowFounderModal(false)}
-				>
-					<div
-						className="bg-dark-900 rounded-xl border border-primary-500/30 max-w-2xl w-full max-h-[80vh] overflow-y-auto"
-						onClick={(e) => e.stopPropagation()}
-					>
-						{/* Modal Header */}
-						<div className="sticky top-0 bg-dark-900 border-b border-dark-700 p-6">
+				<div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowFounderModal(false)}>
+					<div className="bg-[#0d0e24] rounded-2xl border border-white/10 max-w-2xl w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+						<div className="sticky top-0 bg-[#0d0e24] border-b border-white/5 p-6">
 							<div className="flex items-center justify-between">
-								<h2 className="text-2xl font-bold text-white">
-									Founder Profile
-								</h2>
-								<button
-									onClick={() => setShowFounderModal(false)}
-									className="p-2 hover:bg-dark-800 rounded-lg transition-colors"
-								>
-									<svg
-										className="w-6 h-6 text-dark-400"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											strokeLinecap="round"
-											strokeLinejoin="round"
-											strokeWidth={2}
-											d="M6 18L18 6M6 6l12 12"
-										/>
-									</svg>
+								<h2 className="text-2xl font-bold text-white">Founder Profile</h2>
+								<button onClick={() => setShowFounderModal(false)} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
+									<svg className="w-5 h-5 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
 								</button>
 							</div>
 						</div>
-
-						{/* Modal Content */}
 						<div className="p-6 space-y-6">
-							{/* Profile Picture and Name */}
 							<div className="flex items-start gap-6">
-								<div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center border-2 border-accent-cyan/30 flex-shrink-0">
+								<div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center border-2 border-white/10 flex-shrink-0">
 									{selectedFounderForModal.founder_user?.profile_picture_url ? (
-										<img
-											src={
-												selectedFounderForModal.founder_user.profile_picture_url
-											}
-											alt={selectedFounderForModal.name}
-											className="w-full h-full object-cover"
-										/>
+										<img src={selectedFounderForModal.founder_user.profile_picture_url} alt={selectedFounderForModal.name} className="w-full h-full object-cover" />
 									) : (
-										<div className="w-full h-full bg-gradient-to-br from-primary-600 to-accent-cyan flex items-center justify-center text-white font-bold text-3xl">
+										<div className="w-full h-full bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-white font-bold text-3xl">
 											{selectedFounderForModal.name.charAt(0)}
 										</div>
 									)}
 								</div>
 								<div className="flex-1">
-									<h3 className="text-2xl font-bold text-white mb-2">
-										{selectedFounderForModal.name}
-									</h3>
+									<h3 className="text-2xl font-bold text-white mb-1">{selectedFounderForModal.name}</h3>
 									{selectedFounderForModal.founder_user && (
-										<p className="text-dark-300">
-											{selectedFounderForModal.founder_user.first_name}{" "}
-											{selectedFounderForModal.founder_user.last_name}
-										</p>
+										<p className="text-white/50">{selectedFounderForModal.founder_user.first_name} {selectedFounderForModal.founder_user.last_name}</p>
 									)}
 								</div>
 							</div>
-
-							{/* Project Logo */}
 							{selectedFounderForModal.logo_url && (
 								<div>
-									<p className="text-sm text-dark-400 mb-2">Project Logo</p>
-									<div className="w-32 h-32 rounded-lg overflow-hidden border border-dark-700">
-										<img
-											src={selectedFounderForModal.logo_url}
-											alt={`${selectedFounderForModal.name} logo`}
-											className="w-full h-full object-cover"
-										/>
+									<p className="text-sm text-white/40 mb-2">Project Logo</p>
+									<div className="w-32 h-32 rounded-xl overflow-hidden border border-white/10">
+										<img src={selectedFounderForModal.logo_url} alt={`${selectedFounderForModal.name} logo`} className="w-full h-full object-cover" />
 									</div>
 								</div>
 							)}
-
-							{/* Bio */}
 							{selectedFounderForModal.founder_user?.bio && (
 								<div>
-									<p className="text-sm text-dark-400 mb-2">Bio</p>
-									<p className="text-white leading-relaxed">
-										{selectedFounderForModal.founder_user.bio}
-									</p>
+									<p className="text-sm text-white/40 mb-2">Bio</p>
+									<p className="text-white/80 leading-relaxed">{selectedFounderForModal.founder_user.bio}</p>
 								</div>
 							)}
-
-							{/* Pitch Summary */}
 							{selectedFounderForModal.pitch_summary && (
 								<div>
-									<p className="text-sm text-dark-400 mb-2">Pitch Summary</p>
-									<p className="text-white leading-relaxed">
-										{selectedFounderForModal.pitch_summary}
-									</p>
+									<p className="text-sm text-white/40 mb-2">Pitch Summary</p>
+									<p className="text-white/80 leading-relaxed">{selectedFounderForModal.pitch_summary}</p>
 								</div>
 							)}
-
-							{/* Market Stats — hidden in simpleMode */}
 							{!simpleMode && (
-								<div className="grid grid-cols-2 gap-4 pt-4 border-t border-dark-700">
-									<div className="bg-dark-800/50 p-4 rounded-lg">
-										<p className="text-xs text-dark-400 mb-1">Current Price</p>
-										<p className="text-xl font-bold text-accent-cyan">
-											${selectedFounderForModal.current_price.toFixed(2)}
-										</p>
+								<div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
+									<div className="bg-white/5 p-4 rounded-xl">
+										<p className="text-xs text-white/40 mb-1">Current Price</p>
+										<p className="text-xl font-bold text-cyan-400">${selectedFounderForModal.current_price.toFixed(2)}</p>
 									</div>
-									<div className="bg-dark-800/50 p-4 rounded-lg">
-										<p className="text-xs text-dark-400 mb-1">Market Cap</p>
-										<p className="text-xl font-bold text-white">
-											{formatCurrency(selectedFounderForModal.market_cap)}
-										</p>
+									<div className="bg-white/5 p-4 rounded-xl">
+										<p className="text-xs text-white/40 mb-1">Market Cap</p>
+										<p className="text-xl font-bold text-white">{formatCurrency(selectedFounderForModal.market_cap)}</p>
 									</div>
 								</div>
 							)}
-
-							{/* Action Buttons */}
-							<div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-dark-700">
-								<button
-									onClick={() => {
-										setShowFounderModal(false);
-										handleBuyClick(selectedFounderForModal);
-									}}
-									disabled={!canTrade}
-									className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all shadow-lg flex items-center justify-center gap-2 ${
-										!canTrade
-											? "bg-dark-700 text-dark-500 cursor-not-allowed opacity-50"
-											: "bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white hover:shadow-green-500/50"
-									}`}
-								>
-									<svg
-										className="w-5 h-5"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											strokeLinecap="round"
-											strokeLinejoin="round"
-											strokeWidth={2}
-											d="M12 4v16m8-8H4"
-										/>
-									</svg>
+							<div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-white/5">
+								<button onClick={() => { setShowFounderModal(false); handleBuyClick(selectedFounderForModal); }} disabled={!canTrade} className={`flex-1 px-4 py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${!canTrade ? "bg-white/5 text-white/30 cursor-not-allowed" : "bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:opacity-90 shadow-lg"}`}>
+									<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
 									Buy Shares
 								</button>
 								{user && getOwnedShares(selectedFounderForModal.id) > 0 && (
-									<button
-										onClick={() => {
-											setShowFounderModal(false);
-											handleSellClick(selectedFounderForModal);
-										}}
-										disabled={!canTrade}
-										className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all shadow-lg flex items-center justify-center gap-2 ${
-											!canTrade
-												? "bg-dark-700 text-dark-500 cursor-not-allowed opacity-50"
-												: "bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-white hover:shadow-red-500/50"
-										}`}
-									>
-										<svg
-											className="w-5 h-5"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												strokeLinecap="round"
-												strokeLinejoin="round"
-												strokeWidth={2}
-												d="M20 12H4"
-											/>
-										</svg>
+									<button onClick={() => { setShowFounderModal(false); handleSellClick(selectedFounderForModal); }} disabled={!canTrade} className={`flex-1 px-4 py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${!canTrade ? "bg-white/5 text-white/30 cursor-not-allowed" : "bg-gradient-to-r from-orange-500 to-red-500 text-white hover:opacity-90 shadow-lg"}`}>
+										<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
 										Sell Shares
 									</button>
 								)}
@@ -2300,13 +1312,11 @@ const EventPage: React.FC = () => {
 				</div>
 			)}
 
-			{/* Modals */}
-			<QRShareModal
-				eventId={eventId || ""}
-				eventName={event?.name || ""}
-				isOpen={showQRModal}
-				onClose={() => setShowQRModal(false)}
-			/>
+			<ProfilePanel isOpen={showProfile} onClose={() => setShowProfile(false)} userId={user?.id ?? null} userEmail={user?.email ?? null} />
+			<SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} onSignOut={async () => { await import("../lib/supabaseClient").then(m => m.supabase.auth.signOut()); setShowSettings(false); }} isAdmin={isAdmin} onOpenAdminAnalytics={() => setActiveTab("admin-analytics")} />
+			<QRShareModal eventId={eventId} eventName={event?.name || ""} isOpen={showQRModal} onClose={() => setShowQRModal(false)} />
+			<ChatPanel isOpen={showChat} onClose={() => setShowChat(false)} eventId={eventId} userId={user?.id ?? null} displayName={displayName ?? "Guest"} />
+			<LeaderboardPanel isOpen={showLeaderboard} onClose={() => setShowLeaderboard(false)} eventId={eventId} founders={founders} allInvestors={allInvestors} currentInvestorId={investorId ?? undefined} eventDate={event?.start_time} />
 
 			{selectedFounder && investorId && investor && (
 				<TradeModal
@@ -2318,10 +1328,7 @@ const EventPage: React.FC = () => {
 					simpleMode={simpleMode}
 					initialTradeType={tradeModalInitialType}
 					initialShares={getOwnedShares(selectedFounder.id)}
-					onTradeComplete={() => {
-						// Refetch will happen automatically via realtime subscriptions
-						setSelectedFounder(null);
-					}}
+					onTradeComplete={() => setSelectedFounder(null)}
 				/>
 			)}
 		</div>

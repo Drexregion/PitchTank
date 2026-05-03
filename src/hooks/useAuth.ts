@@ -48,7 +48,7 @@ export function useAuth(): AuthHookReturn {
 		try {
 			const { data, error: founderError } = await supabase
 				.from("founder_users")
-				.select("*")
+				.select("id, auth_user_id, email, first_name, last_name, profile_picture_url, bio, linkedin_url, twitter_url, role, created_at, updated_at")
 				.eq("auth_user_id", authUserId)
 				.maybeSingle();
 

@@ -6,6 +6,9 @@ export interface FounderUser {
   last_name: string;
   profile_picture_url: string | null;
   bio: string | null;
+  linkedin_url: string | null;
+  twitter_url: string | null;
+  role: "pitcher" | "sponsor" | "judge" | null;
   created_at: string;
   updated_at: string;
 }
@@ -28,4 +31,7 @@ export interface UpdateFounderUserRequest {
   last_name?: string;
   profile_picture_url?: string | null;
   bio?: string | null;
+  linkedin_url?: string | null;
+  twitter_url?: string | null;
+  role?: "pitcher" | "sponsor" | "judge" | null;
 }

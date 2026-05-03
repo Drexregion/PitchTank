@@ -1,6 +1,7 @@
 export interface Investor {
   id: string;
   event_id: string;
+  user_id: string | null;
   name: string;
   email: string | null;
   initial_balance: number;
@@ -24,6 +25,14 @@ export interface InvestorWithPortfolio extends Investor {
   portfolio_value: number; // Sum of all holdings value
   total_value: number;     // portfolio_value + current_balance
   roi_percent: number;     // (total_value / initial_balance - 1) * 100
+}
+
+export interface EventInvestorEntry {
+  id: string;
+  name: string;
+  initial_balance: number;
+  current_balance: number;
+  holdings: { founder_id: string; shares: number }[];
 }
 
 export interface InvestorHoldingWithValue extends InvestorHolding {

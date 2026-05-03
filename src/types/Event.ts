@@ -1,3 +1,10 @@
+export interface ScheduleItem {
+  title: string;
+  description?: string;
+  time?: string;
+  duration?: string;
+}
+
 export interface Event {
   id: string;
   name: string;
@@ -8,6 +15,7 @@ export interface Event {
   updated_at: string;
   status: 'draft' | 'active' | 'completed' | 'cancelled';
   closing_at?: string | null;
+  schedule?: ScheduleItem[];
 }
 
 export interface EventSettings {

@@ -5,7 +5,16 @@
       "Bash(curl -s https://api.supabase.com/v1/projects/ccwwdkpafpxfxyuzgmjs/functions -H 'Authorization: Bearer sbp_01c816fcd2403e59776ba623ea5eb1c542b29a52')",
       "Bash(/tmp/supabase.exe login *)",
       "Bash(/tmp/supabase.exe functions *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "WebFetch(domain:api.supabase.com)",
+      "WebFetch(domain:ccwwdkpafpxfxyuzgmjs.supabase.co)",
+      "WebFetch(domain:pitch-tank-event.vercel.app)",
+      "Bash(curl -L -o \"c:/Users/Rahel/PycharmProjects/PitchTank/public/leaderboard/skyline.webp\" \"https://pitch-tank-event.vercel.app/leaderboard/skyline.webp\" -w \"\\\\nHTTP %{http_code} - %{size_download} bytes\" --silent --show-error)",
+      "Bash(curl -L -o \"c:/Users/Rahel/PycharmProjects/PitchTank/public/leaderboard/ranking-1.webp\" \"https://pitch-tank-event.vercel.app/leaderboard/ranking-1.webp\" -w \"\\\\nHTTP %{http_code} - %{size_download} bytes\" --silent --show-error)",
+      "Bash(curl -L -o \"c:/Users/Rahel/PycharmProjects/PitchTank/public/leaderboard/ranking-2.webp\" \"https://pitch-tank-event.vercel.app/leaderboard/ranking-2.webp\" -w \"\\\\nHTTP %{http_code} - %{size_download} bytes\" --silent --show-error)",
+      "Bash(curl -L -o \"c:/Users/Rahel/PycharmProjects/PitchTank/public/leaderboard/ranking-3.webp\" \"https://pitch-tank-event.vercel.app/leaderboard/ranking-3.webp\" -w \"\\\\nHTTP %{http_code} - %{size_download} bytes\" --silent --show-error)",
+      "Bash(curl -L -o \"c:/Users/Rahel/PycharmProjects/PitchTank/public/leaderboard/logo.png\" \"https://pitch-tank-event.vercel.app/leaderboard/logo.png\" -w \"\\\\nHTTP %{http_code} - %{size_download} bytes\" --silent --show-error)"
     ]
   }
 }
