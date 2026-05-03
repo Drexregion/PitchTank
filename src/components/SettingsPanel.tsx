@@ -87,7 +87,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         style={{ opacity: visible ? 1 : 0, transition: "opacity 0.3s" }}
       />
       <div
-        className="relative w-full max-w-lg rounded-t-3xl overflow-hidden flex flex-col"
+        className="relative w-full xl:max-w-[430px] rounded-t-3xl overflow-hidden flex flex-col"
         style={{
           background: "linear-gradient(180deg, #13102e 0%, #0d0b22 100%)",
           border: "1px solid rgba(255,255,255,0.08)",

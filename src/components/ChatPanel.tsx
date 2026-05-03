@@ -264,31 +264,43 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
 	return (
 		<div
-			className="fixed inset-0 z-[60] flex flex-col"
-			style={{
-				background: "#080a14",
-				transform: isOpen ? "translateX(0)" : "translateX(100%)",
-				transition: "transform 300ms cubic-bezier(0.22,1,0.36,1)",
-				pointerEvents: isOpen ? "auto" : "none",
-			}}
+			className="fixed inset-0 z-[60]"
+			style={{ pointerEvents: isOpen ? "auto" : "none" }}
 		>
+			{/* Full-screen dark backdrop */}
+			<div
+				className="absolute inset-0 bg-black/60"
+				style={{
+					opacity: isOpen ? 1 : 0,
+					transition: "opacity 300ms cubic-bezier(0.22,1,0.36,1)",
+				}}
+			/>
+
+			{/* Centering wrapper — matches the 430px main column */}
+			<div className="absolute inset-0 xl:max-w-[430px] xl:left-1/2 xl:-translate-x-1/2 overflow-hidden">
+
+			{/* Panel column — slides in from right */}
+			<div
+				className="absolute inset-0 flex flex-col overflow-hidden"
+				style={{
+					background: "#080a14",
+					transform: isOpen ? "translateX(0)" : "translateX(100%)",
+					transition: "transform 300ms cubic-bezier(0.22,1,0.36,1)",
+				}}
+			>
 			{/* Ambient glow */}
 			<div className="absolute inset-0 pointer-events-none overflow-hidden">
 				<div
 					className="absolute -top-32 left-1/2 -translate-x-1/2 w-[140vw] h-[55vh] rounded-full opacity-40"
-					style={{
-						background:
-							"radial-gradient(ellipse at center, #2d1b69 0%, #1a0e4a 35%, transparent 70%)",
-					}}
+					style={{ background: "radial-gradient(ellipse at center, #2d1b69 0%, #1a0e4a 35%, transparent 70%)" }}
 				/>
 				<div
 					className="absolute top-1/3 -right-24 w-64 h-64 rounded-full opacity-15"
-					style={{
-						background: "radial-gradient(circle, #0ea5e9 0%, transparent 70%)",
-						filter: "blur(40px)",
-					}}
+					style={{ background: "radial-gradient(circle, #0ea5e9 0%, transparent 70%)", filter: "blur(40px)" }}
 				/>
 			</div>
+
+			<div className="relative z-10 flex flex-col flex-1 min-h-0">
 
 			{/* ── Header ── */}
 			<div
@@ -753,6 +765,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 					</button>
 				</div>
 			</div>
+			</div>
+			</div>
 		</div>
+	</div>
 	);
 };
