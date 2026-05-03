@@ -5,6 +5,20 @@ export interface ScheduleItem {
   duration?: string;
 }
 
+export interface Judge {
+  name: string;
+  profile_picture?: string;
+  bio?: string;
+  linkedin?: string;
+}
+
+export interface Sponsor {
+  name: string;
+  logo?: string;
+  description?: string;
+  website?: string;
+}
+
 export interface Event {
   id: string;
   name: string;
@@ -16,6 +30,8 @@ export interface Event {
   status: 'draft' | 'active' | 'completed' | 'cancelled';
   closing_at?: string | null;
   schedule?: ScheduleItem[];
+  judges?: Judge[];
+  sponsors?: Sponsor[];
 }
 
 export interface EventSettings {
