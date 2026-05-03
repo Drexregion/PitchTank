@@ -585,6 +585,16 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 		return () => clearTimeout(t);
 	}, [showClosingCountdown, closingSecondsLeft]);
 
+	// Lock body scroll when any panel or modal is open
+	useEffect(() => {
+		const anyOpen =
+			showLeaderboard || showChat || showSchedule || showSettings ||
+			showQRModal || showScanner || showEventInfoModal || showHelpModal ||
+			showFounderModal || !!selectedFounder;
+		document.body.style.overflow = anyOpen ? "hidden" : "";
+		return () => { document.body.style.overflow = ""; };
+	}, [showLeaderboard, showChat, showSchedule, showSettings, showQRModal, showScanner, showEventInfoModal, showHelpModal, showFounderModal, selectedFounder]);
+
 	// Close portfolio dropdown on outside click
 	useEffect(() => {
 		const handleClickOutside = (e: MouseEvent) => {
@@ -786,7 +796,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	return (
 		<div className="min-h-screen relative" style={{ background: "var(--bg-base)" }}>
 			{/* Background glows */}
-			<div className="fixed inset-0 pointer-events-none overflow-hidden">
+			<div className="fixed inset-0 pointer-events-none overflow-hidden" style={{ filter: "blur(4px)" }}>
 				<div
 					className="absolute -top-32 left-1/2 -translate-x-1/2 w-[140vw] h-[60vh] rounded-full opacity-70"
 					style={{ background: "radial-gradient(ellipse at center, #2d1b69 0%, #1a0e4a 35%, transparent 70%)" }}
@@ -801,7 +811,20 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				/>
 			</div>
 
+			{/* Dark side curtains outside the center column */}
+			<div className="fixed inset-y-0 left-0 z-[9] pointer-events-none" style={{ width: "calc((100vw - 430px) / 2)", background: "rgba(4,3,12,0.92)" }} />
+			<div className="fixed inset-y-0 right-0 z-[9] pointer-events-none" style={{ width: "calc((100vw - 430px) / 2)", background: "rgba(4,3,12,0.92)" }} />
+
 			<div className="relative z-10">
+			<div
+				className="xl:max-w-[430px] mx-auto min-h-screen"
+				style={{
+					background: "rgba(6,5,18,0.72)",
+					borderLeft: "1px solid rgba(255,255,255,0.08)",
+					borderRight: "1px solid rgba(255,255,255,0.08)",
+					backdropFilter: "blur(2px)",
+				}}
+			>
 				{isLoading ? (
 					<EventLoadingScreen />
 				) : error ? (
@@ -1172,6 +1195,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 						</div>
 					</>
 				)}
+			</div>
 			</div>
 
 			{/* Floating bottom nav */}

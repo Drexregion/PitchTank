@@ -60,11 +60,11 @@ const HomePage: React.FC = () => {
 
 	return (
 		<div className="min-h-screen relative overflow-hidden" style={{ background: "#080a14" }}>
-			{/* Leaderboard background image */}
+			{/* Leaderboard background image — blurred full-width */}
 			<div
 				aria-hidden="true"
 				className="fixed inset-0 bg-cover bg-center bg-no-repeat"
-				style={{ backgroundImage: "url('/leaderboard/leaderboard-bg.webp')" }}
+				style={{ backgroundImage: "url('/leaderboard/leaderboard-bg.webp')", filter: "blur(6px)", transform: "scale(1.04)" }}
 			/>
 			{/* Dark overlay */}
 			<div
@@ -100,8 +100,20 @@ const HomePage: React.FC = () => {
 				/>
 			</div>
 
+			{/* Dark side curtains outside the center column */}
+			<div className="fixed inset-y-0 left-0 z-[9] pointer-events-none" style={{ width: "calc((100vw - 430px) / 2)", background: "rgba(4,3,12,0.92)" }} />
+			<div className="fixed inset-y-0 right-0 z-[9] pointer-events-none" style={{ width: "calc((100vw - 430px) / 2)", background: "rgba(4,3,12,0.92)" }} />
+
 			{/* Content */}
-			<div className="relative z-10 container mx-auto px-5 py-10 pb-28">
+			<div
+				className="relative z-10 xl:max-w-[430px] mx-auto px-5 py-10 pb-28 min-h-screen"
+				style={{
+					background: "rgba(6,5,18,0.72)",
+					borderLeft: "1px solid rgba(255,255,255,0.08)",
+					borderRight: "1px solid rgba(255,255,255,0.08)",
+					backdropFilter: "blur(2px)",
+				}}
+			>
 				{/* Header */}
 				<header className="mb-10 flex items-end justify-between">
 					<div>
@@ -205,7 +217,7 @@ const HomePage: React.FC = () => {
 						</p>
 					</div>
 				) : (
-					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+					<div className="grid grid-cols-1 gap-4">
 						{events.map((event) => (
 							<div
 								key={event.id}

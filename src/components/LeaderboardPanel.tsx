@@ -253,12 +253,29 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
 	return (
 		<div
 			className="fixed inset-0 z-[55] overflow-hidden"
-			style={{
-				transform: isOpen ? "translateX(0)" : "translateX(100%)",
-				transition: "transform 320ms cubic-bezier(0.22,1,0.36,1)",
-				pointerEvents: isOpen ? "auto" : "none",
-			}}
+			style={{ pointerEvents: isOpen ? "auto" : "none" }}
 		>
+			{/* Full-screen dark backdrop */}
+			<div
+				className="absolute inset-0 bg-black/60"
+				style={{
+					opacity: isOpen ? 1 : 0,
+					transition: "opacity 320ms cubic-bezier(0.22,1,0.36,1)",
+				}}
+			/>
+
+			{/* Centering wrapper — matches the 430px main column */}
+			<div className="absolute inset-0 xl:max-w-[430px] xl:left-1/2 xl:-translate-x-1/2 overflow-hidden">
+
+			{/* The actual panel — slides in from right */}
+			<div
+				className="absolute inset-0 overflow-hidden"
+				style={{
+					transform: isOpen ? "translateX(0)" : "translateX(100%)",
+					transition: "transform 320ms cubic-bezier(0.22,1,0.36,1)",
+				}}
+			>
+			{/* Panel backgrounds */}
 			<div
 				aria-hidden="true"
 				className="absolute inset-0 bg-cover bg-center bg-no-repeat"
@@ -268,7 +285,6 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
 				className="absolute inset-0"
 				style={{ background: "linear-gradient(160deg, rgba(10,8,24,0.88) 0%, rgba(13,11,34,0.82) 50%, rgba(8,10,20,0.9) 100%)" }}
 			/>
-
 			<div className="absolute inset-0 pointer-events-none overflow-hidden">
 				<div
 					className="absolute -top-32 left-1/2 -translate-x-1/2 w-[140vw] h-[60vh] rounded-full opacity-50"
@@ -283,8 +299,7 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
 					style={{ background: "radial-gradient(circle, #7c3aed 0%, transparent 70%)", filter: "blur(35px)" }}
 				/>
 			</div>
-
-			<div aria-hidden="true" className="fixed bottom-0 left-0 right-0 z-[5] pointer-events-none">
+			<div aria-hidden="true" className="absolute bottom-0 left-0 right-0 z-[5] pointer-events-none">
 				<img
 					src="/leaderboard/skyline.webp"
 					alt=""
@@ -316,6 +331,7 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
 			)}
 
 			<div className="absolute inset-0 z-10 overflow-y-auto pb-28 px-5" style={{ scrollbarWidth: "none" }}>
+			<div>
 				<div className="relative pt-6">
 					<button
 						onClick={onClose}
@@ -415,5 +431,8 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
 				</div>
 			</div>
 		</div>
+		</div>
+		</div>
+	</div>
 	);
 };

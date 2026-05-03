@@ -114,7 +114,16 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({ founderUserId 
 		<>
 		<div className="min-h-screen relative" style={{ background: "#080a14" }}>
 			<BgGlow />
-			<div className="relative z-10 max-w-lg mx-auto px-5 pt-10 pb-20">
+			<div className="fixed inset-y-0 left-0 z-[9] pointer-events-none" style={{ width: "calc((100vw - 430px) / 2)", background: "rgba(4,3,12,0.92)" }} />
+			<div className="fixed inset-y-0 right-0 z-[9] pointer-events-none" style={{ width: "calc((100vw - 430px) / 2)", background: "rgba(4,3,12,0.92)" }} />
+			<div
+				className="relative z-10 xl:max-w-[430px] mx-auto px-5 pt-10 pb-20 min-h-screen"
+				style={{
+					background: "rgba(6,5,18,0.72)",
+					borderLeft: "1px solid rgba(255,255,255,0.08)",
+					borderRight: "1px solid rgba(255,255,255,0.08)",
+				}}
+			>
 				{/* Back + share row */}
 				<div className="flex items-center justify-between mb-8">
 					<button
@@ -478,8 +487,16 @@ const ProfilePage: React.FC = () => {
 		<>
 		<div className="min-h-screen relative" style={{ background: "#080a14" }}>
 			<BgGlow />
-
-			<div className="relative z-10 max-w-lg mx-auto px-5 pt-8 pb-20">
+			<div className="fixed inset-y-0 left-0 z-[9] pointer-events-none" style={{ width: "calc((100vw - 430px) / 2)", background: "rgba(4,3,12,0.92)" }} />
+			<div className="fixed inset-y-0 right-0 z-[9] pointer-events-none" style={{ width: "calc((100vw - 430px) / 2)", background: "rgba(4,3,12,0.92)" }} />
+			<div
+				className="relative z-10 xl:max-w-[430px] mx-auto px-5 pt-8 pb-20 min-h-screen"
+				style={{
+					background: "rgba(6,5,18,0.72)",
+					borderLeft: "1px solid rgba(255,255,255,0.08)",
+					borderRight: "1px solid rgba(255,255,255,0.08)",
+				}}
+			>
 				{/* Top bar */}
 				<div className="flex items-center justify-between mb-6">
 					<button
