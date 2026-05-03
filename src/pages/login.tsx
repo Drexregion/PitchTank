@@ -31,10 +31,6 @@ const AuthPage: React.FC = () => {
 		? `/profile?id=${claimId}`
 		: searchParams.get("redirect") || location.state?.from || "/";
 
-	const redirectParamStr = searchParams.get("redirect")
-		? `?redirect=${searchParams.get("redirect")}`
-		: "";
-
 	const eventIdMatch = redirectPath?.match(/\/events?\/([^/]+)/);
 	const eventId = eventIdMatch ? eventIdMatch[1] : undefined;
 	const redirectMissing = tab === "signup" && !searchParams.get("redirect") && !claimId;
@@ -341,15 +337,6 @@ const AuthPage: React.FC = () => {
 						</form>
 					)}
 
-					{/* Footer link */}
-					<div className="mt-5 pt-4 text-center" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-						<p className="text-white/25 text-xs">
-							Founder?{" "}
-							<Link to={`/founder-login${redirectParamStr}`} className="text-indigo-400 hover:text-white transition-colors">
-								Founder login
-							</Link>
-						</p>
-					</div>
 				</div>
 			</div>
 		</div>

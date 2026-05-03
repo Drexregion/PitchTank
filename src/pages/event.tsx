@@ -690,11 +690,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const canTrade = event ? isEventActive(event) : false;
 	const simpleMode = eventSettings?.hide_leaderboard_and_prices ?? false;
 
-	const displayName = user
-		? user.founderUser?.first_name
-			? user.founderUser.first_name
-			: (user.email?.split("@")[0] ?? "Trader")
-		: null;
+	const displayName = user ? (user.email?.split("@")[0] ?? "Trader") : null;
 
 	const hour = new Date().getHours();
 	const greeting = hour < 12 ? "Good Morning," : hour < 17 ? "Good Afternoon," : "Good Evening,";
@@ -826,13 +822,9 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 									className="w-12 h-12 rounded-full overflow-hidden border-2 border-white/20 flex-shrink-0 shadow-lg shadow-purple-500/30 transition-all active:scale-90 hover:border-white/40"
 								>
 									{user ? (
-										user.founderUser?.profile_picture_url ? (
-											<img src={user.founderUser.profile_picture_url} alt={displayName ?? ""} className="w-full h-full object-cover" />
-										) : (
-											<div className="w-full h-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white font-bold text-lg">
+										<div className="w-full h-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white font-bold text-lg">
 												{(displayName ?? "G").charAt(0).toUpperCase()}
 											</div>
-										)
 									) : (
 										<div className="w-full h-full bg-white/10 flex items-center justify-center">
 											<svg className="w-6 h-6 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1429,11 +1421,8 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 			<ScannerModal
 				isOpen={showScanner}
 				onClose={() => setShowScanner(false)}
-				profileUrl={user?.founderUser?.id
-					? `${window.location.origin}/profile?id=${user.founderUser.id}`
-					: `${window.location.origin}/profile`}
+				profileUrl={`${window.location.origin}/profile`}
 				profileName={displayName ?? undefined}
-				profileAvatarUrl={user?.founderUser?.profile_picture_url ?? undefined}
 			/>
 			<ChatPanel isOpen={showChat} onClose={() => setShowChat(false)} eventId={eventId} userId={user?.id ?? null} displayName={displayName ?? "Guest"} />
 			<LeaderboardPanel isOpen={showLeaderboard} onClose={() => setShowLeaderboard(false)} eventId={eventId} founders={founders} allInvestors={allInvestors} currentInvestorId={investorId ?? undefined} eventDate={event?.start_time} simpleMode={simpleMode} />

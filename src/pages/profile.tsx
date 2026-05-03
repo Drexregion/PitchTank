@@ -253,6 +253,8 @@ const ProfilePage: React.FC = () => {
 	const [isSaving, setIsSaving] = useState(false);
 	const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
 	const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+	const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+	const [avatarError, setAvatarError] = useState<string | null>(null);
 
 	// Load own profile
 	useEffect(() => {
@@ -313,6 +315,20 @@ const ProfilePage: React.FC = () => {
 			setApplication(app);
 			setClaimed(true);
 
+			// Auto-link any founder project assigned to this application
+			const { data: founderRow } = await supabase
+				.from("founder_users")
+				.select("id")
+				.eq("auth_user_id", user.id)
+				.maybeSingle();
+			if (founderRow) {
+				await supabase
+					.from("founders")
+					.update({ founder_user_id: founderRow.id })
+					.eq("application_id", app.id)
+					.is("founder_user_id", null);
+			}
+
 			const questions: { id: string; question_text: string; question_type: string }[] = app.questions ?? [];
 			const answers: Record<string, string> = app.answers ?? {};
 
@@ -359,6 +375,35 @@ const ProfilePage: React.FC = () => {
 				if (data) setApplication(data);
 			});
 	}, [user, claimId, application]);
+
+	const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (!file || !user) return;
+		setAvatarError(null);
+		if (!file.type.startsWith("image/")) {
+			setAvatarError("Please select an image file.");
+			return;
+		}
+		if (file.size > 5 * 1024 * 1024) {
+			setAvatarError("Image must be under 5 MB.");
+			return;
+		}
+		setIsUploadingAvatar(true);
+		const ext = file.name.split(".").pop();
+		const path = `${user.id}/avatar.${ext}`;
+		const { error: uploadError } = await supabase.storage
+			.from("avatars")
+			.upload(path, file, { upsert: true });
+		if (uploadError) {
+			setAvatarError("Upload failed. Please try again.");
+			setIsUploadingAvatar(false);
+			return;
+		}
+		const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+		const url = `${data.publicUrl}?t=${Date.now()}`;
+		setDraft((d) => ({ ...d, profile_picture_url: url }));
+		setIsUploadingAvatar(false);
+	};
 
 	const handleSave = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -654,29 +699,38 @@ const ProfilePage: React.FC = () => {
 						{/* ── EDIT TAB ── */}
 						{tab === "edit" && (
 							<form onSubmit={handleSave} className="space-y-4">
-								{/* Avatar preview */}
+								{/* Avatar upload */}
 								<div className="flex items-center gap-4">
-									<div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/15 flex-shrink-0">
-										{draft.profile_picture_url ? (
+									<label className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-white/15 flex-shrink-0 cursor-pointer group">
+										{isUploadingAvatar ? (
+											<div className="w-full h-full bg-white/10 flex items-center justify-center">
+												<div className="w-5 h-5 rounded-full border-2 border-violet-400 border-t-transparent animate-spin" />
+											</div>
+										) : draft.profile_picture_url ? (
 											<img src={draft.profile_picture_url} alt="" className="w-full h-full object-cover" />
 										) : (
 											<div className="w-full h-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white font-black text-xl">
 												{(draft.first_name.charAt(0) + draft.last_name.charAt(0)).toUpperCase() || "?"}
 											</div>
 										)}
-									</div>
-									<div className="flex-1">
-										<label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-1.5">
-											Profile picture URL
-										</label>
+										<div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+											<svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+												<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+											</svg>
+										</div>
 										<input
-											type="url"
-											value={draft.profile_picture_url}
-											onChange={(e) => setDraft((d) => ({ ...d, profile_picture_url: e.target.value }))}
-											placeholder="https://..."
-											className={inputClass}
-											style={inputStyle}
+											type="file"
+											accept="image/*"
+											className="sr-only"
+											onChange={handleAvatarUpload}
+											disabled={isUploadingAvatar}
 										/>
+									</label>
+									<div className="flex-1">
+										<p className="text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-1">Profile photo</p>
+										<p className="text-white/30 text-xs">Click the avatar to upload. Max 5 MB.</p>
+										{avatarError && <p className="text-red-400 text-xs mt-1">{avatarError}</p>}
 									</div>
 								</div>
 

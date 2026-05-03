@@ -7,7 +7,7 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
-	const { user, isAdmin, isFounder, founderUser, signOut } = useAuth();
+	const { user, isAdmin, signOut } = useAuth();
 	const location = useLocation();
 	const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
 
@@ -56,19 +56,6 @@ export const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
 							</Link>
 						)} */}
 
-						{isFounder && (
-							<Link
-								to="/founder-dashboard"
-								className={`px-3 py-2 rounded-md text-sm font-medium ${
-									isActive("/founder-dashboard")
-										? "bg-blue-100 text-blue-700"
-										: "text-gray-700 hover:bg-gray-100"
-								}`}
-							>
-								Founder Dashboard
-							</Link>
-						)}
-
 						{isAdmin && (
 							<Link
 								to="/admin"
@@ -88,11 +75,7 @@ export const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
 									onClick={() => setIsMenuOpen(!isMenuOpen)}
 									className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-dark-100 hover:bg-dark-700"
 								>
-									<span className="mr-2">
-										{isFounder && founderUser
-											? `${founderUser.first_name} ${founderUser.last_name}`
-											: user.email}
-									</span>
+									<span className="mr-2">{user.email}</span>
 									<svg
 										className="w-4 h-4"
 										fill="none"
@@ -211,20 +194,6 @@ export const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
 								Dashboard
 							</Link>
 						)} */}
-
-						{isFounder && (
-							<Link
-								to="/founder-dashboard"
-								className={`block px-3 py-2 rounded-md text-base font-medium ${
-									isActive("/founder-dashboard")
-										? "bg-blue-100 text-blue-700"
-										: "text-gray-700 hover:bg-gray-100"
-								}`}
-								onClick={() => setIsMenuOpen(false)}
-							>
-								Founder Dashboard
-							</Link>
-						)}
 
 						{isAdmin && (
 							<Link

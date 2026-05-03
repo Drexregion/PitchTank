@@ -1,7 +1,8 @@
 export interface Founder {
   id: string;
   event_id: string;
-  founder_user_id: string;
+  founder_user_id: string | null;
+  application_id?: string | null;
   name: string;
   bio: string | null;
   logo_url: string | null;
