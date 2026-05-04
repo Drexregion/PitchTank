@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
 import { Info, CircleHelp } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 import { TradeModal } from "../components/TradeModal";
@@ -38,7 +39,6 @@ function useTopSheet(onClose: () => void) {
 
 	const onPointerDown = (e: React.PointerEvent) => {
 		dragStart.current = e.clientY;
-		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 	};
 	const onPointerMove = (e: React.PointerEvent) => {
 		if (dragStart.current === null) return;
@@ -120,9 +120,9 @@ const EventInfoSheet: React.FC<{
 								{event.name}
 							</h2>
 							{event.description && (
-								<p className="text-white/45 text-sm mt-1.5 leading-relaxed">
-									{event.description}
-								</p>
+								<div className="text-white/45 text-sm mt-1.5 leading-relaxed prose prose-sm prose-invert max-w-none">
+									<ReactMarkdown>{event.description}</ReactMarkdown>
+								</div>
 							)}
 						</div>
 						<div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
