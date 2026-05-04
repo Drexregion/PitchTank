@@ -466,51 +466,57 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 				</div>
 
 				{/* Order Preview */}
-				{showOrderPreview && (
-					<div className="px-6 pb-4">
-						<div
-							className="rounded-2xl p-4"
-							style={{
-								background: "rgba(255,255,255,0.04)",
-								border: "1px solid rgba(255,255,255,0.06)",
-							}}
-						>
-							<div className="flex items-center justify-between mb-3">
-								<p className="text-cyan-400 text-[10px] font-bold uppercase tracking-widest">
-									Order Preview
-								</p>
-								<svg
-									className="w-4 h-4 text-white/20"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										strokeLinecap="round"
-										strokeLinejoin="round"
-										strokeWidth={2}
-										d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-									/>
-								</svg>
-							</div>
+				<div className="px-6 pb-4">
+					<div
+						className="rounded-2xl p-4"
+						style={{
+							background: "rgba(255,255,255,0.04)",
+							border: "1px solid rgba(255,255,255,0.06)",
+						}}
+					>
+						<div className="flex items-center justify-between mb-3">
+							<p className="text-cyan-400 text-[10px] font-bold uppercase tracking-widest">
+								Order Preview
+							</p>
+							<svg
+								className="w-4 h-4 text-white/20"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+							>
+								<path
+									strokeLinecap="round"
+									strokeLinejoin="round"
+									strokeWidth={2}
+									d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+								/>
+							</svg>
+						</div>
 
-							{tradeType === "buy" && buyResult && buyResult.shares > 0 ? (
+						<div
+							style={
+								!showOrderPreview
+									? { filter: "blur(4px)", userSelect: "none", pointerEvents: "none" }
+									: {}
+							}
+						>
+							{tradeType === "buy" ? (
 								<div className="space-y-0 divide-y divide-white/5">
 									{!simpleMode && (
 										<div className="flex justify-between items-center text-sm py-2.5">
 											<span className="text-white/50">Shares bought</span>
 											<span className="text-white font-bold tabular-nums">
-												{buyResult.shares.toLocaleString()}
+												{buyResult && buyResult.shares > 0 ? buyResult.shares.toLocaleString() : "—"}
 											</span>
 										</div>
 									)}
 									<div className="flex justify-between items-center text-sm py-2.5">
 										<span className="text-white/50">Estimated cost</span>
 										<span className="text-cyan-400 font-bold tabular-nums">
-											${buyResult.actualCost.toFixed(2)}
+											{buyResult && buyResult.shares > 0 ? `$${buyResult.actualCost.toFixed(2)}` : "$—"}
 										</span>
 									</div>
-									{buyResult.remainder > 0.01 && (
+									{buyResult && buyResult.remainder > 0.01 && (
 										<div className="flex justify-between items-center text-sm py-2.5">
 											<span className="text-white/50">Change returned</span>
 											<span className="text-green-400 font-bold tabular-nums">
@@ -521,21 +527,19 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 									<div className="flex justify-between items-center text-sm py-2.5">
 										<span className="text-white/50">Remaining balance</span>
 										<span className="text-white font-bold tabular-nums">
-											$
-											{(investorBalance - buyResult.actualCost).toLocaleString(
-												undefined,
-												{ minimumFractionDigits: 2, maximumFractionDigits: 2 },
-											)}
+											{buyResult && buyResult.shares > 0
+												? `$${(investorBalance - buyResult.actualCost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+												: "$—"}
 										</span>
 									</div>
 								</div>
-							) : tradeType === "sell" && sellResult ? (
+							) : (
 								<div className="space-y-0 divide-y divide-white/5">
 									{!simpleMode && (
 										<div className="flex justify-between items-center text-sm py-2.5">
 											<span className="text-white/50">Shares sold</span>
 											<span className="text-white font-bold tabular-nums">
-												{sellResult.shares.toLocaleString()}
+												{sellResult ? sellResult.shares.toLocaleString() : "—"}
 											</span>
 										</div>
 									)}
@@ -545,22 +549,22 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 											className="font-bold tabular-nums"
 											style={{ color: "#f97316" }}
 										>
-											${sellResult.proceeds.toFixed(2)}
+											{sellResult ? `$${sellResult.proceeds.toFixed(2)}` : "$—"}
 										</span>
 									</div>
 									{!simpleMode && (
 										<div className="flex justify-between items-center text-sm py-2.5">
 											<span className="text-white/50">Shares remaining</span>
 											<span className="text-white font-bold tabular-nums">
-												{sellResult.sharesRemaining.toLocaleString()}
+												{sellResult ? sellResult.sharesRemaining.toLocaleString() : "—"}
 											</span>
 										</div>
 									)}
 								</div>
-							) : null}
+							)}
 						</div>
 					</div>
-				)}
+				</div>
 
 				{/* Note Section */}
 				<div className="px-6 pb-4">

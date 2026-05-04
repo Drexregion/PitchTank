@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { MessageCircle, X, Users, Hash, Sparkles } from "lucide-react";
+import { MessageCircle, X, Users, Hash, Sparkles, RefreshCw, ArrowRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { supabase, supabaseUrl, supabaseAnonKey } from "../lib/supabaseClient";
 
 interface DMThread {
@@ -82,16 +83,18 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 	onOpenPublicChat,
 	onOpenDM,
 }) => {
+	const navigate = useNavigate();
 	const [threads, setThreads] = useState<DMThread[]>([]);
 	const [loading, setLoading] = useState(true);
 	const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
 	const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
 	const [recLoading, setRecLoading] = useState(false);
+	const [recEmpty, setRecEmpty] = useState(false);
 	const recFetchedRef = useRef(false);
 
-	const fetchRecommendations = useCallback(async () => {
-		if (recFetchedRef.current || !eventId || !userId) return;
+	const fetchRecommendations = useCallback(async (force = false) => {
+		if ((recFetchedRef.current && !force) || !eventId || !userId) return;
 		recFetchedRef.current = true;
 		setRecLoading(true);
 		try {
@@ -108,7 +111,9 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 			});
 			if (res.ok) {
 				const json = await res.json();
-				setRecommendations(json.recommendations ?? []);
+				const recs = json.recommendations ?? [];
+				setRecommendations(recs);
+				setRecEmpty(recs.length === 0);
 			}
 		} catch {
 			// silently fail — recommendations are non-critical
@@ -158,6 +163,20 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 			fetchRecommendations();
 		}
 	}, [isOpen, eventId, userId, fetchRecommendations]);
+
+	// Mark all unread DMs as read when the panel opens
+	useEffect(() => {
+		if (!isOpen || !userId || !eventId) return;
+		supabase
+			.from("direct_messages")
+			.update({ is_read: true })
+			.eq("event_id", eventId)
+			.eq("recipient_id", userId)
+			.eq("is_read", false)
+			.then(() => {
+				setThreads((prev) => prev.map((t) => ({ ...t, unread: 0 })));
+			});
+	}, [isOpen, userId, eventId]);
 
 	useEffect(() => {
 		if (!eventId || !userId) return;
@@ -359,63 +378,83 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 							</button>
 
 							{/* Suggested connections */}
-							{(recLoading || recommendations.length > 0) && (
-								<div>
-									<div className="px-5 pt-4 pb-2 flex items-center gap-1.5">
-										<Sparkles size={11} className="text-violet-400/60" />
-										<p className="text-white/25 text-[10px] font-bold uppercase tracking-[0.18em]">
-											Suggested for You
-										</p>
-									</div>
-									{recLoading ? (
-										<div className="flex items-center gap-2 px-5 py-3">
-											<div className="w-4 h-4 rounded-full border-2 border-white/10 border-t-white/40 animate-spin flex-shrink-0" />
-											<p className="text-white/25 text-xs">Finding connections...</p>
-										</div>
-									) : (
-										recommendations.map((rec) => (
-											<button
-												key={rec.investor_id}
-												onClick={() => onOpenDM(rec.investor_id, rec.name)}
-												className="w-full flex items-start gap-3 px-5 py-3.5 text-left transition-all active:scale-[0.98]"
-												style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
-											>
-												{/* Avatar */}
-												{rec.profile_picture_url ? (
-													<img
-														src={rec.profile_picture_url}
-														alt={rec.name}
-														className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-													/>
-												) : (
-													<Avatar name={rec.name} size={40} />
-												)}
-
-												<div className="flex-1 min-w-0">
-													<p className="text-white font-bold text-sm leading-none mb-0.5">{rec.name}</p>
-													{rec.bio && (
-														<p className="text-white/40 text-xs leading-snug line-clamp-1 mb-1">{rec.bio}</p>
-													)}
-													{/* AI reason */}
-													<div
-														className="flex items-start gap-1 mt-1"
-													>
-														<Sparkles size={10} className="text-violet-400/60 mt-0.5 flex-shrink-0" />
-														<p className="text-violet-300/70 text-xs leading-snug line-clamp-2">{rec.reason}</p>
-													</div>
-												</div>
-
-												<div
-													className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 mt-1"
-													style={{ background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.2)" }}
-												>
-													<MessageCircle size={13} className="text-indigo-300/70" />
-												</div>
-											</button>
-										))
-									)}
+							<div>
+								<div className="px-5 pt-4 pb-2 flex items-center gap-1.5">
+									<Sparkles size={11} className="text-violet-400/60" />
+									<p className="text-white/25 text-[10px] font-bold uppercase tracking-[0.18em] flex-1">
+										Suggested for You
+									</p>
+									<button
+										onClick={() => fetchRecommendations(true)}
+										disabled={recLoading}
+										className="text-white/20 hover:text-white/50 transition-colors disabled:opacity-30"
+									>
+										<RefreshCw size={11} className={recLoading ? "animate-spin" : ""} />
+									</button>
 								</div>
-							)}
+								{recLoading ? (
+									<div className="flex items-center gap-2 px-5 py-3">
+										<div className="w-4 h-4 rounded-full border-2 border-white/10 border-t-white/40 animate-spin flex-shrink-0" />
+										<p className="text-white/25 text-xs">Finding connections...</p>
+									</div>
+								) : recEmpty ? (
+									<div
+										className="mx-5 mb-3 rounded-2xl px-4 py-3.5 flex items-start gap-3"
+										style={{
+											background: "rgba(99,102,241,0.07)",
+											border: "1px solid rgba(99,102,241,0.15)",
+										}}
+									>
+										<Sparkles size={14} className="text-violet-400/50 flex-shrink-0 mt-0.5" />
+										<div className="flex-1 min-w-0">
+											<p className="text-white/50 text-xs leading-snug mb-2">
+												Add a bio and what you're looking to connect on to your profile — Claude will suggest the best people to meet here.
+											</p>
+											<button
+												onClick={() => { onClose(); navigate("/profile"); }}
+												className="flex items-center gap-1 text-indigo-300/80 text-xs font-semibold hover:text-indigo-300 transition-colors"
+											>
+												Complete your profile <ArrowRight size={11} />
+											</button>
+										</div>
+									</div>
+								) : (
+									recommendations.map((rec) => (
+										<button
+											key={rec.investor_id}
+											onClick={() => onOpenDM(rec.investor_id, rec.name)}
+											className="w-full flex items-start gap-3 px-5 py-3.5 text-left transition-all active:scale-[0.98]"
+											style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+										>
+											{rec.profile_picture_url ? (
+												<img
+													src={rec.profile_picture_url}
+													alt={rec.name}
+													className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+												/>
+											) : (
+												<Avatar name={rec.name} size={40} />
+											)}
+											<div className="flex-1 min-w-0">
+												<p className="text-white font-bold text-sm leading-none mb-0.5">{rec.name}</p>
+												{rec.bio && (
+													<p className="text-white/40 text-xs leading-snug line-clamp-1 mb-1">{rec.bio}</p>
+												)}
+												<div className="flex items-start gap-1 mt-1">
+													<Sparkles size={10} className="text-violet-400/60 mt-0.5 flex-shrink-0" />
+													<p className="text-violet-300/70 text-xs leading-snug line-clamp-2">{rec.reason}</p>
+												</div>
+											</div>
+											<div
+												className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 mt-1"
+												style={{ background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.2)" }}
+											>
+												<MessageCircle size={13} className="text-indigo-300/70" />
+											</div>
+										</button>
+									))
+								)}
+							</div>
 
 							{/* DM section header */}
 							{!loading && threads.length > 0 && (

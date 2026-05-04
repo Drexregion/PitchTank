@@ -51,7 +51,7 @@ function enrichPitch(raw: any): PitchWithPriceAndUser {
   const pitch: Pitch = {
     id: raw.id,
     event_id: raw.event_id,
-    user_id: raw.user_id,
+    profile_user_id: raw.profile_user_id,
     name: raw.name,
     bio: raw.bio ?? null,
     logo_url: raw.logo_url ?? null,
@@ -180,7 +180,7 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
     if (!investorId) return;
     const { data } = await supabase
       .from("investors")
-      .select("id, event_id, profile_user_id, name, email, initial_balance, current_balance, created_at, updated_at")
+      .select("id, event_id, profile_user_id, name, initial_balance, current_balance, created_at, updated_at")
       .eq("id", investorId)
       .maybeSingle();
     if (data) setInvestor(data as Investor);
@@ -215,7 +215,7 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
         const { data: pitchesData, error: pitchesError } = await supabase
           .from("pitches")
           .select(
-            "id, event_id, user_id, name, bio, logo_url, pitch_summary, pitch_url, shares_in_pool, cash_in_pool, k_constant, min_reserve_shares, created_at, updated_at, users:user_id(id, first_name, last_name, profile_picture_url, bio)"
+            "id, event_id, profile_user_id, name, bio, logo_url, pitch_summary, pitch_url, shares_in_pool, cash_in_pool, k_constant, min_reserve_shares, created_at, updated_at, users!pitches_profile_user_id_fkey(id, first_name, last_name, profile_picture_url, bio)"
           )
           .eq("event_id", eventId);
 
@@ -289,7 +289,7 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
 
       const { data } = await supabase
         .from("investors")
-        .select("id, event_id, profile_user_id, name, email, initial_balance, current_balance, created_at, updated_at")
+        .select("id, event_id, profile_user_id, name, initial_balance, current_balance, created_at, updated_at")
         .eq("profile_user_id", userData.id)
         .eq("event_id", eventId)
         .maybeSingle();
@@ -363,7 +363,7 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
           const { data } = await supabase
             .from("pitches")
             .select(
-              "id, event_id, user_id, name, bio, logo_url, pitch_summary, pitch_url, shares_in_pool, cash_in_pool, k_constant, min_reserve_shares, created_at, updated_at, users:user_id(id, first_name, last_name, profile_picture_url, bio)"
+              "id, event_id, profile_user_id, name, bio, logo_url, pitch_summary, pitch_url, shares_in_pool, cash_in_pool, k_constant, min_reserve_shares, created_at, updated_at, users!pitches_profile_user_id_fkey(id, first_name, last_name, profile_picture_url, bio)"
             )
             .eq("id", updatedId)
             .maybeSingle();
@@ -454,12 +454,11 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
       .insert({
         event_id: eventId,
         name: "Investor",
-        email: "",
         profile_user_id: userData?.id ?? null,
         initial_balance: 1000000,
         current_balance: STARTING_CASH,
       })
-      .select("id, event_id, profile_user_id, name, email, initial_balance, current_balance, created_at, updated_at")
+      .select("id, event_id, profile_user_id, name, initial_balance, current_balance, created_at, updated_at")
       .single();
 
     if (investorError) throw investorError;

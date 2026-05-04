@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { Pitch, UpdatePitchRequest } from "../types/Pitch";
 
@@ -41,6 +41,8 @@ export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [editForm, setEditForm] = useState<UpdatePitchRequest>({});
 	const [assigningId, setAssigningId] = useState<string | null>(null);
+	const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+	const logoInputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
 		fetchPitchs();
@@ -74,7 +76,7 @@ export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 
 		const { error: err } = await supabase.from("pitches").insert({
 			event_id: eventId,
-			user_id: null,
+			profile_user_id: null,
 			application_id: null,
 			name: createForm.name,
 			bio: createForm.bio || null,
@@ -129,6 +131,24 @@ export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 		else await fetchPitchs();
 		setAssigningId(null);
 		setIsLoading(false);
+	};
+
+	const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (!file || !editingId) return;
+		if (!file.type.startsWith("image/")) { setError("Please select an image file."); return; }
+		if (file.size > 5 * 1024 * 1024) { setError("Image must be under 5 MB."); return; }
+		setIsUploadingLogo(true);
+		setError(null);
+		const { data: { user } } = await supabase.auth.getUser();
+		if (!user) { setError("Not authenticated."); setIsUploadingLogo(false); return; }
+		const ext = file.name.split(".").pop();
+		const path = `${user.id}/pitch-logo-${editingId}.${ext}`;
+		const { error: uploadError } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
+		if (uploadError) { setError("Upload failed: " + uploadError.message); setIsUploadingLogo(false); return; }
+		const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+		setEditForm(p => ({ ...p, logo_url: `${data.publicUrl}?t=${Date.now()}` }));
+		setIsUploadingLogo(false);
 	};
 
 	return (
@@ -211,8 +231,27 @@ export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 													<input type="text" value={editForm.name ?? ""} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} className={inputCls} />
 												</div>
 												<div>
-													<label className="block text-xs font-medium text-gray-500 mb-1">Logo URL</label>
-													<input type="url" value={editForm.logo_url ?? ""} onChange={e => setEditForm(p => ({ ...p, logo_url: e.target.value }))} className={inputCls} />
+													<label className="block text-xs font-medium text-gray-500 mb-1">Logo Image</label>
+													<div className="flex items-center gap-2">
+														<button
+															type="button"
+															onClick={() => logoInputRef.current?.click()}
+															disabled={isUploadingLogo}
+															className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white border border-gray-200 hover:border-gray-400 text-gray-600 disabled:opacity-50 flex-shrink-0"
+														>
+															{isUploadingLogo ? (
+																<svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+															) : (
+																<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+															)}
+															{isUploadingLogo ? "Uploading…" : "Upload"}
+														</button>
+														{editForm.logo_url && (
+															<img src={editForm.logo_url} alt="" className="w-7 h-7 rounded object-cover border border-gray-200 flex-shrink-0" />
+														)}
+														<input type="url" value={editForm.logo_url ?? ""} onChange={e => setEditForm(p => ({ ...p, logo_url: e.target.value }))} className={inputCls} placeholder="or paste URL" />
+													</div>
+													<input ref={logoInputRef} type="file" accept="image/*" className="sr-only" onChange={handleLogoUpload} disabled={isUploadingLogo} />
 												</div>
 												<div>
 													<label className="block text-xs font-medium text-gray-500 mb-1">Pitch URL</label>

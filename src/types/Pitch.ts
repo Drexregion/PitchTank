@@ -1,7 +1,7 @@
 export interface Pitch {
   id: string;
   event_id: string;
-  user_id: string | null;
+  profile_user_id: string | null;
   application_id?: string | null;
   name: string;
   bio: string | null;

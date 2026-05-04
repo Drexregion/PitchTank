@@ -3,7 +3,6 @@ export interface Investor {
   event_id: string;
   profile_user_id: string | null;
   name: string;
-  email: string | null;
   initial_balance: number;
   current_balance: number;
   created_at: string;

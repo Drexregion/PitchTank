@@ -28,7 +28,7 @@ export const PitchProjectManager: React.FC<PitchProjectManagerProps> = ({
 	// Create project form state
 	const [createForm, setCreateForm] = useState<CreatePitchRequest>({
 		event_id: "",
-		user_id: founderUserId,
+		profile_user_id: founderUserId,
 		name: "",
 		bio: "",
 		logo_url: "",
@@ -66,7 +66,7 @@ export const PitchProjectManager: React.FC<PitchProjectManagerProps> = ({
 			const { data: existingProject, error: checkError } = await supabase
 				.from("pitches")
 				.select("id, name")
-				.eq("user_id", founderUserId)
+				.eq("profile_user_id", founderUserId)
 				.eq("event_id", createForm.event_id)
 				.maybeSingle();
 
@@ -94,7 +94,7 @@ export const PitchProjectManager: React.FC<PitchProjectManagerProps> = ({
 			// Reset form
 			setCreateForm({
 				event_id: "",
-				user_id: founderUserId,
+				profile_user_id: founderUserId,
 				name: "",
 				bio: "",
 				logo_url: "",

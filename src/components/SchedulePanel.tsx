@@ -24,6 +24,7 @@ interface Attendee {
 	linkedin_url: string | null;
 	twitter_url: string | null;
 	profile_user_id: string | null;
+	auth_user_id: string | null;
 }
 
 const PAGE_SIZE = 20;
@@ -124,22 +125,38 @@ export const SchedulePanel: React.FC<SchedulePanelProps> = ({
 		if (loadingRef.current || !eventId) return;
 		loadingRef.current = true;
 		setLoadingPeople(true);
-		const { data } = await supabase
+		const { data: investorData, error } = await supabase
 			.from("investors")
-			.select(
-				"id, name, profile_user_id, users!investors_profile_user_id_fkey(profile_picture_url, bio, role, linkedin_url, twitter_url)",
-			)
+			.select("id, name, profile_user_id")
 			.eq("event_id", eventId)
 			.order("name", { ascending: true })
 			.range(pageOffset, pageOffset + PAGE_SIZE - 1);
 
-		if (data) {
-			const mapped: Attendee[] = data.map((row: any) => {
-				const u = row.users ?? {};
+		if (error) console.error("SchedulePanel: failed to load attendees", error);
+
+		if (investorData) {
+			const profileIds = investorData
+				.map((r: any) => r.profile_user_id)
+				.filter(Boolean) as string[];
+
+			let userMap: Record<string, any> = {};
+			if (profileIds.length > 0) {
+				const { data: userData } = await supabase
+					.from("users")
+					.select("id, auth_user_id, profile_picture_url, bio, role, linkedin_url, twitter_url")
+					.in("id", profileIds);
+				if (userData) {
+					for (const u of userData) userMap[u.id] = u;
+				}
+			}
+
+			const mapped: Attendee[] = investorData.map((row: any) => {
+				const u = row.profile_user_id ? (userMap[row.profile_user_id] ?? {}) : {};
 				return {
 					id: row.id,
 					name: row.name,
 					profile_user_id: row.profile_user_id,
+					auth_user_id: u.auth_user_id ?? null,
 					profile_picture_url: u.profile_picture_url ?? null,
 					bio: u.bio ?? null,
 					role: u.role ?? null,
@@ -148,8 +165,8 @@ export const SchedulePanel: React.FC<SchedulePanelProps> = ({
 				};
 			});
 			setAttendees((prev) => (pageOffset === 0 ? mapped : [...prev, ...mapped]));
-			setHasMore(data.length === PAGE_SIZE);
-			setOffset(pageOffset + data.length);
+			setHasMore(investorData.length === PAGE_SIZE);
+			setOffset(pageOffset + investorData.length);
 		}
 		setLoadingPeople(false);
 		loadingRef.current = false;
@@ -372,7 +389,7 @@ export const SchedulePanel: React.FC<SchedulePanelProps> = ({
 								<div className="space-y-px">
 									{attendees.map((person) => {
 										const roleStyle = person.role ? ROLE_COLORS[person.role] ?? ROLE_COLORS.member : null;
-										const isSelf = person.profile_user_id === currentUserId;
+										const isSelf = person.auth_user_id === currentUserId;
 										return (
 											<div
 												key={person.id}
@@ -434,17 +451,18 @@ export const SchedulePanel: React.FC<SchedulePanelProps> = ({
 													)}
 												</div>
 
-												{/* DM button — only for authenticated users, not self */}
 												{onStartDM && !isSelf && (
 													<button
-														onClick={() => onStartDM(person.id, person.name)}
-														className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-all active:scale-90"
+														onClick={() => person.auth_user_id && onStartDM(person.auth_user_id, person.name)}
+														disabled={!person.auth_user_id}
+														className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-all active:scale-90 disabled:cursor-not-allowed"
 														style={{
-															background: "rgba(99,102,241,0.1)",
-															border: "1px solid rgba(99,102,241,0.2)",
+															background: person.auth_user_id ? "rgba(99,102,241,0.1)" : "rgba(255,255,255,0.04)",
+															border: person.auth_user_id ? "1px solid rgba(99,102,241,0.2)" : "1px solid rgba(255,255,255,0.06)",
 														}}
+														title={person.auth_user_id ? `Message ${person.name}` : "No account to message"}
 													>
-														<MessageCircle size={14} className="text-indigo-300/70" />
+														<MessageCircle size={14} className={person.auth_user_id ? "text-indigo-300/70" : "text-white/20"} />
 													</button>
 												)}
 											</div>
