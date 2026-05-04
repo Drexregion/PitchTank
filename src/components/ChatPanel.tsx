@@ -19,6 +19,7 @@ interface ChatPanelProps {
 	eventId: string;
 	userId: string | null;
 	displayName: string;
+	onStartDM?: (peerId: string, peerName: string) => void;
 }
 
 const USERNAME_COLORS = [
@@ -80,6 +81,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 	eventId,
 	userId,
 	displayName,
+	onStartDM,
 }) => {
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
 	const [questionsOpen, setQuestionsOpen] = useState(false);
@@ -441,12 +443,22 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 													<HelpCircle size={9} />Q
 												</span>
 											)}
-											<span
-												className="font-bold mr-1"
-												style={{ color: nameCol }}
-											>
-												{msg.display_name}:
-											</span>
+											{onStartDM && msg.user_id !== userId ? (
+												<button
+													onClick={() => onStartDM(msg.user_id, msg.display_name)}
+													className="font-bold mr-1 hover:underline active:opacity-70 transition-opacity"
+													style={{ color: nameCol }}
+												>
+													{msg.display_name}:
+												</button>
+											) : (
+												<span
+													className="font-bold mr-1"
+													style={{ color: nameCol }}
+												>
+													{msg.display_name}:
+												</span>
+											)}
 											<span className="text-white/80">
 												{isQ
 													? msg.text.replace(/^@[Qq]uestion\s*/i, "")

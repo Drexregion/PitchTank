@@ -25,6 +25,7 @@ interface ProfileData {
 	linkedin_url: string;
 	twitter_url: string;
 	role: "pitcher" | "sponsor" | "judge" | "member" | "";
+	looking_to_connect: string;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -85,6 +86,7 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({ founderUserId 
 						linkedin_url: data.linkedin_url ?? "",
 						twitter_url: data.twitter_url ?? "",
 						role: (data.role as ProfileData["role"]) ?? "",
+						looking_to_connect: "",
 					});
 				}
 				setIsLoading(false);
@@ -262,6 +264,7 @@ const ProfilePage: React.FC = () => {
 		linkedin_url: "",
 		twitter_url: "",
 		role: "member",
+		looking_to_connect: "",
 	});
 	const [draft, setDraft] = useState<ProfileData>(profile);
 	const [isSaving, setIsSaving] = useState(false);
@@ -275,7 +278,7 @@ const ProfilePage: React.FC = () => {
 		if (!user) return;
 		supabase
 			.from("users")
-			.select("id, first_name, last_name, bio, profile_picture_url, linkedin_url, twitter_url, role")
+			.select("id, first_name, last_name, bio, profile_picture_url, linkedin_url, twitter_url, role, looking_to_connect")
 			.eq("auth_user_id", user.id)
 			.maybeSingle()
 			.then(({ data }) => {
@@ -289,6 +292,7 @@ const ProfilePage: React.FC = () => {
 						linkedin_url: data.linkedin_url ?? "",
 						twitter_url: data.twitter_url ?? "",
 						role: (data.role as ProfileData["role"]) ?? "",
+						looking_to_connect: data.looking_to_connect ?? "",
 					};
 					setProfile(p);
 					setDraft(p);
@@ -444,6 +448,7 @@ const ProfilePage: React.FC = () => {
 				linkedin_url: draft.linkedin_url || null,
 				twitter_url: draft.twitter_url || null,
 				role: draft.role || "member",
+				looking_to_connect: draft.looking_to_connect || null,
 			},
 			{ onConflict: "auth_user_id" }
 		);
@@ -796,6 +801,38 @@ const ProfilePage: React.FC = () => {
 									/>
 								</div>
 
+								{/* Role */}
+								<div>
+									<label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-1.5">
+										Role
+									</label>
+									<div className="grid grid-cols-2 gap-2">
+										{(["member", "pitcher", "sponsor", "judge"] as const).map((r) => (
+											<button
+												key={r}
+												type="button"
+												onClick={() => setDraft((d) => ({ ...d, role: r }))}
+												className="py-2.5 rounded-xl text-sm font-bold transition-all border"
+												style={
+													draft.role === r
+														? {
+																background: "rgba(124,58,237,0.25)",
+																border: "1px solid rgba(124,58,237,0.6)",
+																color: "#c4b5fd",
+															}
+														: {
+																background: "rgba(255,255,255,0.04)",
+																border: "1px solid rgba(255,255,255,0.08)",
+																color: "rgba(255,255,255,0.4)",
+															}
+												}
+											>
+												{ROLE_LABELS[r]}
+											</button>
+										))}
+									</div>
+								</div>
+
 								{/* LinkedIn */}
 								<div>
 									<label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-1.5">
@@ -822,6 +859,24 @@ const ProfilePage: React.FC = () => {
 										onChange={(e) => setDraft((d) => ({ ...d, twitter_url: e.target.value }))}
 										placeholder="https://x.com/..."
 										className={inputClass}
+										style={inputStyle}
+									/>
+								</div>
+
+								{/* Looking to connect — private, used for AI recommendations */}
+								<div>
+									<label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-1.5">
+										Who are you looking to connect with?
+									</label>
+									<p className="text-white/25 text-[10px] mb-2">
+										Private — only used to recommend relevant people for you to meet.
+									</p>
+									<textarea
+										value={draft.looking_to_connect}
+										onChange={(e) => setDraft((d) => ({ ...d, looking_to_connect: e.target.value }))}
+										rows={3}
+										placeholder="e.g. investors interested in B2B SaaS, other founders working on climate tech..."
+										className="w-full rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none resize-none"
 										style={inputStyle}
 									/>
 								</div>
