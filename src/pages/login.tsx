@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 
 const AuthPage: React.FC = () => {

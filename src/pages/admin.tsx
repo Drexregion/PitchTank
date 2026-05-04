@@ -5,7 +5,7 @@ import { Navbar } from "../components/Navbar";
 import { EventSetupForm } from "../components/EventSetupForm";
 import { AdminPitchManager } from "../components/AdminFounderManager";
 import { AdminPitchAnalytics } from "../components/AdminFounderAnalytics";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../contexts/AuthContext";
 import { Event } from "../types/Event";
 import { Pitch } from "../types/Pitch";
 
