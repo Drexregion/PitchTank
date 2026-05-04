@@ -4,7 +4,8 @@ import { supabase } from "../lib/supabaseClient";
 import { Navbar } from "../components/Navbar";
 import { useAuth } from "../hooks/useAuth";
 import { Event } from "../types/Event";
-import { Application, EventQuestion } from "../types/Application";
+import { Application } from "../types/Application";
+import { EventQuestion } from "../types/Event";
 
 
 const statusStyles: Record<string, string> = {

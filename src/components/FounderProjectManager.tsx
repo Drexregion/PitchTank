@@ -296,7 +296,7 @@ export const PitchProjectManager: React.FC<PitchProjectManagerProps> = ({
 								Project Description
 							</label>
 							<textarea
-								value={createForm.bio}
+								value={createForm.bio ?? ""}
 								onChange={handleInputChange("bio")}
 								placeholder="Describe your project, what it does, and its value proposition..."
 								rows={3}
@@ -311,7 +311,7 @@ export const PitchProjectManager: React.FC<PitchProjectManagerProps> = ({
 							</label>
 							<input
 								type="url"
-								value={createForm.logo_url}
+								value={createForm.logo_url ?? ""}
 								onChange={handleInputChange("logo_url")}
 								placeholder="https://example.com/logo.png"
 								className="w-full p-3 bg-dark-800 border border-dark-600 text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
@@ -324,7 +324,7 @@ export const PitchProjectManager: React.FC<PitchProjectManagerProps> = ({
 								Pitch Summary
 							</label>
 							<textarea
-								value={createForm.pitch_summary}
+								value={createForm.pitch_summary ?? ""}
 								onChange={handleInputChange("pitch_summary")}
 								placeholder="Brief summary of your pitch (2-3 sentences)..."
 								rows={2}
@@ -339,7 +339,7 @@ export const PitchProjectManager: React.FC<PitchProjectManagerProps> = ({
 							</label>
 							<input
 								type="url"
-								value={createForm.pitch_url}
+								value={createForm.pitch_url ?? ""}
 								onChange={handleInputChange("pitch_url")}
 								placeholder="https://youtube.com/watch?v=... or https://docs.google.com/presentation/..."
 								className="w-full p-3 bg-dark-800 border border-dark-600 text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"

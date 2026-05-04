@@ -3,7 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { supabase } from "../lib/supabaseClient";
 import { Event } from "../types/Event";
-import { EventQuestion } from "../types/Application";
+import { EventQuestion } from "../types/Event";
 
 const ApplyPage: React.FC = () => {
 	const { eventId } = useParams<{ eventId: string }>();

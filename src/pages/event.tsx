@@ -938,7 +938,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 			return;
 		}
 		setTradeModalInitialType("buy");
-		setSelectedPitch(founder);
+		setSelectedPitch(pitch);
 	};
 
 	const handleSellClick = (pitch: PitchWithPriceAndUser) => {
@@ -955,7 +955,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 			return;
 		}
 		setTradeModalInitialType("sell");
-		setSelectedPitch(founder);
+		setSelectedPitch(pitch);
 	};
 
 	const handleFounderProfileClick = (
@@ -1462,8 +1462,8 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 														>
 															<button
 																onClick={(e) =>
-																	founder &&
-																	handleFounderProfileClick(founder, e)
+																	pitch &&
+																	handleFounderProfileClick(pitch, e)
 																}
 																className={`w-11 h-11 rounded-full overflow-hidden border-2 ${avatarBorders[i % avatarBorders.length]} flex-shrink-0`}
 															>
@@ -1477,7 +1477,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 																	/>
 																) : (
 																	<div className="w-full h-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
-																		{founder?.name.charAt(0) ?? "?"}
+																		{pitch?.name.charAt(0) ?? "?"}
 																	</div>
 																)}
 															</button>
@@ -1672,7 +1672,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 															>
 																<button
 																	onClick={(e) =>
-																		handleFounderProfileClick(founder, e)
+																		handleFounderProfileClick(pitch, e)
 																	}
 																	className="w-12 h-12 rounded-full overflow-hidden border-2 border-white/15 hover:border-violet-400/60 transition-all flex-shrink-0 shadow-md"
 																>
@@ -1706,7 +1706,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 																			founderId={isDemo ? "" : pitch.id}
 																			price={pitch.current_price}
 																			canTrade={canTrade}
-																			onTrade={() => handleBuyClick(founder)}
+																			onTrade={() => handleBuyClick(pitch)}
 																			formatCurrency={formatCurrency}
 																		/>
 																	)}
@@ -1715,7 +1715,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 																			<button
 																				onClick={(e) => {
 																					e.stopPropagation();
-																					handleBuyClick(founder);
+																					handleBuyClick(pitch);
 																				}}
 																				disabled={!canTrade}
 																				className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${!canTrade ? "bg-white/5 text-white/20 cursor-not-allowed" : "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30"}`}
@@ -1725,7 +1725,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 																			<button
 																				onClick={(e) => {
 																					e.stopPropagation();
-																					handleSellClick(founder);
+																					handleSellClick(pitch);
 																				}}
 																				disabled={
 																					!canTrade || ownedShares === 0
@@ -1785,7 +1785,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 																		<button
 																			onClick={(e) => {
 																				e.stopPropagation();
-																				handleBuyClick(founder);
+																				handleBuyClick(pitch);
 																			}}
 																			disabled={!canTrade}
 																			className={`flex-1 py-4 rounded-2xl font-bold text-base transition-all ${!canTrade ? "bg-white/5 text-white/20 cursor-not-allowed" : "text-white"}`}
@@ -1805,7 +1805,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 																		<button
 																			onClick={(e) => {
 																				e.stopPropagation();
-																				handleSellClick(founder);
+																				handleSellClick(pitch);
 																			}}
 																			disabled={!canTrade || ownedShares === 0}
 																			className={`flex-1 py-4 rounded-2xl font-bold text-base transition-all ${!canTrade || ownedShares === 0 ? "bg-white/5 text-white/20 cursor-not-allowed" : "text-white"}`}
@@ -2577,7 +2577,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				isOpen={showLeaderboard}
 				onClose={() => setShowLeaderboard(false)}
 				eventId={eventId}
-				pitches={pitches}
+				founders={pitches}
 				allInvestors={allInvestors}
 				currentInvestorId={investorId ?? undefined}
 				eventDate={event?.start_time}
