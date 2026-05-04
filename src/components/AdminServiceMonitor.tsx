@@ -153,7 +153,6 @@ export const AdminServiceMonitor: React.FC = () => {
 		return () => clearInterval(tick);
 	}, [data]);
 
-	const allHealthy = data?.services.every((s) => s.healthy) ?? false;
 	const anyUnhealthy = data?.services.some((s) => !s.healthy) ?? false;
 
 	const overallBg = !data
