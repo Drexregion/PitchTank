@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useSearchParams, Navigate, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../contexts/AuthContext";
 import { ScannerModal } from "../components/ScannerModal";
 
 interface ApplicationData {

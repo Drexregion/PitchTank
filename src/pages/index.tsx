@@ -2,9 +2,10 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { Event } from "../types/Event";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../contexts/AuthContext";
 
 const HomePage: React.FC = () => {
+	console.log("[HomePage] render");
 	const [events, setEvents] = useState<Event[]>([]);
 	const [isLoading, setIsLoading] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
@@ -28,7 +29,7 @@ const HomePage: React.FC = () => {
 			}
 		};
 		fetchEvents();
-	}, []);
+	}, [user?.id]);
 
 	const getStatusBadge = (status: string) => {
 		const styles: Record<string, React.CSSProperties> = {

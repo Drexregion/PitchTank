@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { Navbar } from "../components/Navbar";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../contexts/AuthContext";
 import { Event } from "../types/Event";
 import { Application } from "../types/Application";
 import { EventQuestion } from "../types/Event";

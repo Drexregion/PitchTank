@@ -12,7 +12,7 @@ import { PortfolioChart } from "../components/PortfolioChart";
 import { ChatPanel } from "../components/ChatPanel";
 import { SchedulePanel } from "../components/SchedulePanel";
 import { SettingsPanel } from "../components/SettingsPanel";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../contexts/AuthContext";
 import { usePortfolioHistory } from "../hooks/usePortfolioHistory";
 import { Event, Judge, Sponsor } from "../types/Event";
 import { PitchWithPriceAndUser } from "../types/Pitch";
@@ -726,9 +726,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	>("buy");
 	const [sortBy, setSortBy] = useState<"price" | "alphabetical">("price");
 	const [_showSortOptions, setShowSortOptions] = useState(false);
-	const [expandedPitchId, setExpandedPitchId] = useState<string | null>(
-		null,
-	);
+	const [expandedPitchId, setExpandedPitchId] = useState<string | null>(null);
 	const [showPortfolioDropdown, setShowPortfolioDropdown] = useState(false);
 	const [showChat, setShowChat] = useState(false);
 	const [showSchedule, setShowSchedule] = useState(false);
@@ -907,7 +905,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const isEventNotStarted = (ev: Event) => new Date() < new Date(ev.start_time);
 
 	const handleSignIn = () => {
-		navigate(`/signup?redirect=/events/${eventId}`);
+		navigate(`/login?redirect=/events/${eventId}`);
 		setShowSignInNotification(false);
 	};
 
@@ -1223,7 +1221,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 											navigate(
 												user
 													? "/profile"
-													: `/signup?redirect=/events/${eventId}`,
+													: `/login?redirect=/events/${eventId}`,
 											)
 										}
 										className="w-12 h-12 rounded-full overflow-hidden border-2 border-white/20 flex-shrink-0 shadow-lg shadow-purple-500/30 transition-all active:scale-90 hover:border-white/40"
@@ -1462,16 +1460,13 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 														>
 															<button
 																onClick={(e) =>
-																	pitch &&
-																	handleFounderProfileClick(pitch, e)
+																	pitch && handleFounderProfileClick(pitch, e)
 																}
 																className={`w-11 h-11 rounded-full overflow-hidden border-2 ${avatarBorders[i % avatarBorders.length]} flex-shrink-0`}
 															>
 																{pitch?.user?.profile_picture_url ? (
 																	<img
-																		src={
-																			pitch.user.profile_picture_url
-																		}
+																		src={pitch.user.profile_picture_url}
 																		alt={pitch.name}
 																		className="w-full h-full object-cover"
 																	/>
@@ -1509,7 +1504,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 										<div className="flex gap-3">
 											<button
 												onClick={() =>
-													navigate(`/signup?redirect=/events/${eventId}`)
+													navigate(`/login?redirect=/events/${eventId}`)
 												}
 												className="flex-1 py-3.5 rounded-xl font-semibold text-sm text-white transition-colors"
 												style={{
@@ -1521,7 +1516,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 											</button>
 											<button
 												onClick={() =>
-													navigate(`/signup?redirect=/events/${eventId}`)
+													navigate(`/login?redirect=/events/${eventId}`)
 												}
 												className="flex-1 py-3.5 rounded-xl font-semibold text-sm text-white transition-opacity hover:opacity-90"
 												style={{
@@ -1643,8 +1638,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 												{sortedPitches.map((pitch) => {
 													const isExpanded = expandedPitchId === pitch.id;
 													const ownedShares = getOwnedShares(pitch.id);
-													const ownedValue =
-														ownedShares * pitch.current_price;
+													const ownedValue = ownedShares * pitch.current_price;
 
 													return (
 														<div
@@ -1678,9 +1672,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 																>
 																	{pitch.user?.profile_picture_url ? (
 																		<img
-																			src={
-																				pitch.user.profile_picture_url
-																			}
+																			src={pitch.user.profile_picture_url}
 																			alt={pitch.name}
 																			className="w-full h-full object-cover"
 																		/>
@@ -1864,9 +1856,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 																<div className="w-10 h-10 rounded-full overflow-hidden border border-white/10 flex-shrink-0">
 																	{pitch.user?.profile_picture_url ? (
 																		<img
-																			src={
-																				pitch.user.profile_picture_url
-																			}
+																			src={pitch.user.profile_picture_url}
 																			alt={pitch.name}
 																			className="w-full h-full object-cover"
 																		/>
@@ -1910,9 +1900,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 															<div className="w-8 h-8 rounded-full overflow-hidden border border-white/10 flex-shrink-0">
 																{pitch.user?.profile_picture_url ? (
 																	<img
-																		src={
-																			pitch.user.profile_picture_url
-																		}
+																		src={pitch.user.profile_picture_url}
 																		alt={pitch.name}
 																		className="w-full h-full object-cover"
 																	/>
@@ -2100,9 +2088,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 						) : (
 							<div className="divide-y divide-white/5">
 								{holdings.map((holding) => {
-									const pitch = pitches.find(
-										(f) => f.id === holding.pitch_id,
-									);
+									const pitch = pitches.find((f) => f.id === holding.pitch_id);
 									if (!pitch) return null;
 									const currentValue = holding.shares * pitch.current_price;
 									const profitLoss =
@@ -2407,9 +2393,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 								<div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center border-2 border-white/10 flex-shrink-0">
 									{selectedFounderForModal.user?.profile_picture_url ? (
 										<img
-											src={
-												selectedFounderForModal.user.profile_picture_url
-											}
+											src={selectedFounderForModal.user.profile_picture_url}
 											alt={selectedFounderForModal.name}
 											className="w-full h-full object-cover"
 										/>
