@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useSearchParams, Navigate, useNavigate } from "react-router-dom";
+import { useSearchParams, Navigate, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../hooks/useAuth";
 import { ScannerModal } from "../components/ScannerModal";
@@ -66,7 +66,7 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({ founderUserId 
 	const [isLoading, setIsLoading] = useState(true);
 	const [showScanner, setShowScanner] = useState(false);
 
-	const profileUrl = `${window.location.origin}/profile?id=${founderUserId}`;
+	const profileUrl = `${window.location.origin}/profile/${founderUserId}`;
 
 	useEffect(() => {
 		supabase
@@ -239,9 +239,12 @@ const ProfilePage: React.FC = () => {
 	const navigate = useNavigate();
 	const { user, isLoading: authLoading } = useAuth();
 	const [searchParams] = useSearchParams();
+	const { profileId: profileIdParam } = useParams<{ profileId: string }>();
 	const claimId = searchParams.get("id");
 
-	const isLikelyProfileId = !!claimId && /^[0-9a-f-]{36}$/i.test(claimId);
+	// Path-param takes priority; fall back to query param for legacy claim tokens
+	const isLikelyProfileId = !!profileIdParam || (!!claimId && /^[0-9a-f-]{36}$/i.test(claimId));
+	const resolvedProfileId = profileIdParam ?? (isLikelyProfileId ? claimId : null);
 
 	const [tab, setTab] = useState<"view" | "edit">("view");
 	const [showScanner, setShowScanner] = useState(false);
@@ -451,8 +454,8 @@ const ProfilePage: React.FC = () => {
 	};
 
 	const profileUrl = profile.id
-		? `${window.location.origin}/profile?id=${profile.id}`
-		: `${window.location.origin}/profile`;
+		? `${window.location.origin}/profile/${profile.id}`
+		: null;
 
 	if (authLoading) {
 		return (
@@ -463,8 +466,8 @@ const ProfilePage: React.FC = () => {
 	}
 
 	// Public view — show for anyone (including logged-in users) viewing someone else's profile
-	if (isLikelyProfileId) {
-		return <PublicProfileView founderUserId={claimId!} />;
+	if (isLikelyProfileId && resolvedProfileId) {
+		return <PublicProfileView founderUserId={resolvedProfileId} />;
 	}
 
 	if (!user) {
@@ -552,7 +555,8 @@ const ProfilePage: React.FC = () => {
 					))}
 					<button
 						onClick={() => setShowScanner(true)}
-						className="px-4 py-1.5 rounded-full text-xs font-bold transition-all border"
+						disabled={!profileUrl}
+						className="px-4 py-1.5 rounded-full text-xs font-bold transition-all border disabled:opacity-30 disabled:cursor-not-allowed"
 						style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.45)" }}
 					>
 						Share QR
@@ -848,7 +852,7 @@ const ProfilePage: React.FC = () => {
 		<ScannerModal
 			isOpen={showScanner}
 			onClose={() => setShowScanner(false)}
-			profileUrl={profileUrl}
+			profileUrl={profileUrl ?? ""}
 			profileName={(profile.first_name || profile.last_name) ? `${profile.first_name} ${profile.last_name}`.trim() : undefined}
 			profileAvatarUrl={profile.profile_picture_url || undefined}
 		/>
