@@ -203,7 +203,7 @@ async function createTestEventAndFounder(
 
 	{
 		const k = INITIAL_SHARES_IN_POOL * INITIAL_CASH_IN_POOL;
-		const { error } = await adminClient.from("founders").insert({
+		const { error } = await adminClient.from("pitches").insert({
 			id: founderId,
 			event_id: eventId,
 			name: `Test Founder ${founderId.slice(0, 6)}`,
@@ -219,7 +219,7 @@ async function createTestEventAndFounder(
 	}
 
 	const { data: founderRow, error: fErr } = await adminClient
-		.from("founders")
+		.from("pitches")
 		.select("*")
 		.eq("id", founderId)
 		.single();
@@ -275,16 +275,16 @@ async function cleanupTestArtifacts(
 				await adminClient
 					.from("investor_holdings")
 					.delete()
-					.eq("founder_id", founderId);
+					.eq("pitch_id", founderId);
 			} catch {}
 			try {
 				await adminClient
 					.from("price_history")
 					.delete()
-					.eq("founder_id", founderId);
+					.eq("pitch_id", founderId);
 			} catch {}
 			try {
-				await adminClient.from("founders").delete().eq("id", founderId);
+				await adminClient.from("pitches").delete().eq("id", founderId);
 			} catch {}
 		}
 		if (eventId) {
@@ -471,7 +471,7 @@ async function run() {
 				},
 				body: JSON.stringify({
 					investor_id: investorId,
-					founder_id: founderId,
+					pitch_id: founderId,
 					shares: sharesToTrade,
 					type: tradeType,
 					event_id: eventId,
@@ -532,7 +532,7 @@ async function run() {
 		const { data: holdings, error: hErr } = await admin
 			.from("investor_holdings")
 			.select("investor_id, shares")
-			.eq("founder_id", founderId);
+			.eq("pitch_id", founderId);
 
 		if (hErr) throw new Error(`Failed to fetch holdings: ${hErr.message}`);
 
@@ -577,7 +577,7 @@ async function run() {
 
 		// Also verify AMM invariant on final founder state
 		const { data: finalFounder, error: fErr } = await admin
-			.from("founders")
+			.from("pitches")
 			.select("*")
 			.eq("id", founderId)
 			.single();

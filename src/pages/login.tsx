@@ -73,21 +73,23 @@ const AuthPage: React.FC = () => {
 
 			if (eventId && newUser?.id) {
 				try {
-					const { error: investorError } = await supabase
+					// Resolve users.id (row created by DB trigger on signup)
+					const { data: userRow } = await supabase
+						.from("users")
+						.select("id")
+						.eq("auth_user_id", newUser.id)
+						.maybeSingle();
+
+					await supabase
 						.from("investors")
 						.insert({
 							event_id: eventId,
 							name: name || email.split("@")[0],
 							email,
-							user_id: newUser.id,
+							profile_user_id: userRow?.id ?? null,
 							initial_balance: 1000000,
 							current_balance: 1000000,
-						})
-						.select()
-						.single();
-					if (!investorError) {
-						await supabase.from("user_roles").insert({ user_id: newUser.id, role: "investor", event_id: eventId });
-					}
+						});
 				} catch { /* non-fatal */ }
 			}
 

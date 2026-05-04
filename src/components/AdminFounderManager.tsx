@@ -49,7 +49,7 @@ export const AdminFounderManager: React.FC<AdminFounderManagerProps> = ({
 
 	const fetchFounders = async () => {
 		const { data } = await supabase
-			.from("founders")
+			.from("pitches")
 			.select("*")
 			.eq("event_id", eventId)
 			.order("created_at", { ascending: true });
@@ -72,9 +72,9 @@ export const AdminFounderManager: React.FC<AdminFounderManagerProps> = ({
 		setError(null);
 		setSuccessMsg(null);
 
-		const { error: err } = await supabase.from("founders").insert({
+		const { error: err } = await supabase.from("pitches").insert({
 			event_id: eventId,
-			founder_user_id: null,
+			user_id: null,
 			application_id: null,
 			name: createForm.name,
 			bio: createForm.bio || null,
@@ -105,7 +105,7 @@ export const AdminFounderManager: React.FC<AdminFounderManagerProps> = ({
 		setError(null);
 
 		const { error: err } = await supabase
-			.from("founders")
+			.from("pitches")
 			.update(editForm)
 			.eq("id", editingId);
 
@@ -122,7 +122,7 @@ export const AdminFounderManager: React.FC<AdminFounderManagerProps> = ({
 	const handleAssignApplication = async (founderId: string, applicationId: string | null) => {
 		setIsLoading(true);
 		const { error: err } = await supabase
-			.from("founders")
+			.from("pitches")
 			.update({ application_id: applicationId })
 			.eq("id", founderId);
 		if (err) setError(err.message);

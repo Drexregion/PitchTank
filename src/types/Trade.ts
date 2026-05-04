@@ -2,16 +2,16 @@ export interface Trade {
 	id: string;
 	event_id: string;
 	investor_id: string;
-	founder_id: string;
+	pitch_id: string;
 	shares: number;
-	amount: number; // Positive for buy (cost), negative for sell (payout)
+	amount: number;
 	type: "buy" | "sell";
 	price_per_share: number;
-	note?: string; // Optional note explaining reason for trade
+	note?: string;
 	created_at: string;
 }
 
 export interface TradeWithDetails extends Trade {
 	investor_name: string;
-	founder_name: string;
+	pitch_name: string;
 }

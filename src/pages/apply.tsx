@@ -29,22 +29,23 @@ const ApplyPage: React.FC = () => {
 	// Load event + questions
 	useEffect(() => {
 		if (!eventId) return;
-		Promise.all([
-			supabase.from("events").select("*").eq("id", eventId).single(),
-			supabase
-				.from("event_questions")
-				.select("*")
-				.eq("event_id", eventId)
-				.order("sort_order", { ascending: true }),
-		]).then(([eventRes, questionsRes]) => {
-			if (eventRes.error || !eventRes.data) {
-				setNotFound(true);
-			} else {
-				setEvent(eventRes.data);
-				setQuestions(questionsRes.data ?? []);
-			}
-			setIsLoading(false);
-		});
+		supabase
+			.from("events")
+			.select("*")
+			.eq("id", eventId)
+			.single()
+			.then(({ data, error }) => {
+				if (error || !data) {
+					setNotFound(true);
+				} else {
+					setEvent(data);
+					const qs = (data.registration_questions ?? [])
+						.slice()
+						.sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+					setQuestions(qs);
+				}
+				setIsLoading(false);
+			});
 	}, [eventId]);
 
 	// Restore from localStorage after questions load

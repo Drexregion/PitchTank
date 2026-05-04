@@ -32,7 +32,7 @@ export const FounderProjectManager: React.FC<FounderProjectManagerProps> = ({
 	// Create project form state
 	const [createForm, setCreateForm] = useState<CreateFounderProjectRequest>({
 		event_id: "",
-		founder_user_id: founderUserId,
+		user_id: founderUserId,
 		name: "",
 		bio: "",
 		logo_url: "",
@@ -68,9 +68,9 @@ export const FounderProjectManager: React.FC<FounderProjectManagerProps> = ({
 
 			// Check if founder already has a project in this event
 			const { data: existingProject, error: checkError } = await supabase
-				.from("founders")
+				.from("pitches")
 				.select("id, name")
-				.eq("founder_user_id", founderUserId)
+				.eq("user_id", founderUserId)
 				.eq("event_id", createForm.event_id)
 				.maybeSingle();
 
@@ -86,7 +86,7 @@ export const FounderProjectManager: React.FC<FounderProjectManagerProps> = ({
 			}
 
 			const { error: createError } = await supabase
-				.from("founders")
+				.from("pitches")
 				.insert(createForm);
 
 			if (createError) {
@@ -98,7 +98,7 @@ export const FounderProjectManager: React.FC<FounderProjectManagerProps> = ({
 			// Reset form
 			setCreateForm({
 				event_id: "",
-				founder_user_id: founderUserId,
+				user_id: founderUserId,
 				name: "",
 				bio: "",
 				logo_url: "",
@@ -131,7 +131,7 @@ export const FounderProjectManager: React.FC<FounderProjectManagerProps> = ({
 			setSuccessMessage(null);
 
 			const { error: updateError } = await supabase
-				.from("founders")
+				.from("pitches")
 				.update(editForm)
 				.eq("id", editingProject.id);
 

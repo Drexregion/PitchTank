@@ -46,7 +46,7 @@ export function usePortfolioHistory({
     const fetch = async () => {
       const { data: trades } = await supabase
         .from("trades")
-        .select("created_at, amount, shares, type, founder_id, price_per_share")
+        .select("created_at, amount, shares, type, pitch_id, price_per_share")
         .eq("investor_id", investorId)
         .order("created_at", { ascending: true });
 
@@ -70,12 +70,12 @@ export function usePortfolioHistory({
       for (const t of trades) {
         if (t.type === "buy") {
           cash -= Number(t.amount);
-          sharesHeld[t.founder_id] = (sharesHeld[t.founder_id] || 0) + Number(t.shares);
+          sharesHeld[t.pitch_id] = (sharesHeld[t.pitch_id] || 0) + Number(t.shares);
         } else {
           cash += Number(t.amount);
-          sharesHeld[t.founder_id] = Math.max(0, (sharesHeld[t.founder_id] || 0) - Number(t.shares));
+          sharesHeld[t.pitch_id] = Math.max(0, (sharesHeld[t.pitch_id] || 0) - Number(t.shares));
         }
-        lastPrice[t.founder_id] = Number(t.price_per_share);
+        lastPrice[t.pitch_id] = Number(t.price_per_share);
 
         const holdingsValue = Object.entries(sharesHeld).reduce(
           (sum, [fid, shares]) => sum + shares * (lastPrice[fid] || 0),

@@ -109,13 +109,8 @@ const AdminEventApplicationsPage: React.FC = () => {
 		if (!eventId) return;
 		setIsLoading(true);
 		try {
-			const [eventRes, questionsRes, appsRes] = await Promise.all([
+			const [eventRes, appsRes] = await Promise.all([
 				supabase.from("events").select("*").eq("id", eventId).single(),
-				supabase
-					.from("event_questions")
-					.select("*")
-					.eq("event_id", eventId)
-					.order("sort_order", { ascending: true }),
 				supabase
 					.from("applications")
 					.select("*")
@@ -124,7 +119,10 @@ const AdminEventApplicationsPage: React.FC = () => {
 			]);
 			if (eventRes.error) throw eventRes.error;
 			setEvent(eventRes.data);
-			setQuestions(questionsRes.data ?? []);
+			const qs = (eventRes.data?.registration_questions ?? [])
+				.slice()
+				.sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+			setQuestions(qs);
 			setApplications(appsRes.data ?? []);
 		} catch (err: any) {
 			setError(err.message ?? "Failed to load data");

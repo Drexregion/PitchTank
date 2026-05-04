@@ -136,7 +136,7 @@ async function fetchAll(eventId) {
 		.select("*")
 		.order("created_at", { ascending: true });
 	const investorsQuery = supabase.from("investors").select("*");
-	const foundersQuery = supabase.from("founders").select("*");
+	const foundersQuery = supabase.from("pitches").select("*");
 	const pricesQuery = supabase
 		.from("price_history")
 		.select("*")
@@ -163,7 +163,7 @@ async function fetchAll(eventId) {
 		const investorIds = new Set((investorsRes.data || []).map((i) => i.id));
 		const founderIds = new Set((foundersRes.data || []).map((f) => f.id));
 		holdings = holdings.filter(
-			(h) => investorIds.has(h.investor_id) && founderIds.has(h.founder_id)
+			(h) => investorIds.has(h.investor_id) && founderIds.has(h.pitch_id)
 		);
 	}
 
@@ -193,7 +193,7 @@ function computeCoreMetrics(trades, investorsById, foundersById) {
 		if (!largestTrade || amt > Math.abs(largestTrade.amount || 0))
 			largestTrade = t;
 
-		const fKey = t.founder_id;
+		const fKey = t.pitch_id;
 		tradesByFounder.set(fKey, (tradesByFounder.get(fKey) || 0) + 1);
 		const iKey = t.investor_id;
 		tradesByInvestor.set(iKey, (tradesByInvestor.get(iKey) || 0) + 1);
@@ -232,7 +232,7 @@ function computeCoreMetrics(trades, investorsById, foundersById) {
 
 function computePnLAndHoldings(trades) {
 	// Average-cost basis realization per investor+founder
-	const key = (t) => `${t.investor_id}::${t.founder_id}`;
+	const key = (t) => `${t.investor_id}::${t.pitch_id}`;
 	const state = new Map();
 	const perInvestor = new Map();
 
@@ -306,7 +306,7 @@ function computeTimingMetrics(trades, pricesByFounder) {
 	let bestTimedSell = null; // {trade, pctDrop}
 
 	for (const t of trades) {
-		const founderPrices = pricesByFounder.get(t.founder_id) || [];
+		const founderPrices = pricesByFounder.get(t.pitch_id) || [];
 		const ts = parseTs(t.created_at);
 		const price = Number(t.price_per_share || 0);
 		if (String(t.type).toLowerCase() === "buy") {
@@ -372,7 +372,7 @@ function computeHoldingMetrics(
 			if (Number(row.shares || 0) > 0) {
 				if (!positiveByInvestor.has(row.investor_id))
 					positiveByInvestor.set(row.investor_id, new Set());
-				positiveByInvestor.get(row.investor_id).add(row.founder_id);
+				positiveByInvestor.get(row.investor_id).add(row.pitch_id);
 			}
 		}
 	} else {
@@ -437,9 +437,9 @@ function computeFounderNotes(trades) {
 		const note = String(raw).trim();
 		if (!note) continue;
 		if (note.toLowerCase() === "system") continue;
-		const list = notesByFounder.get(t.founder_id) || [];
+		const list = notesByFounder.get(t.pitch_id) || [];
 		list.push({ ts: parseTs(t.created_at), note });
-		notesByFounder.set(t.founder_id, list);
+		notesByFounder.set(t.pitch_id, list);
 	}
 	for (const [fid, list] of notesByFounder.entries()) {
 		list.sort((a, b) => a.ts - b.ts);
@@ -459,7 +459,7 @@ async function main() {
 	}
 	const investorsById = mapById(investors);
 	const foundersById = mapById(founders);
-	const pricesByFounder = groupBy(priceHistory, (p) => p.founder_id);
+	const pricesByFounder = groupBy(priceHistory, (p) => p.pitch_id);
 
 	const core = computeCoreMetrics(trades, investorsById, foundersById);
 	const { perPair, perInvestor } = computePnLAndHoldings(trades);
@@ -562,7 +562,7 @@ async function main() {
 		console.log(
 			`Best-timed buy: ${
 				investorsById.get(t.investor_id)?.name || t.investor_id
-			} in ${foundersById.get(t.founder_id)?.name || t.founder_id} at $${fmt(
+			} in ${foundersById.get(t.pitch_id)?.name || t.pitch_id} at $${fmt(
 				t.price_per_share
 			)} -> ${toPct(timing.bestTimedBuy.pct)}`
 		);
@@ -574,7 +574,7 @@ async function main() {
 			`Best-timed sell: ${
 				investorsById.get(t.investor_id)?.name || t.investor_id
 			} in ${
-				foundersById.get(t.founder_id)?.name || t.founder_id
+				foundersById.get(t.pitch_id)?.name || t.pitch_id
 			} avoided drop ${toPct(timing.bestTimedSell.pct)}`
 		);
 	}

@@ -19,7 +19,8 @@
 		"admin:reset-event": "ts-node --project tsconfig.test.json internal/admin/resetEventTrading.ts",
 		"reports:generate": "node internal/data_processing/generateFounderReports.js",
 		"feedback:flag-unuseful": "node internal/data_processing/flagNegativeFeedback.js",
-		"admin:export-event-users": "node internal/admin/exportEventUsers.js"
+		"admin:export-event-users": "node internal/admin/exportEventUsers.js",
+		"admin:backup-schema": "node internal/admin/backupSchema.js"
 	},
 	"dependencies": {
 		"@supabase/supabase-js": "^2.32.0",

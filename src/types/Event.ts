@@ -19,6 +19,15 @@ export interface Sponsor {
   website?: string;
 }
 
+export interface EventQuestion {
+  id: string;
+  question_text: string;
+  description: string | null;
+  question_type: 'text' | 'textarea' | 'image' | 'url' | 'website_url';
+  required: boolean;
+  sort_order: number;
+}
+
 export interface Event {
   id: string;
   name: string;
@@ -32,20 +41,17 @@ export interface Event {
   schedule?: ScheduleItem[];
   judges?: Judge[];
   sponsors?: Sponsor[];
-}
-
-export interface EventSettings {
-  event_id: string;
+  // Merged from event_settings
   snapshot_interval_seconds: number;
   max_price_history_points: number;
   hide_leaderboard_and_prices: boolean;
-  created_at: string;
-  updated_at: string;
+  // Merged from event_questions
+  registration_questions: EventQuestion[];
 }
 
 export interface EventWithStats extends Event {
   founder_count: number;
   investor_count: number;
   trade_count: number;
-  total_volume: number; // Sum of all trade amounts
+  total_volume: number;
 }

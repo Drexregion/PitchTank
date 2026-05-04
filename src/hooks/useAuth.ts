@@ -24,6 +24,7 @@ export function useAuth(): AuthHookReturn {
 	const [session, setSession] = useState<Session | null>(null);
 	const [user, setUser] = useState<UserWithRoles | null>(null);
 	const [isLoading, setIsLoading] = useState<boolean>(true);
+	const [isAdmin, setIsAdmin] = useState<boolean>(false);
 	const [error, setError] = useState<string | null>(null);
 
 	const makeUser = (u: { id: string; email?: string }): UserWithRoles => ({
@@ -31,6 +32,15 @@ export function useAuth(): AuthHookReturn {
 		email: u.email,
 		roles: [],
 	});
+
+	const fetchAdminStatus = async (authUserId: string) => {
+		const { data } = await supabase
+			.from("users")
+			.select("is_admin")
+			.eq("auth_user_id", authUserId)
+			.maybeSingle();
+		setIsAdmin(data?.is_admin ?? false);
+	};
 
 	useEffect(() => {
 		setIsLoading(true);
@@ -40,7 +50,9 @@ export function useAuth(): AuthHookReturn {
 				const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
 				if (sessionError) { setError(sessionError.message); setIsLoading(false); return; }
 				setSession(currentSession);
-				setUser(currentSession?.user ? makeUser(currentSession.user) : null);
+				const u = currentSession?.user ? makeUser(currentSession.user) : null;
+				setUser(u);
+				if (u) await fetchAdminStatus(u.id);
 			} catch (err: any) {
 				setError(err.message || "Auth error");
 			} finally {
@@ -52,9 +64,15 @@ export function useAuth(): AuthHookReturn {
 
 		const timeout = setTimeout(() => setIsLoading(false), 10000);
 
-		const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+		const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
 			setSession(newSession);
-			setUser(newSession?.user ? makeUser(newSession.user) : null);
+			const u = newSession?.user ? makeUser(newSession.user) : null;
+			setUser(u);
+			if (u) {
+				await fetchAdminStatus(u.id);
+			} else {
+				setIsAdmin(false);
+			}
 		});
 
 		return () => {
@@ -70,7 +88,9 @@ export function useAuth(): AuthHookReturn {
 			const { data: { session: newSession }, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
 			if (signInError) throw signInError;
 			setSession(newSession);
-			setUser(newSession?.user ? makeUser(newSession.user) : null);
+			const u = newSession?.user ? makeUser(newSession.user) : null;
+			setUser(u);
+			if (u) await fetchAdminStatus(u.id);
 		} catch (err: any) {
 			setError(err.message || "Failed to sign in");
 		} finally {
@@ -99,14 +119,11 @@ export function useAuth(): AuthHookReturn {
 		try {
 			setError(null);
 			await supabase.auth.signOut();
+			setIsAdmin(false);
 		} catch (err: any) {
 			setError(err.message || "Failed to sign out");
 		}
 	};
 
-	const adminEmails = ["admin@pitchtank.ca", "rahel.gunaratne1@gmail.com"];
-	const isAdmin = user?.email ? adminEmails.includes(user.email.toLowerCase()) : false;
-	const isInvestor = true;
-
-	return { session, user, isLoading, isAdmin, isInvestor, error, signIn, signUp, signOut };
+	return { session, user, isLoading, isAdmin, isInvestor: true, error, signIn, signUp, signOut };
 }

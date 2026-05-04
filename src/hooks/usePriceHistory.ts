@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabaseClient';
 import { PriceHistoryPoint } from '../types/PriceHistory';
 import { formatPriceHistoryForChart } from '../lib/priceHistoryUtils';
 
-// Module-level registry: one Supabase channel per founderId, shared across all
+// Module-level registry: one Supabase channel per pitchId, shared across all
 // hook instances on the same client. Reference-counted so the channel is removed
 // only when the last subscriber unmounts.
 type ChannelEntry = {
@@ -13,40 +13,40 @@ type ChannelEntry = {
 const channelRegistry = new Map<string, ChannelEntry>();
 
 function subscribeToFounder(
-  founderId: string,
+  pitchId: string,
   listener: (point: PriceHistoryPoint) => void
 ): () => void {
-  if (!channelRegistry.has(founderId)) {
+  if (!channelRegistry.has(pitchId)) {
     const listeners = new Set<(point: PriceHistoryPoint) => void>();
     const channel = supabase
-      .channel(`price_history_${founderId}`)
+      .channel(`price_history_${pitchId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'price_history', filter: `founder_id=eq.${founderId}` },
+        { event: 'INSERT', schema: 'public', table: 'price_history', filter: `pitch_id=eq.${pitchId}` },
         (payload) => {
           const newPoint = payload.new as PriceHistoryPoint;
           listeners.forEach((l) => l(newPoint));
         }
       )
       .subscribe();
-    channelRegistry.set(founderId, { channel, listeners });
+    channelRegistry.set(pitchId, { channel, listeners });
   }
 
-  channelRegistry.get(founderId)!.listeners.add(listener);
+  channelRegistry.get(pitchId)!.listeners.add(listener);
 
   return () => {
-    const entry = channelRegistry.get(founderId);
+    const entry = channelRegistry.get(pitchId);
     if (!entry) return;
     entry.listeners.delete(listener);
     if (entry.listeners.size === 0) {
       supabase.removeChannel(entry.channel);
-      channelRegistry.delete(founderId);
+      channelRegistry.delete(pitchId);
     }
   };
 }
 
 type UsePriceHistoryOptions = {
-  founderId?: string;
+  pitchId?: string;
   since?: string;
   until?: string;
   maxPoints?: number;
@@ -54,10 +54,10 @@ type UsePriceHistoryOptions = {
 
 /**
  * Hook to fetch and subscribe to price history for a founder.
- * All instances for the same founderId share a single Supabase channel.
+ * All instances for the same pitchId share a single Supabase channel.
  */
 export function usePriceHistory({
-  founderId,
+  pitchId,
   since,
   until,
   maxPoints = 1000,
@@ -67,7 +67,7 @@ export function usePriceHistory({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!founderId) {
+    if (!pitchId) {
       setPoints([]);
       setIsLoading(false);
       return;
@@ -81,7 +81,7 @@ export function usePriceHistory({
         let query = supabase
           .from('price_history')
           .select('*')
-          .eq('founder_id', founderId)
+          .eq('pitch_id', pitchId)
           .order('recorded_at', { ascending: true })
           .limit(maxPoints);
 
@@ -101,7 +101,7 @@ export function usePriceHistory({
 
     fetchPriceHistory();
 
-    const unsubscribe = subscribeToFounder(founderId, (newPoint) => {
+    const unsubscribe = subscribeToFounder(pitchId, (newPoint) => {
       setPoints((prev) => {
         const updated = [...prev, newPoint];
         return updated.length > maxPoints ? updated.slice(updated.length - maxPoints) : updated;
@@ -109,7 +109,7 @@ export function usePriceHistory({
     });
 
     return unsubscribe;
-  }, [founderId, since, until, maxPoints]);
+  }, [pitchId, since, until, maxPoints]);
 
 
   const chartData = formatPriceHistoryForChart(points, maxPoints);

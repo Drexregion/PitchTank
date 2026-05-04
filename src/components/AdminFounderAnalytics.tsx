@@ -42,7 +42,7 @@ export const AdminFounderAnalytics: React.FC<FounderAnalyticsProps> = ({
 			const { data: tradeData, error: tradeError } = await supabase
 				.from("trades")
 				.select("*")
-				.eq("founder_id", founder.id)
+				.eq("pitch_id", founder.id)
 				.order("created_at", { ascending: true });
 
 			if (tradeError) throw tradeError;

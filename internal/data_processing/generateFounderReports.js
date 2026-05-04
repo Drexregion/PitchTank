@@ -52,7 +52,7 @@ async function ensureDir(dirPath) {
 
 async function fetchAll(eventId) {
 	// Founders (optional event filter)
-	const foundersQuery = supabase.from("founders").select("*");
+	const foundersQuery = supabase.from("pitches").select("*");
 	const foundersRes = eventId
 		? await foundersQuery.eq("event_id", eventId)
 		: await foundersQuery;
@@ -75,12 +75,12 @@ async function fetchAll(eventId) {
 					.select(
 						"id, founder_id, investor_id, note, amount, shares, price_per_share, created_at",
 					)
-					.in("founder_id", founderIds)
+					.in("pitch_id", founderIds)
 					.order("created_at", { ascending: true }),
 				supabase
 					.from("price_history")
 					.select("founder_id, price, shares_in_pool, recorded_at")
-					.in("founder_id", founderIds)
+					.in("pitch_id", founderIds)
 					.order("recorded_at", { ascending: true }),
 			]);
 			if (tradesRes.error) throw tradesRes.error;
@@ -650,8 +650,8 @@ async function main() {
 	}
 	const { founders, investors, trades, priceHistory } = await fetchAll(eventId);
 	const investorsById = new Map(investors.map((i) => [i.id, i]));
-	const tradesByFounder = groupBy(trades, (t) => t.founder_id);
-	const pricesByFounder = groupBy(priceHistory, (p) => p.founder_id);
+	const tradesByFounder = groupBy(trades, (t) => t.pitch_id);
+	const pricesByFounder = groupBy(priceHistory, (p) => p.pitch_id);
 
 	const outputDir = path.join("internal", "reports");
 	await ensureDir(outputDir);

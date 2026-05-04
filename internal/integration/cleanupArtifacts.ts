@@ -44,7 +44,7 @@ async function deleteByEventIds(eventIds: string[]) {
 	let founderIds: string[] = [];
 	try {
 		const { data } = await admin
-			.from("founders")
+			.from("pitches")
 			.select("id")
 			.in("event_id", eventIds);
 		founderIds = (data || []).map((r: any) => r.id as string);
@@ -55,13 +55,13 @@ async function deleteByEventIds(eventIds: string[]) {
 			await admin
 				.from("investor_holdings")
 				.delete()
-				.in("founder_id", founderIds);
+				.in("pitch_id", founderIds);
 		} catch {}
 		try {
-			await admin.from("price_history").delete().in("founder_id", founderIds);
+			await admin.from("price_history").delete().in("pitch_id", founderIds);
 		} catch {}
 		try {
-			await admin.from("founders").delete().in("id", founderIds);
+			await admin.from("pitches").delete().in("id", founderIds);
 		} catch {}
 	}
 

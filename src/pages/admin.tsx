@@ -208,7 +208,7 @@ const AdminPage: React.FC = () => {
 		if (tradesError) { setError(tradesError.message); return; }
 
 		const { data: founders, error: foundersError } = await supabase
-			.from("founders")
+			.from("pitches")
 			.select("id, k_constant")
 			.eq("event_id", eventId);
 		if (foundersError) { setError(foundersError.message); return; }
@@ -218,20 +218,20 @@ const AdminPage: React.FC = () => {
 			const { error: priceError } = await supabase
 				.from("price_history")
 				.delete()
-				.in("founder_id", founderIds);
+				.in("pitch_id", founderIds);
 			if (priceError) { setError(priceError.message); return; }
 
 			const { error: holdingsError } = await supabase
 				.from("investor_holdings")
 				.delete()
-				.in("founder_id", founderIds);
+				.in("pitch_id", founderIds);
 			if (holdingsError) { setError(holdingsError.message); return; }
 
 			for (const f of founders || []) {
 				const initialShares = 100000;
 				const initialCash = Number(f.k_constant) / initialShares;
 				const { error: founderResetError } = await supabase
-					.from("founders")
+					.from("pitches")
 					.update({
 						shares_in_pool: initialShares,
 						cash_in_pool: initialCash,
@@ -266,7 +266,7 @@ const AdminPage: React.FC = () => {
 			if (sharesPerFounder > 0) {
 				const holdingsToInsert = (founders || []).map((f: { id: string; k_constant: number }) => ({
 					investor_id: investor.id,
-					founder_id: f.id,
+					pitch_id: f.id,
 					shares: sharesPerFounder,
 					cost_basis: INITIAL_PRICE_PER_SHARE,
 				}));
