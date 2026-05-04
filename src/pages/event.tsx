@@ -737,21 +737,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const [showSchedule, setShowSchedule] = useState(false);
 	const [showSettings, setShowSettings] = useState(false);
 	const portfolioDropdownRef = useRef<HTMLDivElement>(null);
-	const [profileUserId, setFounderUserId] = useState<string | null>(null);
-
-	useEffect(() => {
-		if (!user?.id) return;
-		import("../lib/supabaseClient").then(({ supabase }) => {
-			supabase
-				.from("users")
-				.select("id")
-				.eq("auth_user_id", user.id)
-				.maybeSingle()
-				.then(({ data }) => {
-					if (data) setFounderUserId(data.id);
-				});
-		});
-	}, [user?.id]);
+	const profileUserId = user?.id ?? null;
 
 	// Track unread DM count for badge on chat button
 	useEffect(() => {
@@ -1035,7 +1021,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 		{
 			id: "demo-1",
 			event_id: eventId,
-			user_id: null,
+			profile_user_id: null,
 			name: "Maya Kapoor",
 			bio: null,
 			logo_url: null,
@@ -1054,7 +1040,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 		{
 			id: "demo-2",
 			event_id: eventId,
-			user_id: null,
+			profile_user_id: null,
 			name: "Arjun Reyes",
 			bio: null,
 			logo_url: null,
@@ -1073,7 +1059,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 		{
 			id: "demo-3",
 			event_id: eventId,
-			user_id: null,
+			profile_user_id: null,
 			name: "Priya Wen",
 			bio: null,
 			logo_url: null,
@@ -1092,7 +1078,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 		{
 			id: "demo-4",
 			event_id: eventId,
-			user_id: null,
+			profile_user_id: null,
 			name: "Diego Marín",
 			bio: null,
 			logo_url: null,
@@ -1111,7 +1097,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 		{
 			id: "demo-5",
 			event_id: eventId,
-			user_id: null,
+			profile_user_id: null,
 			name: "Sofia Nakamura",
 			bio: null,
 			logo_url: null,
@@ -1438,9 +1424,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 								{/* Your Holdings */}
 								{user &&
 									investor &&
-									holdings.length > 0 &&
-									!simpleMode &&
-									portfolioValue > 0 && (
+									top5Holdings.filter((h) => h.shares > 0).length > 0 && (
 										<div className="px-5 mt-6">
 											<div className="flex items-center justify-between mb-3">
 												<p className="text-white/40 text-[10px] font-semibold uppercase tracking-widest">
@@ -1450,74 +1434,51 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 													{formatCurrency(portfolioValue)}
 												</p>
 											</div>
-											<div className="flex gap-1.5 h-14 items-stretch">
-												{top5Holdings.map((h, i) => {
-													const pct =
-														portfolioValue > 0
-															? Math.round(
-																	(h.current_value / portfolioValue) * 100,
-																)
-															: 0;
-													const segColors = [
-														"bg-[#2a4fd6]",
-														"bg-[#1a9e8f]",
-														"bg-[#7c3dce]",
-														"bg-[#b8326a]",
-														"bg-[#c87a1a]",
-													];
-													return (
-														<div
-															key={h.pitch_id}
-															className={`${segColors[i % segColors.length]} rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}
-															style={{
-																width: `${(h.current_value / portfolioValue) * 100}%`,
-																minWidth: pct > 3 ? undefined : "2rem",
-															}}
-														>
-															{pct >= 6 ? `${pct}%` : ""}
-														</div>
-													);
-												})}
-											</div>
-											<div className="flex mt-3 gap-3">
-												{top5Holdings.map((h, i) => {
-													const pitch = pitches.find(
-														(f) => f.id === h.pitch_id,
-													);
-													const avatarBorders = [
-														"border-[#2a4fd6]",
-														"border-[#1a9e8f]",
-														"border-[#7c3dce]",
-														"border-[#b8326a]",
-														"border-[#c87a1a]",
-													];
-													return (
-														<div
-															key={h.pitch_id}
-															className="flex flex-col items-center gap-1 flex-1 min-w-0"
-														>
-															<button
-																onClick={(e) =>
-																	pitch && handleFounderProfileClick(pitch, e)
-																}
-																className={`w-11 h-11 rounded-full overflow-hidden border-2 ${avatarBorders[i % avatarBorders.length]} flex-shrink-0`}
-															>
-																{pitch?.user?.profile_picture_url ? (
-																	<img
-																		src={pitch.user.profile_picture_url}
-																		alt={pitch.name}
-																		className="w-full h-full object-cover"
-																	/>
-																) : (
-																	<div className="w-full h-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
-																		{pitch?.name.charAt(0) ?? "?"}
+											{(() => {
+												const activeHoldings = top5Holdings.filter((h) => h.shares > 0);
+												const totalValue = activeHoldings.reduce((s, h) => s + h.current_value, 0);
+												const segColors = ["bg-[#2a4fd6]", "bg-[#1a9e8f]", "bg-[#7c3dce]", "bg-[#b8326a]", "bg-[#c87a1a]"];
+												const avatarBorders = ["border-[#2a4fd6]", "border-[#1a9e8f]", "border-[#7c3dce]", "border-[#b8326a]", "border-[#c87a1a]"];
+												return (
+													<>
+														<div className="flex gap-1 h-12 overflow-hidden rounded-xl">
+															{activeHoldings.map((h, i) => {
+																const pct = totalValue > 0 ? (h.current_value / totalValue) * 100 : 0;
+																return (
+																	<div
+																		key={h.pitch_id}
+																		className={`${segColors[i % segColors.length]} flex items-center justify-center text-white font-bold text-xs`}
+																		style={{ width: `${pct}%`, minWidth: pct < 8 ? "1.5rem" : undefined }}
+																	>
+																		{pct >= 10 ? `${Math.round(pct)}%` : ""}
 																	</div>
-																)}
-															</button>
+																);
+															})}
 														</div>
-													);
-												})}
-											</div>
+														<div className="flex mt-3 gap-3">
+															{activeHoldings.map((h, i) => {
+																const pitch = pitches.find((f) => f.id === h.pitch_id);
+																return (
+																	<div key={h.pitch_id} className="flex flex-col items-center gap-1 flex-1 min-w-0">
+																		<button
+																			onClick={(e) => pitch && handleFounderProfileClick(pitch, e)}
+																			className={`w-11 h-11 rounded-full overflow-hidden border-2 ${avatarBorders[i % avatarBorders.length]} flex-shrink-0`}
+																		>
+																			{pitch?.user?.profile_picture_url ? (
+																				<img src={pitch.user.profile_picture_url} alt={pitch.name} className="w-full h-full object-cover" />
+																			) : (
+																				<div className="w-full h-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
+																					{pitch?.name.charAt(0) ?? "?"}
+																				</div>
+																			)}
+																		</button>
+																	</div>
+																);
+															})}
+														</div>
+													</>
+												);
+											})()}
 										</div>
 									)}
 
@@ -1732,13 +1693,20 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 																</div>
 																<div className="flex items-center gap-2.5 flex-shrink-0">
 																	{!simpleMode && !isExpanded && (
-																		<SparklineWithButton
-																			founderId={isDemo ? "" : pitch.id}
-																			price={pitch.current_price}
-																			canTrade={canTrade}
-																			onTrade={() => handleBuyClick(pitch)}
-																			formatCurrency={formatCurrency}
-																		/>
+																		<div className="flex flex-col items-end gap-0.5">
+																			{ownedShares > 0 && (
+																				<p className="text-white/50 text-[10px] tabular-nums">
+																					{ownedShares.toLocaleString()} shares
+																				</p>
+																			)}
+																			<SparklineWithButton
+																				founderId={isDemo ? "" : pitch.id}
+																				price={pitch.current_price}
+																				canTrade={canTrade}
+																				onTrade={() => handleBuyClick(pitch)}
+																				formatCurrency={formatCurrency}
+																			/>
+																		</div>
 																	)}
 																	{simpleMode && (
 																		<div className="flex gap-1.5">
@@ -2575,10 +2543,11 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				eventId={eventId}
 				currentUserId={profileUserId}
 				onStartDM={user?.id ? (peerId, peerName) => {
+					if (peerId === user.id) return;
 					setShowSchedule(false);
 					setActiveDMPeer({ id: peerId, name: peerName });
 				} : undefined}
-			/>
+				/>
 			<SettingsPanel
 				isOpen={showSettings}
 				onClose={() => setShowSettings(false)}
@@ -2619,6 +2588,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 					setShowChat(true);
 				}}
 				onOpenDM={(peerId, peerName) => {
+					if (peerId === user?.id) return;
 					setActiveDMPeer({ id: peerId, name: peerName });
 					setShowConversations(false);
 				}}
@@ -2630,6 +2600,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				userId={user?.id ?? null}
 				displayName={displayName ?? "Guest"}
 				onStartDM={user?.id ? (peerId, peerName) => {
+					if (peerId === user.id) return;
 					setShowChat(false);
 					setActiveDMPeer({ id: peerId, name: peerName });
 				} : undefined}

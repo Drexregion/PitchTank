@@ -203,14 +203,23 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 		setInputText("");
 		setShowAutocomplete(false);
 		const isQuestion = /^@question\s/i.test(text);
-		await supabase.from("chat_messages").insert({
-			event_id: eventId,
-			user_id: effectiveUserId,
-			display_name: displayName,
-			text,
-			type: isQuestion ? "question" : "message",
-			upvotes: 0,
-		});
+		const { data } = await supabase
+			.from("chat_messages")
+			.insert({
+				event_id: eventId,
+				user_id: effectiveUserId,
+				display_name: displayName,
+				text,
+				type: isQuestion ? "question" : "message",
+				upvotes: 0,
+			})
+			.select()
+			.single();
+		if (data) {
+			setMessages((prev) =>
+				prev.find((m) => m.id === data.id) ? prev : [...prev, data as ChatMessage],
+			);
+		}
 	};
 
 	const handleUpvote = async (msgId: string) => {

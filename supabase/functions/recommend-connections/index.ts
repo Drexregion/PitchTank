@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import Anthropic from "npm:@anthropic-ai/sdk";
+import OpenAI from "npm:openai";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -39,10 +39,10 @@ serve(async (req: Request) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+    const openaiKey = Deno.env.get("OPENAI_API_KEY");
 
-    if (!anthropicKey) {
-      return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY not configured" }), {
+    if (!openaiKey) {
+      return new Response(JSON.stringify({ error: "OPENAI_API_KEY not configured" }), {
         status: 503,
         headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
       });
@@ -131,24 +131,24 @@ Respond ONLY with a JSON array, no other text:
 
 Use the exact investor_id values: ${attendeeProfiles.map((a) => `"${a.investor_id}" = ${a.name}`).join(", ")}`;
 
-    const anthropic = new Anthropic({ apiKey: anthropicKey });
+    const openai = new OpenAI({ apiKey: openaiKey });
 
-    const message = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
+    const message = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
       max_tokens: 1024,
       messages: [{ role: "user", content: prompt }],
     });
 
-    const textBlock = message.content.find((b: any) => b.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
-      throw new Error("No text response from Claude");
+    const responseText = message.choices[0]?.message?.content;
+    if (!responseText) {
+      throw new Error("No text response from OpenAI");
     }
 
     let recommendations: Recommendation[] = [];
     try {
-      const jsonMatch = textBlock.text.match(/\[[\s\S]*\]/);
+      const jsonMatch = responseText.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
-        const parsed: { investor_id: string; name: string; reason: string }[] = JSON.parse(jsonMatch[0]);
+        const parsed: { investor_id: string; name: string; reason: string; }[] = JSON.parse(jsonMatch[0]);
         const profileMap = new Map(attendeeProfiles.map((a) => [a.investor_id, a]));
         recommendations = parsed.map((r) => {
           const profile = profileMap.get(r.investor_id);

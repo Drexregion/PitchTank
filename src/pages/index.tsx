@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect, useRef } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { Event } from "../types/Event";
 import { useAuth } from "../contexts/AuthContext";
@@ -9,7 +9,26 @@ const HomePage: React.FC = () => {
 	const [events, setEvents] = useState<Event[]>([]);
 	const [isLoading, setIsLoading] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
-	const { isAdmin, user } = useAuth();
+	const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+	const avatarRef = useRef<HTMLDivElement>(null);
+	const { isAdmin, user, signOut } = useAuth();
+	const navigate = useNavigate();
+
+	useEffect(() => {
+		const handleClickOutside = (e: MouseEvent) => {
+			if (avatarRef.current && !avatarRef.current.contains(e.target as Node)) {
+				setAvatarMenuOpen(false);
+			}
+		};
+		document.addEventListener("mousedown", handleClickOutside);
+		return () => document.removeEventListener("mousedown", handleClickOutside);
+	}, []);
+
+	const handleLogout = async () => {
+		setAvatarMenuOpen(false);
+		await signOut();
+		navigate("/login");
+	};
 
 	useEffect(() => {
 		const fetchEvents = async () => {
@@ -21,7 +40,13 @@ const HomePage: React.FC = () => {
 					.select("*")
 					.order("start_time", { ascending: false });
 				if (fetchError) throw fetchError;
-				setEvents(data || []);
+				const statusOrder: Record<string, number> = { active: 0, completed: 1, draft: 2 };
+				const sorted = (data || []).sort((a, b) => {
+					const aOrder = statusOrder[a.status] ?? 3;
+					const bOrder = statusOrder[b.status] ?? 3;
+					return aOrder !== bOrder ? aOrder - bOrder : 0;
+				});
+				setEvents(sorted);
 			} catch (err: any) {
 				setError(err.message || "Failed to fetch events");
 			} finally {
@@ -148,17 +173,51 @@ const HomePage: React.FC = () => {
 							</Link>
 						)}
 						{user ? (
-							<Link
-								to="/profile"
-								className="w-9 h-9 rounded-full flex items-center justify-center font-black text-sm text-white transition-all hover:opacity-80 active:scale-95"
-								style={{
-									background: "linear-gradient(135deg, #7c3aed 0%, #22d3ee 100%)",
-									boxShadow: "0 0 14px rgba(124,58,237,0.4)",
-								}}
-								title="My Profile"
-							>
-								{(user.email ?? "?").charAt(0).toUpperCase()}
-							</Link>
+							<div ref={avatarRef} className="relative">
+								<button
+									onClick={() => setAvatarMenuOpen((o) => !o)}
+									className="w-9 h-9 rounded-full flex items-center justify-center font-black text-sm text-white transition-all hover:opacity-80 active:scale-95"
+									style={{
+										background: "linear-gradient(135deg, #7c3aed 0%, #22d3ee 100%)",
+										boxShadow: "0 0 14px rgba(124,58,237,0.4)",
+									}}
+								>
+									{(user.email ?? "?").charAt(0).toUpperCase()}
+								</button>
+								{avatarMenuOpen && (
+									<div
+										className="absolute right-0 top-11 rounded-2xl overflow-hidden z-50 min-w-[150px] py-1"
+										style={{
+											background: "rgba(16,12,40,0.97)",
+											border: "1px solid rgba(255,255,255,0.1)",
+											boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+											backdropFilter: "blur(12px)",
+										}}
+									>
+										{[
+											{ label: "Profile", to: "/profile" },
+											{ label: "Settings", to: "/settings" },
+										].map(({ label, to }) => (
+											<Link
+												key={label}
+												to={to}
+												onClick={() => setAvatarMenuOpen(false)}
+												className="block px-4 py-2.5 text-sm font-medium text-white/80 hover:text-white hover:bg-white/5 transition-colors"
+											>
+												{label}
+											</Link>
+										))}
+										<div style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }} className="mt-1 pt-1">
+											<button
+												onClick={handleLogout}
+												className="w-full text-left px-4 py-2.5 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-white/5 transition-colors"
+											>
+												Log out
+											</button>
+										</div>
+									</div>
+								)}
+							</div>
 						) : (
 							<Link
 								to="/login"

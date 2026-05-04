@@ -8,6 +8,7 @@ import LoginPage from "./pages/login";
 import ApplyPage from "./pages/apply";
 import AdminEventApplicationsPage from "./pages/admin-event-applications";
 import ProfilePage from "./pages/profile";
+import SettingsPage from "./pages/settings";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -28,6 +29,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 				/>
 				<Route path="/profile" element={<ProfilePage />} />
 				<Route path="/profile/:profileId" element={<ProfilePage />} />
+				<Route path="/settings" element={<SettingsPage />} />
 			</Routes>
 		</AuthProvider>
 	</BrowserRouter>,

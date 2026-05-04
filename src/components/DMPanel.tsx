@@ -38,8 +38,18 @@ function avatarGradient(name: string): [string, string] {
 	return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length] as [string, string];
 }
 
-function Avatar({ name, size = 28 }: { name: string; size?: number }) {
+function Avatar({ name, url, size = 28 }: { name: string; url?: string | null; size?: number }) {
 	const [from, to] = avatarGradient(name);
+	if (url) {
+		return (
+			<img
+				src={url}
+				alt={name}
+				className="rounded-full object-cover flex-shrink-0"
+				style={{ width: size, height: size }}
+			/>
+		);
+	}
 	return (
 		<div
 			className="rounded-full flex items-center justify-center font-black text-white flex-shrink-0"
@@ -75,6 +85,7 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 	const [messages, setMessages] = useState<DMMessage[]>([]);
 	const [inputText, setInputText] = useState("");
 	const [loading, setLoading] = useState(true);
+	const [peerProfilePic, setPeerProfilePic] = useState<string | null>(null);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
 
@@ -124,6 +135,17 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 			supabase.removeChannel(channel);
 		};
 	}, [isOpen, eventId, userId, peerId]);
+
+	// Fetch peer's profile picture
+	useEffect(() => {
+		if (!isOpen || !peerId) { setPeerProfilePic(null); return; }
+		supabase
+			.from("users")
+			.select("profile_picture_url")
+			.eq("auth_user_id", peerId)
+			.maybeSingle()
+			.then(({ data }) => setPeerProfilePic(data?.profile_picture_url ?? null));
+	}, [isOpen, peerId]);
 
 	// Mark incoming messages as read when panel is open
 	useEffect(() => {
@@ -235,7 +257,7 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 								<ArrowLeft size={15} />
 							</button>
 
-							<Avatar name={peerName} size={30} />
+							<Avatar name={peerName} url={peerProfilePic} size={30} />
 
 							<div className="flex-1 min-w-0">
 								<p className="text-white/30 text-[9px] font-semibold uppercase tracking-[0.2em] leading-none mb-1">
@@ -266,7 +288,7 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 								</div>
 							) : grouped.length === 0 ? (
 								<div className="flex flex-col items-center justify-center h-full gap-3 text-center py-16">
-									<Avatar name={peerName} size={48} />
+									<Avatar name={peerName} url={peerProfilePic} size={48} />
 									<p className="text-white/50 font-bold text-sm">{peerName}</p>
 									<p className="text-white/20 text-xs">
 										Send a message to start the conversation
