@@ -1,7 +1,7 @@
 export interface PriceHistoryPoint {
   id: string;
   event_id: string;
-  founder_id: string;
+  pitch_id: string;
   price: number;
   shares_in_pool: number;
   cash_in_pool: number;
@@ -10,7 +10,7 @@ export interface PriceHistoryPoint {
 }
 
 export interface ChartPoint {
-  time: string; // Formatted time for display
+  time: string;
   price: number;
 }
 

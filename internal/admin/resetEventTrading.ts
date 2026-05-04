@@ -61,7 +61,7 @@ async function resetEventTrading(eventId: string): Promise<void> {
 
 	// 2. Get founders for this event
 	const { data: founders, error: foundersError } = await admin
-		.from("founders")
+		.from("pitches")
 		.select("id")
 		.eq("event_id", eventId);
 
@@ -79,7 +79,7 @@ async function resetEventTrading(eventId: string): Promise<void> {
 		const { error: priceError } = await admin
 			.from("price_history")
 			.delete()
-			.in("founder_id", founderIds);
+			.in("pitch_id", founderIds);
 
 		if (priceError) {
 			console.error("Failed to delete price history:", priceError.message);

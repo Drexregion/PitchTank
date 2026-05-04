@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { FounderWithPrice } from "../types/Founder";
+import { PitchWithPrice } from "../types/Pitch";
 import { supabase, supabaseUrl } from "../lib/supabaseClient";
 import {
 	simulateBuyTrade,
@@ -10,7 +10,7 @@ import { useEventData } from "../contexts/EventDataContext";
 interface TradeModalProps {
 	isOpen: boolean;
 	onClose: () => void;
-	founder: FounderWithPrice;
+	founder: PitchWithPrice;
 	investorId: string;
 	investorBalance: number;
 	onTradeComplete?: () => void;
@@ -30,11 +30,11 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 	initialTradeType = "buy",
 	initialShares = 0,
 }) => {
-	const { founders, event } = useEventData();
+	const { pitches, event } = useEventData();
 
-	// Always use the live founder from context so AMM price reflects other trades
-	const currentFounder: FounderWithPrice =
-		(founders.find((f) => f.id === founder.id) as FounderWithPrice | undefined) ?? founder;
+	// Always use the live pitch from context so AMM price reflects other trades
+	const currentFounder: PitchWithPrice =
+		(pitches.find((f) => f.id === founder.id) as PitchWithPrice | undefined) ?? founder;
 
 	const [tradeType, setTradeType] = useState<"buy" | "sell">(initialTradeType);
 	const [dollarInput, setDollarInput] = useState<string>("100");
@@ -193,7 +193,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 					},
 					body: JSON.stringify({
 						investor_id: investorId,
-						founder_id: founder.id,
+						pitch_id: founder.id,
 						shares: sharesToTrade,
 						type: tradeType,
 						event_id: founder.event_id,

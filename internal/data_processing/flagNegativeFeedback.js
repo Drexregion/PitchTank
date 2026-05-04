@@ -42,7 +42,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const openai = new OpenAI({ apiKey: openaiApiKey });
 
 async function fetchEventFeedback(eventId) {
-	const foundersQuery = supabase.from("founders").select("*");
+	const foundersQuery = supabase.from("pitches").select("*");
 	const foundersRes = await foundersQuery.eq("event_id", eventId);
 	if (foundersRes.error) throw foundersRes.error;
 	const founders = foundersRes.data || [];
@@ -63,7 +63,7 @@ async function fetchEventFeedback(eventId) {
 			.select(
 				"id, founder_id, investor_id, note, amount, shares, price_per_share, created_at",
 			)
-			.in("founder_id", founderIds)
+			.in("pitch_id", founderIds)
 			.order("created_at", { ascending: true }),
 		supabase.from("investors").select("*"),
 	]);
@@ -109,8 +109,8 @@ async function flagUnusefulFeedback(
 
 	const context = tradesWithNotes.map((t) => ({
 		trade_id: t.id,
-		founder_id: t.founder_id,
-		founder_name: foundersById.get(t.founder_id)?.name || t.founder_id,
+		pitch_id: t.pitch_id,
+		founder_name: foundersById.get(t.pitch_id)?.name || t.pitch_id,
 		investor_name: investorsById.get(t.investor_id)?.name || t.investor_id,
 		created_at: t.created_at,
 		note: String(t.note).trim(),

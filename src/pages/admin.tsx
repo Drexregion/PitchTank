@@ -3,11 +3,11 @@ import { Link, Navigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { Navbar } from "../components/Navbar";
 import { EventSetupForm } from "../components/EventSetupForm";
-import { AdminFounderManager } from "../components/AdminFounderManager";
-import { AdminFounderAnalytics } from "../components/AdminFounderAnalytics";
+import { AdminPitchManager } from "../components/AdminFounderManager";
+import { AdminPitchAnalytics } from "../components/AdminFounderAnalytics";
 import { useAuth } from "../hooks/useAuth";
 import { Event } from "../types/Event";
-import { Founder } from "../types/Founder";
+import { Pitch } from "../types/Pitch";
 
 const CountdownDisplay: React.FC<{ target: string }> = ({ target }) => {
 	const [secs, setSecs] = useState(() =>
@@ -37,8 +37,8 @@ const AdminPage: React.FC = () => {
 	const adminTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 	const [resetCountdown, setResetCountdown] = useState<Record<string, number | null>>({});
 	const resetIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
-	const [expandedFounders, setExpandedFounders] = useState<Record<string, boolean>>({});
-	const [analyticsFounder, setAnalyticsFounder] = useState<Founder | null>(null);
+	const [expandedPitchs, setExpandedPitchs] = useState<Record<string, boolean>>({});
+	const [analyticsPitch, setAnalyticsPitch] = useState<Pitch | null>(null);
 
 	const fetchEvents = useCallback(async () => {
 		try {
@@ -208,7 +208,7 @@ const AdminPage: React.FC = () => {
 		if (tradesError) { setError(tradesError.message); return; }
 
 		const { data: founders, error: foundersError } = await supabase
-			.from("founders")
+			.from("pitches")
 			.select("id, k_constant")
 			.eq("event_id", eventId);
 		if (foundersError) { setError(foundersError.message); return; }
@@ -218,20 +218,20 @@ const AdminPage: React.FC = () => {
 			const { error: priceError } = await supabase
 				.from("price_history")
 				.delete()
-				.in("founder_id", founderIds);
+				.in("pitch_id", founderIds);
 			if (priceError) { setError(priceError.message); return; }
 
 			const { error: holdingsError } = await supabase
 				.from("investor_holdings")
 				.delete()
-				.in("founder_id", founderIds);
+				.in("pitch_id", founderIds);
 			if (holdingsError) { setError(holdingsError.message); return; }
 
 			for (const f of founders || []) {
 				const initialShares = 100000;
 				const initialCash = Number(f.k_constant) / initialShares;
 				const { error: founderResetError } = await supabase
-					.from("founders")
+					.from("pitches")
 					.update({
 						shares_in_pool: initialShares,
 						cash_in_pool: initialCash,
@@ -246,7 +246,7 @@ const AdminPage: React.FC = () => {
 		const STARTING_CASH = 500000;
 		const INITIAL_PRICE_PER_SHARE = 10;
 		const SHARES_POOL_BUDGET = 500000;
-		const sharesPerFounder = founders && founders.length > 0
+		const sharesPerPitch = founders && founders.length > 0
 			? Math.floor(SHARES_POOL_BUDGET / founders.length / INITIAL_PRICE_PER_SHARE)
 			: 0;
 
@@ -263,11 +263,11 @@ const AdminPage: React.FC = () => {
 				.eq("id", investor.id);
 			if (balanceError) { setError(balanceError.message); return; }
 
-			if (sharesPerFounder > 0) {
+			if (sharesPerPitch > 0) {
 				const holdingsToInsert = (founders || []).map((f: { id: string; k_constant: number }) => ({
 					investor_id: investor.id,
-					founder_id: f.id,
-					shares: sharesPerFounder,
+					pitch_id: f.id,
+					shares: sharesPerPitch,
 					cost_basis: INITIAL_PRICE_PER_SHARE,
 				}));
 				const { error: holdingsInsertError } = await supabase
@@ -511,18 +511,18 @@ const AdminPage: React.FC = () => {
 											{/* Pitchers panel */}
 											<div className="pt-3 border-t border-gray-100 mt-1">
 												<button
-													onClick={() => setExpandedFounders(p => ({ ...p, [event.id]: !p[event.id] }))}
+													onClick={() => setExpandedPitchs(p => ({ ...p, [event.id]: !p[event.id] }))}
 													className="flex items-center gap-1.5 text-xs font-semibold text-purple-600 hover:text-purple-800 transition-colors"
 												>
-													<svg className={`w-3.5 h-3.5 transition-transform ${expandedFounders[event.id] ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<svg className={`w-3.5 h-3.5 transition-transform ${expandedPitchs[event.id] ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
 														<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
 													</svg>
 													Pitchers
 												</button>
-												{expandedFounders[event.id] && (
-													<AdminFounderManager
+												{expandedPitchs[event.id] && (
+													<AdminPitchManager
 														eventId={event.id}
-														onViewAnalytics={(f) => setAnalyticsFounder(f)}
+														onViewAnalytics={(f) => setAnalyticsPitch(f)}
 													/>
 												)}
 											</div>
@@ -536,14 +536,14 @@ const AdminPage: React.FC = () => {
 			</div>
 
 			{/* Analytics modal */}
-			{analyticsFounder && (
-				<div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm overflow-y-auto py-8 px-4" onClick={() => setAnalyticsFounder(null)}>
+			{analyticsPitch && (
+				<div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm overflow-y-auto py-8 px-4" onClick={() => setAnalyticsPitch(null)}>
 					<div className="w-full max-w-4xl" onClick={e => e.stopPropagation()}>
 						<div className="flex justify-between items-center mb-4">
-							<h2 className="text-lg font-bold text-white">{analyticsFounder.name} — Analytics</h2>
-							<button onClick={() => setAnalyticsFounder(null)} className="text-white/60 hover:text-white text-sm">✕ Close</button>
+							<h2 className="text-lg font-bold text-white">{analyticsPitch.name} — Analytics</h2>
+							<button onClick={() => setAnalyticsPitch(null)} className="text-white/60 hover:text-white text-sm">✕ Close</button>
 						</div>
-						<AdminFounderAnalytics founder={analyticsFounder} />
+						<AdminPitchAnalytics founder={analyticsPitch} />
 					</div>
 				</div>
 			)}

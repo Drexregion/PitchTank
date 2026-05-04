@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { Founder, UpdateFounderProjectRequest } from "../types/Founder";
+import { Pitch, UpdatePitchRequest } from "../types/Pitch";
 
-interface AdminFounderManagerProps {
+interface AdminPitchManagerProps {
 	eventId: string;
 	onProjectCreated?: () => void;
 	onProjectUpdated?: () => void;
-	onViewAnalytics?: (founder: Founder) => void;
+	onViewAnalytics?: (founder: Pitch) => void;
 }
 
 interface ApprovedApplication {
@@ -17,14 +17,14 @@ interface ApprovedApplication {
 
 const inputCls = "w-full p-2 bg-white border border-gray-200 text-gray-900 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
 
-export const AdminFounderManager: React.FC<AdminFounderManagerProps> = ({
+export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 	eventId,
 	onProjectCreated,
 	onProjectUpdated,
 	onViewAnalytics,
 }) => {
 	const [tab, setTab] = useState<"create" | "manage">("manage");
-	const [founders, setFounders] = useState<Founder[]>([]);
+	const [founders, setPitchs] = useState<Pitch[]>([]);
 	const [approvedApps, setApprovedApps] = useState<ApprovedApplication[]>([]);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -39,21 +39,21 @@ export const AdminFounderManager: React.FC<AdminFounderManagerProps> = ({
 	});
 
 	const [editingId, setEditingId] = useState<string | null>(null);
-	const [editForm, setEditForm] = useState<UpdateFounderProjectRequest>({});
+	const [editForm, setEditForm] = useState<UpdatePitchRequest>({});
 	const [assigningId, setAssigningId] = useState<string | null>(null);
 
 	useEffect(() => {
-		fetchFounders();
+		fetchPitchs();
 		fetchApprovedApps();
 	}, [eventId]);
 
-	const fetchFounders = async () => {
+	const fetchPitchs = async () => {
 		const { data } = await supabase
-			.from("founders")
+			.from("pitches")
 			.select("*")
 			.eq("event_id", eventId)
 			.order("created_at", { ascending: true });
-		if (data) setFounders(data);
+		if (data) setPitchs(data);
 	};
 
 	const fetchApprovedApps = async () => {
@@ -72,9 +72,9 @@ export const AdminFounderManager: React.FC<AdminFounderManagerProps> = ({
 		setError(null);
 		setSuccessMsg(null);
 
-		const { error: err } = await supabase.from("founders").insert({
+		const { error: err } = await supabase.from("pitches").insert({
 			event_id: eventId,
-			founder_user_id: null,
+			user_id: null,
 			application_id: null,
 			name: createForm.name,
 			bio: createForm.bio || null,
@@ -91,7 +91,7 @@ export const AdminFounderManager: React.FC<AdminFounderManagerProps> = ({
 		else {
 			setSuccessMsg("Pitcher slot created.");
 			setCreateForm({ name: "", bio: "", logo_url: "", pitch_summary: "", pitch_url: "" });
-			await fetchFounders();
+			await fetchPitchs();
 			setTab("manage");
 			onProjectCreated?.();
 		}
@@ -105,7 +105,7 @@ export const AdminFounderManager: React.FC<AdminFounderManagerProps> = ({
 		setError(null);
 
 		const { error: err } = await supabase
-			.from("founders")
+			.from("pitches")
 			.update(editForm)
 			.eq("id", editingId);
 
@@ -113,7 +113,7 @@ export const AdminFounderManager: React.FC<AdminFounderManagerProps> = ({
 		else {
 			setEditingId(null);
 			setEditForm({});
-			await fetchFounders();
+			await fetchPitchs();
 			onProjectUpdated?.();
 		}
 		setIsLoading(false);
@@ -122,11 +122,11 @@ export const AdminFounderManager: React.FC<AdminFounderManagerProps> = ({
 	const handleAssignApplication = async (founderId: string, applicationId: string | null) => {
 		setIsLoading(true);
 		const { error: err } = await supabase
-			.from("founders")
+			.from("pitches")
 			.update({ application_id: applicationId })
 			.eq("id", founderId);
 		if (err) setError(err.message);
-		else await fetchFounders();
+		else await fetchPitchs();
 		setAssigningId(null);
 		setIsLoading(false);
 	};

@@ -162,7 +162,7 @@ async function createTestEventAndFounder(
 	// Create founder
 	{
 		const k = INITIAL_SHARES_IN_POOL * INITIAL_CASH_IN_POOL;
-		const { error } = await adminClient.from("founders").insert({
+		const { error } = await adminClient.from("pitches").insert({
 			id: founderId,
 			event_id: eventId,
 			name: `Test Founder ${founderId.slice(0, 6)}`,
@@ -179,7 +179,7 @@ async function createTestEventAndFounder(
 
 	// Return latest founder row
 	const { data: founderRow, error: fErr } = await adminClient
-		.from("founders")
+		.from("pitches")
 		.select("*")
 		.eq("id", founderId)
 		.single();
@@ -241,16 +241,16 @@ async function cleanupTestArtifacts(
 				await adminClient
 					.from("investor_holdings")
 					.delete()
-					.eq("founder_id", founderId);
+					.eq("pitch_id", founderId);
 			} catch {}
 			try {
 				await adminClient
 					.from("price_history")
 					.delete()
-					.eq("founder_id", founderId);
+					.eq("pitch_id", founderId);
 			} catch {}
 			try {
-				await adminClient.from("founders").delete().eq("id", founderId);
+				await adminClient.from("pitches").delete().eq("id", founderId);
 			} catch {}
 		}
 
@@ -394,7 +394,7 @@ async function run() {
 					},
 					body: JSON.stringify({
 						investor_id: investorId,
-						founder_id: createdFounderId,
+						pitch_id: createdFounderId,
 						shares: t.shares,
 						type: t.type,
 						event_id: createdEventId,
@@ -455,7 +455,7 @@ async function run() {
 
 		// Fetch final founder state
 		const { data: founder, error: fErr } = await admin
-			.from("founders")
+			.from("pitches")
 			.select("*")
 			.eq("id", createdFounderId!)
 			.single();

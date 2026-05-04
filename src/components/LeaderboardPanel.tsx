@@ -1,14 +1,14 @@
 import React, { useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { calculateCurrentPrice, calculateMarketCap } from "../lib/ammEngine";
-import { FounderWithPriceAndUser } from "../types/Founder";
+import { PitchWithPriceAndUser } from "../types/Pitch";
 import { EventInvestorEntry } from "../types/Investor";
 
 interface LeaderboardPanelProps {
 	isOpen: boolean;
 	onClose: () => void;
 	eventId: string;
-	founders?: FounderWithPriceAndUser[];
+	founders?: PitchWithPriceAndUser[];
 	allInvestors?: EventInvestorEntry[];
 	currentInvestorId?: string;
 	eventDate?: string;
@@ -193,7 +193,7 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
 			.map((inv) => {
 				let portfolioValue = 0;
 				inv.holdings.forEach((h) => {
-					portfolioValue += h.shares * (priceMap.get(h.founder_id) ?? 0);
+					portfolioValue += h.shares * (priceMap.get(h.pitch_id) ?? 0);
 				});
 				const totalValue = portfolioValue + inv.current_balance;
 				return {
@@ -216,7 +216,7 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
 				price: calculateCurrentPrice(f),
 				market_cap: calculateMarketCap(f),
 				price_change_percent: (calculateCurrentPrice(f) / 10 - 1) * 100,
-				profile_picture_url: f.founder_user?.profile_picture_url ?? null,
+				profile_picture_url: f.user?.profile_picture_url ?? null,
 			}))
 			.sort((a, b) => b.market_cap - a.market_cap);
 	}, [foundersProp]);

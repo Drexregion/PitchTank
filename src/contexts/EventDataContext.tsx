@@ -6,18 +6,18 @@ import React, {
   useState,
 } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { Event, EventSettings } from "../types/Event";
-import { Founder, FounderUserEmbed, FounderWithPriceAndUser } from "../types/Founder";
+import { Event } from "../types/Event";
+import { Pitch, UserEmbed, PitchWithPriceAndUser } from "../types/Pitch";
 import { Investor, InvestorHolding, InvestorHoldingWithValue, EventInvestorEntry } from "../types/Investor";
 import { calculateCurrentPrice, calculateMarketCap } from "../lib/ammEngine";
 
-export type { FounderUserEmbed, FounderWithPriceAndUser, EventInvestorEntry };
+export type { UserEmbed, PitchWithPriceAndUser, EventInvestorEntry };
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
 export interface PricePoint {
   id: string;
-  founder_id: string;
+  pitch_id: string;
   price: number;
   shares_in_pool: number;
   recorded_at: string;
@@ -27,8 +27,7 @@ export interface PricePoint {
 
 interface EventDataContextValue {
   event: Event | null;
-  eventSettings: EventSettings | null;
-  founders: FounderWithPriceAndUser[];
+  pitches: PitchWithPriceAndUser[];
   investor: Investor | null;
   holdings: InvestorHoldingWithValue[];
   investorId: string | null;
@@ -38,7 +37,6 @@ interface EventDataContextValue {
   priceHistoryMap: Map<string, PricePoint[]>;
   isLoading: boolean;
   error: string | null;
-  // Transition signals for event.tsx UI (countdown timer, toast)
   closingAt: string | null;
   tradingJustStarted: boolean;
   refetchInvestor: () => Promise<void>;
@@ -49,11 +47,11 @@ const EventDataContext = createContext<EventDataContextValue | null>(null);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function enrichFounder(raw: any): FounderWithPriceAndUser {
-  const founder: Founder = {
+function enrichPitch(raw: any): PitchWithPriceAndUser {
+  const pitch: Pitch = {
     id: raw.id,
     event_id: raw.event_id,
-    founder_user_id: raw.founder_user_id,
+    user_id: raw.user_id,
     name: raw.name,
     bio: raw.bio ?? null,
     logo_url: raw.logo_url ?? null,
@@ -67,32 +65,32 @@ function enrichFounder(raw: any): FounderWithPriceAndUser {
     updated_at: raw.updated_at,
   };
   return {
-    ...founder,
-    current_price: calculateCurrentPrice(founder),
-    market_cap: calculateMarketCap(founder),
-    founder_user: raw.founder_users ?? raw.founder_user ?? null,
+    ...pitch,
+    current_price: calculateCurrentPrice(pitch),
+    market_cap: calculateMarketCap(pitch),
+    user: raw.users ?? raw.user ?? null,
   };
 }
 
 function computePortfolioMetrics(
   investor: Investor | null,
   holdings: InvestorHolding[],
-  founders: FounderWithPriceAndUser[]
+  pitches: PitchWithPriceAndUser[]
 ): { holdingsWithValue: InvestorHoldingWithValue[]; portfolioValue: number; roiPercent: number } {
   if (!investor) {
     return { holdingsWithValue: [], portfolioValue: 0, roiPercent: 0 };
   }
 
   const holdingsWithValue: InvestorHoldingWithValue[] = holdings.map((h) => {
-    const founder = founders.find((f) => f.id === h.founder_id);
-    const currentPrice = founder ? founder.current_price : 0;
+    const pitch = pitches.find((p) => p.id === h.pitch_id);
+    const currentPrice = pitch ? pitch.current_price : 0;
     const currentValue = Number(h.shares) * currentPrice;
     const costBasis = Number(h.cost_basis);
     const profitLoss = currentValue - Number(h.shares) * costBasis;
     const roiPercent = costBasis > 0 ? ((currentPrice / costBasis) - 1) * 100 : 0;
     return {
       ...h,
-      founder_name: founder?.name ?? "Unknown",
+      pitch_name: pitch?.name ?? "Unknown",
       current_price: currentPrice,
       current_value: currentValue,
       profit_loss: profitLoss,
@@ -117,8 +115,7 @@ interface EventDataProviderProps {
 
 export function EventDataProvider({ eventId, userId, children }: EventDataProviderProps) {
   const [event, setEvent] = useState<Event | null>(null);
-  const [eventSettings, setEventSettings] = useState<EventSettings | null>(null);
-  const [founders, setFounders] = useState<FounderWithPriceAndUser[]>([]);
+  const [pitches, setPitches] = useState<PitchWithPriceAndUser[]>([]);
   const [investor, setInvestor] = useState<Investor | null>(null);
   const [rawHoldings, setRawHoldings] = useState<InvestorHolding[]>([]);
   const [investorId, setInvestorId] = useState<string | null>(null);
@@ -129,27 +126,28 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
   const [closingAt, setClosingAt] = useState<string | null>(null);
   const [tradingJustStarted, setTradingJustStarted] = useState(false);
 
-  // Refs for use inside realtime callbacks (avoid stale closure over state)
-  const eventSettingsRef = useRef<EventSettings | null>(null);
-  const foundersRef = useRef<FounderWithPriceAndUser[]>([]);
+  const pitchesRef = useRef<PitchWithPriceAndUser[]>([]);
   const prevEventRef = useRef<Event | null>(null);
   const tradingToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ref for simpleMode used in realtime callbacks
+  const simpleModeRef = useRef<boolean>(false);
 
-  useEffect(() => { eventSettingsRef.current = eventSettings; }, [eventSettings]);
-  useEffect(() => { foundersRef.current = founders; }, [founders]);
+  useEffect(() => { pitchesRef.current = pitches; }, [pitches]);
+  useEffect(() => {
+    simpleModeRef.current = event?.hide_leaderboard_and_prices ?? false;
+  }, [event]);
 
-  // Derived portfolio metrics (recomputed whenever investor, rawHoldings, or founders change)
   const { holdingsWithValue, portfolioValue, roiPercent } = computePortfolioMetrics(
     investor,
     rawHoldings,
-    founders
+    pitches
   );
 
   // ── Fetch allInvestors (leaderboard) ─────────────────────────────────────
   const fetchAllInvestors = async () => {
     const { data } = await supabase
       .from("investors")
-      .select("id, name, initial_balance, current_balance, investor_holdings(founder_id, shares)")
+      .select("id, name, initial_balance, current_balance, investor_holdings(pitch_id, shares)")
       .eq("event_id", eventId);
 
     if (data) {
@@ -160,7 +158,7 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
           initial_balance: Number(inv.initial_balance),
           current_balance: Number(inv.current_balance),
           holdings: (inv.investor_holdings ?? []).map((h: any) => ({
-            founder_id: h.founder_id,
+            pitch_id: h.pitch_id,
             shares: Number(h.shares),
           })),
         }))
@@ -172,7 +170,7 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
   const fetchHoldings = async (invId: string) => {
     const { data } = await supabase
       .from("investor_holdings")
-      .select("id, investor_id, founder_id, shares, cost_basis, created_at, updated_at")
+      .select("id, investor_id, pitch_id, shares, cost_basis, created_at, updated_at")
       .eq("investor_id", invId);
     if (data) setRawHoldings(data as InvestorHolding[]);
   };
@@ -182,7 +180,7 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
     if (!investorId) return;
     const { data } = await supabase
       .from("investors")
-      .select("id, event_id, user_id, name, email, initial_balance, current_balance, created_at, updated_at")
+      .select("id, event_id, profile_user_id, name, email, initial_balance, current_balance, created_at, updated_at")
       .eq("id", investorId)
       .maybeSingle();
     if (data) setInvestor(data as Investor);
@@ -197,75 +195,62 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
         setIsLoading(true);
         setError(null);
 
-        // Event + settings in parallel
-        const [eventRes, settingsRes] = await Promise.all([
-          supabase
-            .from("events")
-            .select("id, name, description, start_time, end_time, status, closing_at, schedule, created_at, updated_at")
-            .eq("id", eventId)
-            .maybeSingle(),
-          supabase
-            .from("event_settings")
-            .select("event_id, snapshot_interval_seconds, max_price_history_points, hide_leaderboard_and_prices, created_at, updated_at")
-            .eq("event_id", eventId)
-            .maybeSingle(),
-        ]);
+        const { data: eventData, error: eventError } = await supabase
+          .from("events")
+          .select("id, name, description, start_time, end_time, status, closing_at, schedule, snapshot_interval_seconds, max_price_history_points, hide_leaderboard_and_prices, registration_questions, created_at, updated_at")
+          .eq("id", eventId)
+          .maybeSingle();
 
         if (cancelled) return;
-        if (eventRes.error) throw eventRes.error;
-        if (!eventRes.data) throw new Error("Event not found");
+        if (eventError) throw eventError;
+        if (!eventData) throw new Error("Event not found");
 
-        const loadedEvent = eventRes.data as Event;
+        const loadedEvent = eventData as Event;
         setEvent(loadedEvent);
         prevEventRef.current = loadedEvent;
+        simpleModeRef.current = loadedEvent.hide_leaderboard_and_prices;
         if (loadedEvent.closing_at) setClosingAt(loadedEvent.closing_at);
 
-        const loadedSettings = settingsRes.data as EventSettings | null;
-        setEventSettings(loadedSettings);
-        eventSettingsRef.current = loadedSettings;
-
-        // Founders
-        const { data: foundersData, error: foundersError } = await supabase
-          .from("founders")
+        // Pitches
+        const { data: pitchesData, error: pitchesError } = await supabase
+          .from("pitches")
           .select(
-            "id, event_id, founder_user_id, name, bio, logo_url, pitch_summary, pitch_url, shares_in_pool, cash_in_pool, k_constant, min_reserve_shares, created_at, updated_at, founder_users:founder_user_id(id, first_name, last_name, profile_picture_url, bio)"
+            "id, event_id, user_id, name, bio, logo_url, pitch_summary, pitch_url, shares_in_pool, cash_in_pool, k_constant, min_reserve_shares, created_at, updated_at, users:user_id(id, first_name, last_name, profile_picture_url, bio)"
           )
           .eq("event_id", eventId);
 
         if (cancelled) return;
-        if (foundersError) throw foundersError;
+        if (pitchesError) throw pitchesError;
 
-        const enriched: FounderWithPriceAndUser[] = (foundersData ?? []).map(enrichFounder);
-        const simpleMode = loadedSettings?.hide_leaderboard_and_prices ?? false;
+        const enriched: PitchWithPriceAndUser[] = (pitchesData ?? []).map(enrichPitch);
+        const simpleMode = loadedEvent.hide_leaderboard_and_prices;
         if (!simpleMode) enriched.sort((a, b) => b.market_cap - a.market_cap);
 
-        setFounders(enriched);
-        foundersRef.current = enriched;
+        setPitches(enriched);
+        pitchesRef.current = enriched;
 
-        // Price history — one query for the whole event
-        const founderCount = enriched.length;
-        if (founderCount > 0) {
+        // Price history
+        const pitchCount = enriched.length;
+        if (pitchCount > 0) {
           const { data: historyData } = await supabase
             .from("price_history")
-            .select("id, founder_id, price, shares_in_pool, recorded_at")
+            .select("id, pitch_id, price, shares_in_pool, recorded_at")
             .eq("event_id", eventId)
             .order("recorded_at", { ascending: false })
-            .limit(60 * founderCount);
+            .limit(60 * pitchCount);
 
           if (!cancelled && historyData) {
             const map = new Map<string, PricePoint[]>();
             for (const pt of historyData) {
-              const arr = map.get(pt.founder_id) ?? [];
+              const arr = map.get(pt.pitch_id) ?? [];
               if (arr.length < 60) arr.push(pt as PricePoint);
-              map.set(pt.founder_id, arr);
+              map.set(pt.pitch_id, arr);
             }
-            // Reverse each array so oldest is first (charts expect ascending time)
             map.forEach((arr, k) => map.set(k, arr.reverse()));
             setPriceHistoryMap(map);
           }
         }
 
-        // All investors for leaderboard
         await fetchAllInvestors();
 
         if (!cancelled) setIsLoading(false);
@@ -293,10 +278,19 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
     let cancelled = false;
 
     const fetchInvestor = async () => {
+      // Look up investor via profile_user_id (users.id) — join through users table
+      const { data: userData } = await supabase
+        .from("users")
+        .select("id")
+        .eq("auth_user_id", userId)
+        .maybeSingle();
+
+      if (cancelled || !userData) return;
+
       const { data } = await supabase
         .from("investors")
-        .select("id, event_id, user_id, name, email, initial_balance, current_balance, created_at, updated_at")
-        .eq("user_id", userId)
+        .select("id, event_id, profile_user_id, name, email, initial_balance, current_balance, created_at, updated_at")
+        .eq("profile_user_id", userData.id)
         .eq("event_id", eventId)
         .maybeSingle();
 
@@ -338,16 +332,9 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
           prevEventRef.current = updated;
           setEvent(updated);
 
-          // Closing countdown: closing_at just appeared
-          if (updated.closing_at && !prev?.closing_at) {
-            setClosingAt(updated.closing_at);
-          }
-          // Closing countdown cancelled
-          if (!updated.closing_at && prev?.closing_at) {
-            setClosingAt(null);
-          }
+          if (updated.closing_at && !prev?.closing_at) setClosingAt(updated.closing_at);
+          if (!updated.closing_at && prev?.closing_at) setClosingAt(null);
 
-          // "Trading started" signal
           if (updated.status === "active" && prev?.status !== "active") {
             setTradingJustStarted(true);
             if (tradingToastTimer.current) clearTimeout(tradingToastTimer.current);
@@ -363,38 +350,36 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
     };
   }, [eventId]);
 
-  // ── Channel B: founder updates ────────────────────────────────────────────
+  // ── Channel B: pitch updates ──────────────────────────────────────────────
   useEffect(() => {
     const channel = supabase
-      .channel(`founders_${eventId}`)
+      .channel(`pitches_${eventId}`)
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "founders", filter: `event_id=eq.${eventId}` },
+        { event: "UPDATE", schema: "public", table: "pitches", filter: `event_id=eq.${eventId}` },
         async (payload) => {
           const updatedId: string = (payload.new as any).id;
 
-          // Fetch the single updated founder row
           const { data } = await supabase
-            .from("founders")
+            .from("pitches")
             .select(
-              "id, event_id, founder_user_id, name, bio, logo_url, pitch_summary, pitch_url, shares_in_pool, cash_in_pool, k_constant, min_reserve_shares, created_at, updated_at, founder_users:founder_user_id(id, first_name, last_name, profile_picture_url, bio)"
+              "id, event_id, user_id, name, bio, logo_url, pitch_summary, pitch_url, shares_in_pool, cash_in_pool, k_constant, min_reserve_shares, created_at, updated_at, users:user_id(id, first_name, last_name, profile_picture_url, bio)"
             )
             .eq("id", updatedId)
             .maybeSingle();
 
           if (!data) return;
 
-          const enriched = enrichFounder(data);
-          const simpleMode = eventSettingsRef.current?.hide_leaderboard_and_prices ?? false;
+          const enriched = enrichPitch(data);
+          const simpleMode = simpleModeRef.current;
 
-          setFounders((prev) => {
-            const updated = prev.map((f) => (f.id === enriched.id ? enriched : f));
+          setPitches((prev) => {
+            const updated = prev.map((p) => (p.id === enriched.id ? enriched : p));
             if (!simpleMode) updated.sort((a, b) => b.market_cap - a.market_cap);
-            foundersRef.current = updated;
+            pitchesRef.current = updated;
             return updated;
           });
 
-          // Keep leaderboard fresh after any trade
           fetchAllInvestors();
         }
       )
@@ -412,16 +397,12 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "investors", filter: `id=eq.${investorId}` },
-        (payload) => {
-          setInvestor(payload.new as Investor);
-        }
+        (payload) => { setInvestor(payload.new as Investor); }
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "investor_holdings", filter: `investor_id=eq.${investorId}` },
-        () => {
-          fetchHoldings(investorId);
-        }
+        () => { fetchHoldings(investorId); }
       )
       .subscribe();
 
@@ -439,9 +420,9 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
           const pt = payload.new as PricePoint;
           setPriceHistoryMap((prev) => {
             const next = new Map(prev);
-            const existing = next.get(pt.founder_id) ?? [];
+            const existing = next.get(pt.pitch_id) ?? [];
             const updated = [...existing, pt];
-            next.set(pt.founder_id, updated.length > 60 ? updated.slice(-60) : updated);
+            next.set(pt.pitch_id, updated.length > 60 ? updated.slice(-60) : updated);
             return next;
           });
         }
@@ -459,7 +440,14 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
     const SHARES_POOL_BUDGET = 500000;
     const INITIAL_PRICE_PER_SHARE = 10;
 
-    const currentFounders = foundersRef.current;
+    const currentPitches = pitchesRef.current;
+
+    // Resolve users.id from auth UID
+    const { data: userData } = await supabase
+      .from("users")
+      .select("id")
+      .eq("auth_user_id", userId)
+      .maybeSingle();
 
     const { data: newInvestor, error: investorError } = await supabase
       .from("investors")
@@ -467,23 +455,23 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
         event_id: eventId,
         name: "Investor",
         email: "",
-        user_id: userId,
+        profile_user_id: userData?.id ?? null,
         initial_balance: 1000000,
         current_balance: STARTING_CASH,
       })
-      .select("id, event_id, user_id, name, email, initial_balance, current_balance, created_at, updated_at")
+      .select("id, event_id, profile_user_id, name, email, initial_balance, current_balance, created_at, updated_at")
       .single();
 
     if (investorError) throw investorError;
 
-    if (newInvestor && currentFounders.length > 0) {
-      const sharesPerFounder = Math.floor(
-        SHARES_POOL_BUDGET / currentFounders.length / INITIAL_PRICE_PER_SHARE
+    if (newInvestor && currentPitches.length > 0) {
+      const sharesPerPitch = Math.floor(
+        SHARES_POOL_BUDGET / currentPitches.length / INITIAL_PRICE_PER_SHARE
       );
-      const holdingsToInsert = currentFounders.map((f) => ({
+      const holdingsToInsert = currentPitches.map((p) => ({
         investor_id: newInvestor.id,
-        founder_id: f.id,
-        shares: sharesPerFounder,
+        pitch_id: p.id,
+        shares: sharesPerPitch,
         cost_basis: INITIAL_PRICE_PER_SHARE,
       }));
       const { error: holdingsError } = await supabase
@@ -500,8 +488,7 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
 
   const value: EventDataContextValue = {
     event,
-    eventSettings,
-    founders,
+    pitches,
     investor,
     holdings: holdingsWithValue,
     investorId,

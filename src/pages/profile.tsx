@@ -70,9 +70,9 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({ founderUserId 
 
 	useEffect(() => {
 		supabase
-			.from("founder_users")
+			.from("users")
 			.select("id, first_name, last_name, bio, profile_picture_url, linkedin_url, twitter_url, role")
-			.eq("id", founderUserId)
+			.eq("auth_user_id", founderUserId)
 			.maybeSingle()
 			.then(({ data }) => {
 				if (data) {
@@ -274,7 +274,7 @@ const ProfilePage: React.FC = () => {
 	useEffect(() => {
 		if (!user) return;
 		supabase
-			.from("founder_users")
+			.from("users")
 			.select("id, first_name, last_name, bio, profile_picture_url, linkedin_url, twitter_url, role")
 			.eq("auth_user_id", user.id)
 			.maybeSingle()
@@ -305,7 +305,7 @@ const ProfilePage: React.FC = () => {
 		(async () => {
 			const { data: app, error: appError } = await supabase
 				.from("applications")
-				.select("*, event:events(name), questions:event_questions(id, question_text, question_type)")
+				.select("*, event:events(name)")
 				.eq("claim_token", claimId)
 				.maybeSingle();
 
@@ -315,9 +315,16 @@ const ProfilePage: React.FC = () => {
 				return;
 			}
 
+			// Resolve users.id for the FK
+			const { data: userRow } = await supabase
+				.from("users")
+				.select("id")
+				.eq("auth_user_id", user.id)
+				.maybeSingle();
+
 			const { error: updateError } = await supabase
 				.from("applications")
-				.update({ claimed_by_auth_user_id: user.id })
+				.update({ claimed_by_user_id: userRow?.id ?? null })
 				.eq("claim_token", claimId);
 
 			if (updateError) {
@@ -329,18 +336,13 @@ const ProfilePage: React.FC = () => {
 			setApplication(app);
 			setClaimed(true);
 
-			// Auto-link any founder project assigned to this application
-			const { data: founderRow } = await supabase
-				.from("founder_users")
-				.select("id")
-				.eq("auth_user_id", user.id)
-				.maybeSingle();
-			if (founderRow) {
+			// Auto-link any pitch assigned to this application
+			if (userRow) {
 				await supabase
-					.from("founders")
-					.update({ founder_user_id: founderRow.id })
+					.from("pitches")
+					.update({ user_id: userRow.id })
 					.eq("application_id", app.id)
-					.is("founder_user_id", null);
+					.is("user_id", null);
 			}
 
 			const questions: { id: string; question_text: string; question_type: string }[] = app.questions ?? [];
@@ -378,16 +380,22 @@ const ProfilePage: React.FC = () => {
 	// Load existing linked application
 	useEffect(() => {
 		if (!user || claimId || application) return;
-		supabase
-			.from("applications")
-			.select("*, event:events(name), questions:event_questions(id, question_text, question_type)")
-			.eq("claimed_by_auth_user_id", user.id)
-			.order("submitted_at", { ascending: false })
-			.limit(1)
-			.maybeSingle()
-			.then(({ data }) => {
-				if (data) setApplication(data);
-			});
+		(async () => {
+			const { data: userRow } = await supabase
+				.from("users")
+				.select("id")
+				.eq("auth_user_id", user.id)
+				.maybeSingle();
+			if (!userRow) return;
+			const { data } = await supabase
+				.from("applications")
+				.select("*, event:events(name, registration_questions)")
+				.eq("claimed_by_user_id", userRow.id)
+				.order("submitted_at", { ascending: false })
+				.limit(1)
+				.maybeSingle();
+			if (data) setApplication(data);
+		})();
 	}, [user, claimId, application]);
 
 	const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -425,7 +433,7 @@ const ProfilePage: React.FC = () => {
 		setIsSaving(true);
 		setSaveMsg(null);
 
-		const { error } = await supabase.from("founder_users").upsert(
+		const { error } = await supabase.from("users").upsert(
 			{
 				auth_user_id: user.id,
 				email: user.email ?? "",
@@ -453,8 +461,8 @@ const ProfilePage: React.FC = () => {
 		setIsSaving(false);
 	};
 
-	const profileUrl = profile.id
-		? `${window.location.origin}/profile/${profile.id}`
+	const profileUrl = user
+		? `${window.location.origin}/profile/${user.id}`
 		: null;
 
 	if (authLoading) {

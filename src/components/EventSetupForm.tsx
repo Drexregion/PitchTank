@@ -66,52 +66,41 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 	// Load existing data in edit mode
 	useEffect(() => {
 		if (!eventId) return;
-		Promise.all([
-			supabase.from("events").select("*").eq("id", eventId).single(),
-			supabase.from("event_settings").select("*").eq("event_id", eventId).single(),
-			supabase
-				.from("event_questions")
-				.select("*")
-				.eq("event_id", eventId)
-				.order("sort_order", { ascending: true }),
-		]).then(([eventRes, settingsRes, questionsRes]) => {
-			if (eventRes.data) {
-				const ev = eventRes.data;
-				setEventName(ev.name ?? "");
-				setEventDescription(ev.description ?? "");
-				setStartTime(toDatetimeLocal(ev.start_time));
-				setEndTime(toDatetimeLocal(ev.end_time));
-			}
-			if (settingsRes.data) {
-				setHideLeaderboardAndPrices(
-					settingsRes.data.hide_leaderboard_and_prices ?? false
-				);
-			}
-			if (questionsRes.data) {
-				setQuestions(
-					questionsRes.data.map((q: any) => ({
-						id: q.id,
-						question_text: q.question_text,
-						description: q.description ?? "",
-						question_type: q.question_type,
-						required: q.required,
-					}))
-				);
-			}
-			if (eventRes.data) {
-				const raw: ScheduleItem[] = eventRes.data.schedule ?? [];
-				setScheduleItems(
-					raw.map((item) => ({
-						id: crypto.randomUUID(),
-						title: item.title,
-						description: item.description ?? "",
-						time: item.time ?? "",
-						duration: item.duration ?? "",
-					}))
-				);
-			}
-			setIsLoadingData(false);
-		});
+		supabase
+			.from("events")
+			.select("*")
+			.eq("id", eventId)
+			.single()
+			.then(({ data: ev }) => {
+				if (ev) {
+					setEventName(ev.name ?? "");
+					setEventDescription(ev.description ?? "");
+					setStartTime(toDatetimeLocal(ev.start_time));
+					setEndTime(toDatetimeLocal(ev.end_time));
+					setHideLeaderboardAndPrices(ev.hide_leaderboard_and_prices ?? false);
+					const rawQ: any[] = ev.registration_questions ?? [];
+					setQuestions(
+						rawQ.map((q: any) => ({
+							id: q.id,
+							question_text: q.question_text,
+							description: q.description ?? "",
+							question_type: q.question_type,
+							required: q.required,
+						}))
+					);
+					const raw: ScheduleItem[] = ev.schedule ?? [];
+					setScheduleItems(
+						raw.map((item) => ({
+							id: crypto.randomUUID(),
+							title: item.title,
+							description: item.description ?? "",
+							time: item.time ?? "",
+							duration: item.duration ?? "",
+						}))
+					);
+				}
+				setIsLoadingData(false);
+			});
 	}, [eventId]);
 
 	const addQuestion = () => {
@@ -204,6 +193,15 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 						start_time: startTime,
 						end_time: endTime,
 						schedule: serializeSchedule(),
+						hide_leaderboard_and_prices: hideLeaderboardAndPrices,
+						registration_questions: questions.map((q, idx) => ({
+							id: q.id,
+							question_text: q.question_text,
+							description: q.description || null,
+							question_type: q.question_type,
+							required: q.required,
+							sort_order: idx,
+						})),
 					})
 					.eq("id", eventId)
 					.select()
@@ -211,36 +209,6 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 
 				if (eventError) throw eventError;
 				if (!eventData) throw new Error("Failed to update event");
-
-				const { error: settingsError } = await supabase
-					.from("event_settings")
-					.update({ hide_leaderboard_and_prices: hideLeaderboardAndPrices })
-					.eq("event_id", eventId);
-
-				if (settingsError) throw settingsError;
-
-				// Replace questions: delete all then re-insert current list
-				const { error: deleteError } = await supabase
-					.from("event_questions")
-					.delete()
-					.eq("event_id", eventId);
-				if (deleteError) throw deleteError;
-
-				if (questions.length > 0) {
-					const { error: questionsError } = await supabase
-						.from("event_questions")
-						.insert(
-							questions.map((q, idx) => ({
-								event_id: eventId,
-								question_text: q.question_text,
-								description: q.description || null,
-								question_type: q.question_type,
-								required: q.required,
-								sort_order: idx,
-							}))
-						);
-					if (questionsError) throw questionsError;
-				}
 
 				setSuccess(`Event "${eventName}" updated successfully!`);
 				if (onEventUpdated) onEventUpdated(eventData);
@@ -255,38 +223,23 @@ export const EventSetupForm: React.FC<EventSetupFormProps> = ({
 						end_time: endTime,
 						status: "draft",
 						schedule: serializeSchedule(),
+						hide_leaderboard_and_prices: hideLeaderboardAndPrices,
+						snapshot_interval_seconds: 60,
+						max_price_history_points: 10000,
+						registration_questions: questions.map((q, idx) => ({
+							id: q.id,
+							question_text: q.question_text,
+							description: q.description || null,
+							question_type: q.question_type,
+							required: q.required,
+							sort_order: idx,
+						})),
 					})
 					.select()
 					.single();
 
 				if (eventError) throw eventError;
 				if (!eventData) throw new Error("Failed to create event");
-
-				const { error: settingsError } = await supabase
-					.from("event_settings")
-					.insert({
-						event_id: eventData.id,
-						snapshot_interval_seconds: 60,
-						max_price_history_points: 10000,
-						hide_leaderboard_and_prices: hideLeaderboardAndPrices,
-					});
-				if (settingsError) throw settingsError;
-
-				if (questions.length > 0) {
-					const { error: questionsError } = await supabase
-						.from("event_questions")
-						.insert(
-							questions.map((q, idx) => ({
-								event_id: eventData.id,
-								question_text: q.question_text,
-								description: q.description || null,
-								question_type: q.question_type,
-								required: q.required,
-								sort_order: idx,
-							}))
-						);
-					if (questionsError) throw questionsError;
-				}
 
 				setSuccess(`Event "${eventName}" created successfully!`);
 				setEventName("");
