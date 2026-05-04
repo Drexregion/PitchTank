@@ -1560,7 +1560,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 			<ScannerModal
 				isOpen={showScanner}
 				onClose={() => setShowScanner(false)}
-				profileUrl={founderUserId ? `${window.location.origin}/profile?id=${founderUserId}` : `${window.location.origin}/profile`}
+				profileUrl={founderUserId ? `${window.location.origin}/profile/${founderUserId}` : ""}
 				profileName={displayName ?? undefined}
 			/>
 			<ChatPanel isOpen={showChat} onClose={() => setShowChat(false)} eventId={eventId} userId={user?.id ?? null} displayName={displayName ?? "Guest"} />
