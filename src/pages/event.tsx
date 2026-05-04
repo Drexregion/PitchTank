@@ -10,6 +10,8 @@ import { FounderMarketCapChart } from "../components/FounderMarketCapChart";
 import { SparklineWithButton } from "../components/SparklineChart";
 import { PortfolioChart } from "../components/PortfolioChart";
 import { ChatPanel } from "../components/ChatPanel";
+import { ConversationsPanel } from "../components/ConversationsPanel";
+import { DMPanel } from "../components/DMPanel";
 import { SchedulePanel } from "../components/SchedulePanel";
 import { SettingsPanel } from "../components/SettingsPanel";
 import { useAuth } from "../contexts/AuthContext";
@@ -728,7 +730,10 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const [_showSortOptions, setShowSortOptions] = useState(false);
 	const [expandedPitchId, setExpandedPitchId] = useState<string | null>(null);
 	const [showPortfolioDropdown, setShowPortfolioDropdown] = useState(false);
+	const [showConversations, setShowConversations] = useState(false);
 	const [showChat, setShowChat] = useState(false);
+	const [activeDMPeer, setActiveDMPeer] = useState<{ id: string; name: string } | null>(null);
+	const [totalUnreadDMs, setTotalUnreadDMs] = useState(0);
 	const [showSchedule, setShowSchedule] = useState(false);
 	const [showSettings, setShowSettings] = useState(false);
 	const portfolioDropdownRef = useRef<HTMLDivElement>(null);
@@ -747,6 +752,35 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				});
 		});
 	}, [user?.id]);
+
+	// Track unread DM count for badge on chat button
+	useEffect(() => {
+		if (!user?.id || !eventId) return;
+		import("../lib/supabaseClient").then(({ supabase }) => {
+			const fetchUnread = () =>
+				supabase
+					.from("direct_messages")
+					.select("id", { count: "exact", head: true })
+					.eq("event_id", eventId)
+					.eq("recipient_id", user.id)
+					.eq("is_read", false)
+					.then(({ count }) => setTotalUnreadDMs(count ?? 0));
+
+			fetchUnread();
+
+			const channel = supabase
+				.channel(`dm_unread_${eventId}_${user.id}`)
+				.on("postgres_changes", {
+					event: "*",
+					schema: "public",
+					table: "direct_messages",
+					filter: `event_id=eq.${eventId}`,
+				}, () => fetchUnread())
+				.subscribe();
+
+			return () => { supabase.removeChannel(channel); };
+		});
+	}, [user?.id, eventId]);
 
 	// Closing countdown UI state (driven by context's closingAt signal)
 	const [showTradingClosedNotification, setShowTradingClosedNotification] =
@@ -820,7 +854,9 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	useEffect(() => {
 		const anyOpen =
 			showLeaderboard ||
+			showConversations ||
 			showChat ||
+			!!activeDMPeer ||
 			showSchedule ||
 			showSettings ||
 			showQRModal ||
@@ -835,7 +871,9 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 		};
 	}, [
 		showLeaderboard,
+		showConversations,
 		showChat,
+		activeDMPeer,
 		showSchedule,
 		showSettings,
 		showQRModal,
@@ -1961,9 +1999,22 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 					<span className="text-[9px] font-medium">Leaderboard</span>
 				</button>
 				<button
-					onClick={() => setShowChat(true)}
-					className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-full transition-all ${showChat ? "text-cyan-400" : "text-white/35 hover:text-white/60"}`}
+					onClick={() => setShowConversations(true)}
+					className={`relative flex flex-col items-center gap-0.5 px-4 py-2 rounded-full transition-all ${showConversations || showChat || activeDMPeer ? "text-cyan-400" : "text-white/35 hover:text-white/60"}`}
 				>
+					{totalUnreadDMs > 0 && (
+						<span
+							className="absolute -top-0.5 right-2 min-w-[16px] h-4 rounded-full flex items-center justify-center text-white font-black tabular-nums"
+							style={{
+								background: "#6366f1",
+								fontSize: 9,
+								padding: "0 3px",
+								boxShadow: "0 0 8px rgba(99,102,241,0.7)",
+							}}
+						>
+							{totalUnreadDMs > 99 ? "99+" : totalUnreadDMs}
+						</span>
+					)}
 					<svg
 						className="w-5 h-5"
 						fill="none"
@@ -2521,6 +2572,12 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				schedule={event?.schedule ?? []}
 				eventStart={event?.start_time ?? ""}
 				eventEnd={event?.end_time ?? ""}
+				eventId={eventId}
+				currentUserId={profileUserId}
+				onStartDM={user?.id ? (peerId, peerName) => {
+					setShowSchedule(false);
+					setActiveDMPeer({ id: peerId, name: peerName });
+				} : undefined}
 			/>
 			<SettingsPanel
 				isOpen={showSettings}
@@ -2550,12 +2607,45 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				}
 				profileName={displayName ?? undefined}
 			/>
+			<ConversationsPanel
+				isOpen={showConversations}
+				onClose={() => setShowConversations(false)}
+				eventId={eventId}
+				userId={user?.id ?? ""}
+				displayName={displayName ?? "Guest"}
+				publicOnlineCount={0}
+				onOpenPublicChat={() => {
+					setShowConversations(false);
+					setShowChat(true);
+				}}
+				onOpenDM={(peerId, peerName) => {
+					setActiveDMPeer({ id: peerId, name: peerName });
+					setShowConversations(false);
+				}}
+			/>
 			<ChatPanel
 				isOpen={showChat}
 				onClose={() => setShowChat(false)}
 				eventId={eventId}
 				userId={user?.id ?? null}
 				displayName={displayName ?? "Guest"}
+				onStartDM={user?.id ? (peerId, peerName) => {
+					setShowChat(false);
+					setActiveDMPeer({ id: peerId, name: peerName });
+				} : undefined}
+			/>
+			<DMPanel
+				isOpen={!!activeDMPeer}
+				onClose={() => setActiveDMPeer(null)}
+				onBack={() => {
+					setActiveDMPeer(null);
+					setShowConversations(true);
+				}}
+				eventId={eventId}
+				userId={user?.id ?? ""}
+				displayName={displayName ?? "Guest"}
+				peerId={activeDMPeer?.id ?? ""}
+				peerName={activeDMPeer?.name ?? ""}
 			/>
 			<LeaderboardPanel
 				isOpen={showLeaderboard}
