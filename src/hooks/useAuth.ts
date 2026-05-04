@@ -2,18 +2,16 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { Session, User } from "@supabase/supabase-js";
 
-type UserWithRoles = {
+type AuthUser = {
 	id: string;
 	email?: string;
-	roles: { role: string; event_id: string }[];
 };
 
 type AuthHookReturn = {
 	session: Session | null;
-	user: UserWithRoles | null;
+	user: AuthUser | null;
 	isLoading: boolean;
 	isAdmin: boolean;
-	isInvestor: boolean;
 	error: string | null;
 	signIn: (email: string, password: string) => Promise<void>;
 	signUp: (email: string, password: string, name: string) => Promise<{ user: User | null; error: Error | null }>;
@@ -22,15 +20,14 @@ type AuthHookReturn = {
 
 export function useAuth(): AuthHookReturn {
 	const [session, setSession] = useState<Session | null>(null);
-	const [user, setUser] = useState<UserWithRoles | null>(null);
+	const [user, setUser] = useState<AuthUser | null>(null);
 	const [isLoading, setIsLoading] = useState<boolean>(true);
 	const [isAdmin, setIsAdmin] = useState<boolean>(false);
 	const [error, setError] = useState<string | null>(null);
 
-	const makeUser = (u: { id: string; email?: string }): UserWithRoles => ({
+	const makeUser = (u: { id: string; email?: string }): AuthUser => ({
 		id: u.id,
 		email: u.email,
-		roles: [],
 	});
 
 	const fetchAdminStatus = async (authUserId: string) => {
@@ -125,5 +122,5 @@ export function useAuth(): AuthHookReturn {
 		}
 	};
 
-	return { session, user, isLoading, isAdmin, isInvestor: true, error, signIn, signUp, signOut };
+	return { session, user, isLoading, isAdmin, error, signIn, signUp, signOut };
 }

@@ -1,11 +1,6 @@
-import { Founder } from '../types/Founder';
+import { Pitch } from '../types/Pitch';
 
-/**
- * Calculates the current price of a founder's shares
- * @param founder The founder object with shares_in_pool and cash_in_pool
- * @returns Current price (capped at $100)
- */
-export function calculateCurrentPrice(founder: Founder): number {
+export function calculateCurrentPrice(founder: Pitch): number {
   const sharesInPool = Number(founder.shares_in_pool);
   const cashInPool = Number(founder.cash_in_pool);
   
@@ -13,25 +8,13 @@ export function calculateCurrentPrice(founder: Founder): number {
   return Math.min(cashInPool / sharesInPool, 100); // Cap price at $100
 }
 
-/**
- * Calculates the market capitalization of a founder
- * @param founder The founder object
- * @param initialShares Initial shares in the pool (default 100,000)
- * @returns Market capitalization value
- */
-export function calculateMarketCap(founder: Founder, initialShares: number = 100000): number {
+export function calculateMarketCap(founder: Pitch, initialShares: number = 100000): number {
   const currentPrice = calculateCurrentPrice(founder);
   const sharesIssued = initialShares - Number(founder.shares_in_pool);
   return currentPrice * sharesIssued;
 }
 
-/**
- * Simulates a buy trade to calculate the cost without executing it
- * @param founder Current founder state
- * @param shares Number of shares to buy
- * @returns Calculated cost and resulting price
- */
-export function simulateBuyTrade(founder: Founder, shares: number): { 
+export function simulateBuyTrade(founder: Pitch, shares: number): {
   cost: number; 
   resultingPrice: number;
   error?: string;
@@ -69,13 +52,7 @@ export function simulateBuyTrade(founder: Founder, shares: number): {
   }
 }
 
-/**
- * Simulates a sell trade to calculate the payout without executing it
- * @param founder Current founder state
- * @param shares Number of shares to sell
- * @returns Calculated payout and resulting price
- */
-export function simulateSellTrade(founder: Founder, shares: number): { 
+export function simulateSellTrade(founder: Pitch, shares: number): {
   payout: number; 
   resultingPrice: number;
   error?: string;

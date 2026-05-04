@@ -41,11 +41,9 @@ export interface Event {
   schedule?: ScheduleItem[];
   judges?: Judge[];
   sponsors?: Sponsor[];
-  // Merged from event_settings
   snapshot_interval_seconds: number;
   max_price_history_points: number;
   hide_leaderboard_and_prices: boolean;
-  // Merged from event_questions
   registration_questions: EventQuestion[];
 }
 

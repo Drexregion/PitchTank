@@ -32,3 +32,6 @@ export interface UserEmbed {
 export interface PitchWithPriceAndUser extends PitchWithPrice {
   user: UserEmbed | null;
 }
+
+export type CreatePitchRequest = Omit<Pitch, 'id' | 'created_at' | 'updated_at'>;
+export type UpdatePitchRequest = Partial<Omit<Pitch, 'id' | 'created_at' | 'updated_at' | 'event_id'>>;

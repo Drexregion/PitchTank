@@ -109,11 +109,23 @@ UPDATE applications a
   WHERE u.auth_user_id = a.claimed_by_auth_user_id;
 
 -- ----------------------------------------------------------------
--- 9. Drop merged/dead tables
+-- 9. Drop all policies that reference user_roles before dropping it
 -- ----------------------------------------------------------------
+DROP POLICY IF EXISTS trades_view_own              ON trades;
+DROP POLICY IF EXISTS trades_admin_view            ON trades;
+DROP POLICY IF EXISTS trades_view_own              ON trades_old;
+DROP POLICY IF EXISTS trades_admin_view            ON trades_old;
+DROP POLICY IF EXISTS investor_holdings_view_own   ON investor_holdings;
+DROP POLICY IF EXISTS investor_holdings_admin_view ON investor_holdings;
+DROP POLICY IF EXISTS events_view_participants     ON events;
+DROP POLICY IF EXISTS founders_view_participants   ON pitches;
+DROP POLICY IF EXISTS investors_view_event         ON investors;
+DROP POLICY IF EXISTS price_history_read_event_scope ON price_history;
+
+-- Drop merged/dead tables
 DROP TABLE IF EXISTS event_settings;
 DROP TABLE IF EXISTS event_questions;
-DROP TABLE IF EXISTS user_roles;
+DROP TABLE IF EXISTS user_roles CASCADE;
 
 -- ----------------------------------------------------------------
 -- 10. Update is_platform_admin() to use users.is_admin
@@ -127,6 +139,19 @@ RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE AS $$
   );
 $$;
 
+-- Helper: is the current user enrolled as an investor in a given event?
+-- SECURITY DEFINER bypasses RLS on investors, avoiding infinite recursion
+-- in the investors_view_event policy.
+CREATE OR REPLACE FUNCTION is_enrolled_in_event(p_event_id uuid)
+RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.investors i
+    JOIN public.users u ON u.id = i.profile_user_id
+    WHERE i.event_id = p_event_id
+      AND u.auth_user_id = auth.uid()
+  );
+$$;
+
 -- ----------------------------------------------------------------
 -- 11. Drop the admin-seeding trigger (user_roles is gone)
 -- ----------------------------------------------------------------
@@ -137,16 +162,10 @@ DROP FUNCTION IF EXISTS _seed_admin_roles_for_event();
 -- 12. Update RLS policies that relied on user_roles
 -- ----------------------------------------------------------------
 
--- events: participant view (was: user has a role in event)
+-- events: participant view
 DROP POLICY IF EXISTS events_view_participants ON events;
 CREATE POLICY events_view_participants ON events FOR SELECT USING (
-  EXISTS (
-    SELECT 1 FROM investors
-    WHERE event_id = events.id
-      AND profile_user_id IN (
-        SELECT id FROM users WHERE auth_user_id = auth.uid()
-      )
-  )
+  is_enrolled_in_event(id)
 );
 
 -- pitches: admin manage (rename from founders_admin_manage)
@@ -169,29 +188,14 @@ CREATE POLICY pitches_public_read ON pitches FOR SELECT USING (
 -- pitches: participant view
 DROP POLICY IF EXISTS founders_view_participants ON pitches;
 CREATE POLICY pitches_view_participants ON pitches FOR SELECT USING (
-  EXISTS (
-    SELECT 1 FROM investors
-    WHERE event_id = pitches.event_id
-      AND profile_user_id IN (
-        SELECT id FROM users WHERE auth_user_id = auth.uid()
-      )
-  )
+  is_enrolled_in_event(event_id)
 );
 
--- investors: event view (was: user has role in same event)
+-- investors: event view (own row OR enrolled in same event for leaderboard)
 DROP POLICY IF EXISTS investors_view_event ON investors;
 CREATE POLICY investors_view_event ON investors FOR SELECT USING (
-  -- own row
-  profile_user_id IN (SELECT id FROM users WHERE auth_user_id = auth.uid())
-  OR
-  -- any other investor in the same event (leaderboard)
-  EXISTS (
-    SELECT 1 FROM investors i2
-    WHERE i2.event_id = investors.event_id
-      AND i2.profile_user_id IN (
-        SELECT id FROM users WHERE auth_user_id = auth.uid()
-      )
-  )
+  profile_user_id IN (SELECT id FROM public.users WHERE auth_user_id = auth.uid())
+  OR is_enrolled_in_event(event_id)
 );
 
 -- investor_holdings: update investor_write policy (investor_id unchanged)
@@ -207,14 +211,7 @@ CREATE POLICY price_history_read_event_scope ON price_history FOR SELECT USING (
     WHERE e.id = price_history.event_id
       AND e.status = 'active'
   )
-  OR
-  EXISTS (
-    SELECT 1 FROM investors i
-    WHERE i.event_id = price_history.event_id
-      AND i.profile_user_id IN (
-        SELECT id FROM users WHERE auth_user_id = auth.uid()
-      )
-  )
+  OR is_enrolled_in_event(event_id)
   OR is_platform_admin()
 );
 

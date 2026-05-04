@@ -734,7 +734,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const [showSchedule, setShowSchedule] = useState(false);
 	const [showSettings, setShowSettings] = useState(false);
 	const portfolioDropdownRef = useRef<HTMLDivElement>(null);
-	const [founderUserId, setFounderUserId] = useState<string | null>(null);
+	const [profileUserId, setFounderUserId] = useState<string | null>(null);
 
 	useEffect(() => {
 		if (!user?.id) return;
@@ -749,8 +749,6 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				});
 		});
 	}, [user?.id]);
-
-	console.log(founderUserId);
 
 	// Closing countdown UI state (driven by context's closingAt signal)
 	const [showTradingClosedNotification, setShowTradingClosedNotification] =
@@ -969,7 +967,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 		setShowFounderModal(true);
 	};
 
-	const getOwnedShares = (founderId: string) => {
+	const getOwnedShares = (pitchId: string) => {
 		const holding = holdings.find((h) => h.pitch_id === pitchId);
 		return holding ? holding.shares : 0;
 	};
@@ -2562,8 +2560,8 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				isOpen={showScanner}
 				onClose={() => setShowScanner(false)}
 				profileUrl={
-					founderUserId
-						? `${window.location.origin}/profile/${founderUserId}`
+					profileUserId
+						? `${window.location.origin}/profile/${profileUserId}`
 						: ""
 				}
 				profileName={displayName ?? undefined}

@@ -1,22 +1,18 @@
 import React, { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
-import {
-	Founder,
-	CreateFounderProjectRequest,
-	UpdateFounderProjectRequest,
-} from "../types/Founder";
+import { Pitch, CreatePitchRequest, UpdatePitchRequest } from "../types/Pitch";
 import { Event } from "../types/Event";
 
-interface FounderProjectManagerProps {
+interface PitchProjectManagerProps {
 	founderUserId: string;
 	events: Event[];
-	existingProjects?: Founder[];
+	existingProjects?: Pitch[];
 	onProjectCreated?: () => void;
 	onProjectUpdated?: () => void;
 	className?: string;
 }
 
-export const FounderProjectManager: React.FC<FounderProjectManagerProps> = ({
+export const PitchProjectManager: React.FC<PitchProjectManagerProps> = ({
 	founderUserId,
 	events,
 	existingProjects = [],
@@ -30,7 +26,7 @@ export const FounderProjectManager: React.FC<FounderProjectManagerProps> = ({
 	const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
 	// Create project form state
-	const [createForm, setCreateForm] = useState<CreateFounderProjectRequest>({
+	const [createForm, setCreateForm] = useState<CreatePitchRequest>({
 		event_id: "",
 		user_id: founderUserId,
 		name: "",
@@ -45,8 +41,8 @@ export const FounderProjectManager: React.FC<FounderProjectManagerProps> = ({
 	});
 
 	// Edit project state
-	const [editingProject, setEditingProject] = useState<Founder | null>(null);
-	const [editForm, setEditForm] = useState<UpdateFounderProjectRequest>({});
+	const [editingProject, setEditingProject] = useState<Pitch | null>(null);
+	const [editForm, setEditForm] = useState<UpdatePitchRequest>({});
 
 	const handleCreateProject = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -153,7 +149,7 @@ export const FounderProjectManager: React.FC<FounderProjectManagerProps> = ({
 		}
 	};
 
-	const startEditing = (project: Founder) => {
+	const startEditing = (project: Pitch) => {
 		setEditingProject(project);
 		setEditForm({
 			name: project.name,
@@ -171,7 +167,7 @@ export const FounderProjectManager: React.FC<FounderProjectManagerProps> = ({
 	};
 
 	const handleInputChange =
-		(field: keyof CreateFounderProjectRequest) =>
+		(field: keyof CreatePitchRequest) =>
 		(
 			e: React.ChangeEvent<
 				HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
@@ -184,7 +180,7 @@ export const FounderProjectManager: React.FC<FounderProjectManagerProps> = ({
 		};
 
 	const handleEditInputChange =
-		(field: keyof UpdateFounderProjectRequest) =>
+		(field: keyof UpdatePitchRequest) =>
 		(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
 			setEditForm((prev) => ({
 				...prev,

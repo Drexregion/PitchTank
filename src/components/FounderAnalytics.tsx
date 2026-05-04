@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { usePriceHistory } from "../hooks/usePriceHistory";
-import { Founder } from "../types/Founder";
+import { Pitch } from "../types/Pitch";
 import { Trade } from "../types/Trade";
 
-interface FounderAnalyticsProps {
-	founder: Founder;
+interface PitchAnalyticsProps {
+	founder: Pitch;
 }
 
 interface TradeWithNote extends Trade {
@@ -13,14 +13,14 @@ interface TradeWithNote extends Trade {
 	priceAtTime: number;
 }
 
-export const FounderAnalytics: React.FC<FounderAnalyticsProps> = ({
+export const PitchAnalytics: React.FC<PitchAnalyticsProps> = ({
 	founder,
 }) => {
 	const {
 		points,
 		isLoading: priceLoading,
 		error: priceError,
-	} = usePriceHistory({ founderId: founder.id, maxPoints: 1000 });
+	} = usePriceHistory({ pitchId: founder.id, maxPoints: 1000 });
 	const [trades, setTrades] = useState<TradeWithNote[]>([]);
 	const [selectedTrade, setSelectedTrade] = useState<TradeWithNote | null>(
 		null
