@@ -23,6 +23,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 				<Route path="/apply/:eventId" element={<ApplyPage />} />
 				<Route path="/admin/events/:eventId/applications" element={<AdminEventApplicationsPage />} />
 				<Route path="/profile" element={<ProfilePage />} />
+			<Route path="/profile/:profileId" element={<ProfilePage />} />
 			</Routes>
 		</BrowserRouter>
 	</React.StrictMode>
