@@ -8,6 +8,7 @@ import { AdminPitchAnalytics } from "../components/AdminFounderAnalytics";
 import { useAuth } from "../contexts/AuthContext";
 import { Event } from "../types/Event";
 import { Pitch } from "../types/Pitch";
+import { AdminServiceMonitor } from "../components/AdminServiceMonitor";
 
 const CountdownDisplay: React.FC<{ target: string }> = ({ target }) => {
 	const [secs, setSecs] = useState(() =>
@@ -30,6 +31,7 @@ const AdminPage: React.FC = () => {
 	const [isLoadingEvents, setIsLoadingEvents] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
 	const [activeView, setActiveView] = useState<"list" | "new" | "edit">("list");
+	const [activeTab, setActiveTab] = useState<"events" | "monitor">("events");
 	const [editingEventId, setEditingEventId] = useState<string | null>(null);
 	const { user, isAdmin, isLoading } = useAuth();
 	const location = useLocation();
@@ -299,7 +301,7 @@ const AdminPage: React.FC = () => {
 				<div className="flex justify-between items-center mb-8">
 					<h1 className="text-3xl font-bold">Admin Dashboard</h1>
 					<div className="flex space-x-4">
-						{activeView === "list" && (
+						{activeTab === "events" && activeView === "list" && (
 							<button
 								onClick={() => setActiveView("new")}
 								className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
@@ -307,7 +309,7 @@ const AdminPage: React.FC = () => {
 								Create New Event
 							</button>
 						)}
-						{(activeView === "new" || activeView === "edit") && (
+						{activeTab === "events" && (activeView === "new" || activeView === "edit") && (
 							<button
 								onClick={() => { setActiveView("list"); setEditingEventId(null); }}
 								className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg"
@@ -319,23 +321,35 @@ const AdminPage: React.FC = () => {
 				</div>
 
 				{/* Navigation Tabs */}
-				<div className="mb-6">
+				<div className="mb-6 border-b border-gray-200">
 					<nav className="flex space-x-8">
 						<button
-							onClick={() => setActiveView("list")}
+							onClick={() => { setActiveTab("events"); if (activeView !== "new" && activeView !== "edit") setActiveView("list"); }}
 							className={`py-2 px-1 border-b-2 font-medium text-sm ${
-								activeView === "list"
+								activeTab === "events"
 									? "border-blue-500 text-blue-600"
 									: "border-transparent text-gray-500 hover:text-gray-700"
 							}`}
 						>
 							Events
 						</button>
+						<button
+							onClick={() => setActiveTab("monitor")}
+							className={`py-2 px-1 border-b-2 font-medium text-sm ${
+								activeTab === "monitor"
+									? "border-blue-500 text-blue-600"
+									: "border-transparent text-gray-500 hover:text-gray-700"
+							}`}
+						>
+							Service Monitor
+						</button>
 					</nav>
 				</div>
 
-				{/* Tab Content */}
-				{activeView === "new" ? (
+				{/* Monitor Tab */}
+				{activeTab === "monitor" ? (
+					<AdminServiceMonitor />
+				) : activeView === "new" ? (
 					<EventSetupForm onEventCreated={handleEventCreated} />
 				) : activeView === "edit" && editingEventId ? (
 					<EventSetupForm
