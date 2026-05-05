@@ -115,6 +115,12 @@ export const PeoplePanel: React.FC<PeoplePanelProps> = ({
 	const [recEmpty, setRecEmpty] = useState(false);
 	const recFetchedAtRef = useRef<number | null>(null);
 
+	// Auth user ids of people the current user already has a DM thread with —
+	// used as a client-side safety net to hide them from suggestions.
+	const [existingDmAuthIds, setExistingDmAuthIds] = useState<Set<string>>(
+		() => new Set(),
+	);
+
 	const fetchRecommendations = useCallback(
 		async (force = false) => {
 			const now = Date.now();
@@ -150,6 +156,23 @@ export const PeoplePanel: React.FC<PeoplePanelProps> = ({
 		},
 		[eventId, currentUserId],
 	);
+
+	const loadExistingDmPeers = useCallback(async () => {
+		if (!currentUserId) {
+			setExistingDmAuthIds(new Set());
+			return;
+		}
+		const { data } = await supabase
+			.from("direct_messages")
+			.select("sender_id, recipient_id")
+			.or(`sender_id.eq.${currentUserId},recipient_id.eq.${currentUserId}`);
+		const set = new Set<string>();
+		for (const row of (data ?? []) as { sender_id: string; recipient_id: string }[]) {
+			if (row.sender_id !== currentUserId) set.add(row.sender_id);
+			if (row.recipient_id !== currentUserId) set.add(row.recipient_id);
+		}
+		setExistingDmAuthIds(set);
+	}, [currentUserId]);
 
 	const fetchPage = useCallback(
 		async (pageOffset: number) => {
@@ -223,6 +246,7 @@ export const PeoplePanel: React.FC<PeoplePanelProps> = ({
 		if (!isOpen) return;
 		if (attendees.length === 0 && hasMore) fetchPage(0);
 		fetchRecommendations();
+		loadExistingDmPeers();
 	}, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	// Infinite scroll for attendees
@@ -244,8 +268,12 @@ export const PeoplePanel: React.FC<PeoplePanelProps> = ({
 
 	if (!isOpen) return null;
 
-	const dmPeerIds = new Set<string>();
-	const filteredRecommendations = recommendations.filter((r) => !dmPeerIds.has(r.investor_id));
+	// Hide recommendations the user already has an active DM thread with.
+	// `profile_auth_id` lives in the same id space as direct_messages.sender_id /
+	// recipient_id (auth.uid()::text), so this comparison is what actually matches.
+	const filteredRecommendations = recommendations.filter(
+		(r) => !r.profile_auth_id || !existingDmAuthIds.has(r.profile_auth_id),
+	);
 
 	return (
 		<div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
@@ -373,12 +401,39 @@ export const PeoplePanel: React.FC<PeoplePanelProps> = ({
 									</button>
 									{onStartDM && (
 										<button
-											onClick={() => onStartDM(rec.investor_id, rec.name)}
-											className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 mt-1 transition-all active:scale-90"
-											style={{ background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.2)" }}
-											aria-label={`Message ${rec.name}`}
+											onClick={() =>
+												rec.profile_auth_id &&
+												onStartDM(rec.profile_auth_id, rec.name)
+											}
+											disabled={!rec.profile_auth_id}
+											className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 mt-1 transition-all active:scale-90 disabled:cursor-not-allowed"
+											style={{
+												background: rec.profile_auth_id
+													? "rgba(99,102,241,0.12)"
+													: "rgba(255,255,255,0.04)",
+												border: rec.profile_auth_id
+													? "1px solid rgba(99,102,241,0.2)"
+													: "1px solid rgba(255,255,255,0.06)",
+											}}
+											title={
+												rec.profile_auth_id
+													? `Message ${rec.name}`
+													: "No account to message"
+											}
+											aria-label={
+												rec.profile_auth_id
+													? `Message ${rec.name}`
+													: "No account to message"
+											}
 										>
-											<MessageCircle size={13} className="text-indigo-300/70" />
+											<MessageCircle
+												size={13}
+												className={
+													rec.profile_auth_id
+														? "text-indigo-300/70"
+														: "text-white/20"
+												}
+											/>
 										</button>
 									)}
 								</div>

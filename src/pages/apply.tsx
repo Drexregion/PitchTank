@@ -78,12 +78,41 @@ const ApplyPage: React.FC = () => {
 		setFieldErrors((prev) => ({ ...prev, [questionId]: "" }));
 	};
 
+	const normalizeImageToJpeg = (file: File): Promise<File> =>
+		new Promise((resolve, reject) => {
+			const url = URL.createObjectURL(file);
+			const img = new Image();
+			img.onload = () => {
+				const canvas = document.createElement("canvas");
+				canvas.width = img.naturalWidth;
+				canvas.height = img.naturalHeight;
+				canvas.getContext("2d")!.drawImage(img, 0, 0);
+				canvas.toBlob(
+					(blob) => {
+						URL.revokeObjectURL(url);
+						if (!blob) return reject(new Error("Conversion failed"));
+						resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" }));
+					},
+					"image/jpeg",
+					0.92
+				);
+			};
+			img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not load image")); };
+			img.src = url;
+		});
+
 	const handleImageUpload = async (questionId: string, file: File) => {
 		setUploadingFor(questionId);
-		const path = `${eventId}/${questionId}/${Date.now()}_${file.name}`;
+		let uploadFile = file;
+		try {
+			uploadFile = await normalizeImageToJpeg(file);
+		} catch {
+			// fall back to original if conversion fails (e.g. HEIC on unsupported browser)
+		}
+		const path = `${eventId}/${questionId}/${Date.now()}_${uploadFile.name}`;
 		const { error: uploadError } = await supabase.storage
 			.from("application-images")
-			.upload(path, file, { upsert: true });
+			.upload(path, uploadFile, { upsert: true });
 		if (uploadError) {
 			setFieldErrors((prev) => ({
 				...prev,
@@ -402,12 +431,12 @@ const ApplyPage: React.FC = () => {
 													? "Uploading..."
 													: answers[q.id]
 													? "Change image"
-													: "Choose image (PNG, JPG, max 10MB)"}
+													: "Choose image (PNG, JPG, WebP, max 10MB)"}
 											</span>
 										</div>
 										<input
 											type="file"
-											accept="image/*"
+											accept="image/png,image/jpeg,image/gif,image/webp"
 											className="hidden"
 											disabled={uploadingFor === q.id || autofilling}
 											onChange={(e) => {

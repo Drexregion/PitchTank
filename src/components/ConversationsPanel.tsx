@@ -14,11 +14,10 @@ interface DMThread {
 interface ConversationsPanelProps {
 	isOpen: boolean;
 	onClose: () => void;
-	eventId: string;
 	userId: string;
 	displayName: string;
-	publicOnlineCount: number;
-	onOpenPublicChat: () => void;
+	publicOnlineCount?: number;
+	onOpenPublicChat?: () => void;
 	onOpenDM: (peerId: string, peerName: string) => void;
 }
 
@@ -108,7 +107,6 @@ function formatPreviewTime(ts: string): string {
 export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 	isOpen,
 	onClose,
-	eventId,
 	userId,
 	displayName: _displayName,
 	publicOnlineCount,
@@ -120,12 +118,11 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 	const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
 	const loadThreads = useCallback(async () => {
-		if (!eventId || !userId) return;
+		if (!userId) return;
 		setLoading(true);
 		const { data } = await supabase
 			.from("direct_messages")
 			.select("sender_id, recipient_id, sender_name, recipient_name, text, is_read, created_at")
-			.eq("event_id", eventId)
 			.or(`sender_id.eq.${userId},recipient_id.eq.${userId}`)
 			.order("created_at", { ascending: true });
 		if (data) {
@@ -150,40 +147,38 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 			}
 		}
 		setLoading(false);
-	}, [eventId, userId]);
+	}, [userId]);
 
 	// Re-fetch threads whenever the panel opens
 	useEffect(() => {
-		if (!isOpen || !eventId || !userId) return;
+		if (!isOpen || !userId) return;
 		loadThreads();
-	}, [isOpen, eventId, userId, loadThreads]);
+	}, [isOpen, userId, loadThreads]);
 
 	// Mark all unread DMs as read when the panel opens
 	useEffect(() => {
-		if (!isOpen || !userId || !eventId) return;
+		if (!isOpen || !userId) return;
 		supabase
 			.from("direct_messages")
 			.update({ is_read: true })
-			.eq("event_id", eventId)
 			.eq("recipient_id", userId)
 			.eq("is_read", false)
 			.then(() => {
 				setThreads((prev) => prev.map((t) => ({ ...t, unread: 0 })));
 			});
-	}, [isOpen, userId, eventId]);
+	}, [isOpen, userId]);
 
 	useEffect(() => {
-		if (!eventId || !userId) return;
+		if (!userId) return;
 
 		const channel = supabase
-			.channel(`conversations_${eventId}_${userId}`)
+			.channel(`conversations_global_${userId}`)
 			.on(
 				"postgres_changes",
 				{
 					event: "INSERT",
 					schema: "public",
 					table: "direct_messages",
-					filter: `event_id=eq.${eventId}`,
 				},
 				(payload) => {
 					const row = payload.new as Parameters<typeof buildThreads>[1][number];
@@ -212,12 +207,10 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 					event: "UPDATE",
 					schema: "public",
 					table: "direct_messages",
-					filter: `event_id=eq.${eventId}`,
 				},
 				(payload) => {
 					const row = payload.new as Parameters<typeof buildThreads>[1][number];
 					if (row.recipient_id !== userId) return;
-					// Recalculate unread when a message is marked read
 					if (row.is_read) {
 						setThreads((prev) =>
 							prev.map((t) => {
@@ -236,9 +229,10 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 		return () => {
 			supabase.removeChannel(channel);
 		};
-	}, [eventId, userId, loadThreads]);
+	}, [userId, loadThreads]);
 
 	const totalUnread = threads.reduce((s, t) => s + t.unread, 0);
+	const onlineCount = publicOnlineCount ?? 0;
 
 	return (
 		<div
@@ -319,85 +313,87 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 
 						{/* List */}
 						<div className="flex-1 min-h-0 overflow-y-auto">
-							{/* Public channel hero — centered & prominent */}
-							<div className="px-5 pt-7 pb-5">
-								<button
-									onClick={onOpenPublicChat}
-									className="group relative w-full rounded-3xl overflow-hidden transition-all active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
-									style={{
-										background:
-											"linear-gradient(135deg, rgba(34,211,238,0.14) 0%, rgba(99,102,241,0.16) 60%, rgba(139,92,246,0.14) 100%)",
-										border: "1px solid rgba(99,102,241,0.32)",
-										boxShadow:
-											"0 0 32px rgba(34,211,238,0.18), 0 8px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)",
-									}}
-									aria-label="Open public channel"
-								>
-									{/* subtle inner glow */}
-									<div
-										aria-hidden="true"
-										className="absolute -top-16 left-1/2 -translate-x-1/2 w-[120%] h-32 rounded-full pointer-events-none"
+							{/* Public channel hero — only when a public chat handler is provided */}
+							{onOpenPublicChat && (
+								<div className="px-5 pt-7 pb-5">
+									<button
+										onClick={onOpenPublicChat}
+										className="group relative w-full rounded-3xl overflow-hidden transition-all active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
 										style={{
 											background:
-												"radial-gradient(ellipse at center, rgba(34,211,238,0.25) 0%, transparent 70%)",
-											filter: "blur(8px)",
+												"linear-gradient(135deg, rgba(34,211,238,0.14) 0%, rgba(99,102,241,0.16) 60%, rgba(139,92,246,0.14) 100%)",
+											border: "1px solid rgba(99,102,241,0.32)",
+											boxShadow:
+												"0 0 32px rgba(34,211,238,0.18), 0 8px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)",
 										}}
-									/>
-
-									<div className="relative flex items-center gap-4 px-5 py-5">
+										aria-label="Open public channel"
+									>
+										{/* subtle inner glow */}
 										<div
-											className="w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0"
+											aria-hidden="true"
+											className="absolute -top-16 left-1/2 -translate-x-1/2 w-[120%] h-32 rounded-full pointer-events-none"
 											style={{
-												background: "linear-gradient(135deg, #22d3ee 0%, #6366f1 100%)",
-												boxShadow:
-													"0 0 24px rgba(99,102,241,0.45), inset 0 1px 0 rgba(255,255,255,0.18)",
+												background:
+													"radial-gradient(ellipse at center, rgba(34,211,238,0.25) 0%, transparent 70%)",
+												filter: "blur(8px)",
 											}}
-										>
-											<Hash size={28} className="text-white" strokeWidth={2.5} />
-										</div>
+										/>
 
-										<div className="flex-1 min-w-0 text-left">
-											<p className="text-white/40 text-[9px] font-bold uppercase tracking-[0.2em] mb-1">
-												Live channel
-											</p>
-											<p className="text-white font-black text-xl leading-none mb-1.5">
-												Public Channel
-											</p>
-											<div className="flex items-center gap-2">
-												<p className="text-white/55 text-xs">
-													Everyone in this event
+										<div className="relative flex items-center gap-4 px-5 py-5">
+											<div
+												className="w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0"
+												style={{
+													background: "linear-gradient(135deg, #22d3ee 0%, #6366f1 100%)",
+													boxShadow:
+														"0 0 24px rgba(99,102,241,0.45), inset 0 1px 0 rgba(255,255,255,0.18)",
+												}}
+											>
+												<Hash size={28} className="text-white" strokeWidth={2.5} />
+											</div>
+
+											<div className="flex-1 min-w-0 text-left">
+												<p className="text-white/40 text-[9px] font-bold uppercase tracking-[0.2em] mb-1">
+													Live channel
 												</p>
-												{publicOnlineCount > 0 && (
-													<div
-														className="flex items-center gap-1 px-2 py-0.5 rounded-full flex-shrink-0"
-														style={{
-															background: "rgba(34,197,94,0.12)",
-															border: "1px solid rgba(34,197,94,0.25)",
-														}}
-													>
-														<Users size={9} className="text-green-400" />
-														<span className="text-green-400 text-[10px] font-bold tabular-nums">
-															{publicOnlineCount >= 1000
-																? `${(publicOnlineCount / 1000).toFixed(1)}k`
-																: publicOnlineCount}
-														</span>
-													</div>
-												)}
+												<p className="text-white font-black text-xl leading-none mb-1.5">
+													Public Channel
+												</p>
+												<div className="flex items-center gap-2">
+													<p className="text-white/55 text-xs">
+														Everyone in this event
+													</p>
+													{onlineCount > 0 && (
+														<div
+															className="flex items-center gap-1 px-2 py-0.5 rounded-full flex-shrink-0"
+															style={{
+																background: "rgba(34,197,94,0.12)",
+																border: "1px solid rgba(34,197,94,0.25)",
+															}}
+														>
+															<Users size={9} className="text-green-400" />
+															<span className="text-green-400 text-[10px] font-bold tabular-nums">
+																{onlineCount >= 1000
+																	? `${(onlineCount / 1000).toFixed(1)}k`
+																	: onlineCount}
+															</span>
+														</div>
+													)}
+												</div>
+											</div>
+
+											<div
+												className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-transform group-hover:translate-x-0.5"
+												style={{
+													background: "rgba(255,255,255,0.08)",
+													border: "1px solid rgba(255,255,255,0.14)",
+												}}
+											>
+												<ChevronRight size={18} className="text-white/85" />
 											</div>
 										</div>
-
-										<div
-											className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-transform group-hover:translate-x-0.5"
-											style={{
-												background: "rgba(255,255,255,0.08)",
-												border: "1px solid rgba(255,255,255,0.14)",
-											}}
-										>
-											<ChevronRight size={18} className="text-white/85" />
-										</div>
-									</div>
-								</button>
-							</div>
+									</button>
+								</div>
+							)}
 
 							{/* DM section header */}
 							<div className="px-5 pt-2 pb-2">
@@ -424,7 +420,7 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 									</div>
 									<p className="text-white/25 text-sm">No direct messages yet</p>
 									<p className="text-white/15 text-xs leading-snug">
-										Open the People tab to find attendees and start a conversation
+										Open the People tab inside an event to find attendees and start a conversation
 									</p>
 								</div>
 							) : (
