@@ -135,6 +135,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 					filter: `event_id=eq.${eventId}`,
 				},
 				(payload) => {
+					console.log("[ChatPanel] realtime INSERT", payload.new);
 					const msg = payload.new as ChatMessage;
 					setMessages((prev) =>
 						prev.find((m) => m.id === msg.id) ? prev : [...prev, msg],
@@ -203,7 +204,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 		setInputText("");
 		setShowAutocomplete(false);
 		const isQuestion = /^@question\s/i.test(text);
-		const { data } = await supabase
+		const tempId = crypto.randomUUID();
+		const optimistic: ChatMessage = {
+			id: tempId,
+			event_id: eventId,
+			user_id: effectiveUserId,
+			display_name: displayName,
+			text,
+			type: isQuestion ? "question" : "message",
+			upvotes: 0,
+			created_at: new Date().toISOString(),
+		};
+		setMessages((prev) => [...prev, optimistic]);
+		const { data, error } = await supabase
 			.from("chat_messages")
 			.insert({
 				event_id: eventId,
@@ -215,9 +228,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 			})
 			.select()
 			.single();
+		if (error) {
+			setMessages((prev) => prev.filter((m) => m.id !== tempId));
+			return;
+		}
 		if (data) {
 			setMessages((prev) =>
-				prev.find((m) => m.id === data.id) ? prev : [...prev, data as ChatMessage],
+				prev.map((m) => (m.id === tempId ? (data as ChatMessage) : m)),
 			);
 		}
 	};

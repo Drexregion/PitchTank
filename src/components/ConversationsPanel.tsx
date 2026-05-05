@@ -6,6 +6,7 @@ import { supabase, supabaseUrl, supabaseAnonKey } from "../lib/supabaseClient";
 interface DMThread {
 	peerId: string;
 	peerName: string;
+	peerAvatar: string | null;
 	lastMessage: string;
 	lastAt: string;
 	unread: number;
@@ -17,6 +18,7 @@ interface Recommendation {
 	reason: string;
 	bio: string | null;
 	profile_picture_url: string | null;
+	profile_auth_id: string | null;
 }
 
 interface ConversationsPanelProps {
@@ -61,6 +63,46 @@ function Avatar({ name, size = 32 }: { name: string; size?: number }) {
 	);
 }
 
+function buildThreads(
+	userId: string,
+	rows: {
+		sender_id: string;
+		recipient_id: string;
+		sender_name: string;
+		recipient_name: string;
+		text: string;
+		is_read: boolean;
+		created_at: string;
+	}[],
+): DMThread[] {
+	const map = new Map<string, DMThread>();
+	for (const row of rows) {
+		const isSender = row.sender_id === userId;
+		const peerId = isSender ? row.recipient_id : row.sender_id;
+		const peerName = isSender ? row.recipient_name : row.sender_name;
+		const existing = map.get(peerId);
+		const unreadDelta = !isSender && !row.is_read ? 1 : 0;
+		if (!existing || row.created_at > existing.lastAt) {
+			map.set(peerId, {
+				peerId,
+				peerName,
+				peerAvatar: null,
+				lastMessage: row.text,
+				lastAt: row.created_at,
+				unread: (existing?.unread ?? 0) + unreadDelta,
+			});
+		} else {
+			map.set(peerId, {
+				...existing,
+				unread: existing.unread + unreadDelta,
+			});
+		}
+	}
+	return Array.from(map.values()).sort(
+		(a, b) => new Date(b.lastAt).getTime() - new Date(a.lastAt).getTime(),
+	);
+}
+
 function formatPreviewTime(ts: string): string {
 	const d = new Date(ts);
 	const now = new Date();
@@ -91,11 +133,13 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 	const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
 	const [recLoading, setRecLoading] = useState(false);
 	const [recEmpty, setRecEmpty] = useState(false);
-	const recFetchedRef = useRef(false);
+	const recFetchedAtRef = useRef<number | null>(null);
 
 	const fetchRecommendations = useCallback(async (force = false) => {
-		if ((recFetchedRef.current && !force) || !eventId || !userId) return;
-		recFetchedRef.current = true;
+		const now = Date.now();
+		const stale = !recFetchedAtRef.current || now - recFetchedAtRef.current > 5 * 60 * 1000;
+		if ((!stale && !force) || !eventId || !userId) return;
+		recFetchedAtRef.current = now;
 		setRecLoading(true);
 		try {
 			const { data: { session } } = await supabase.auth.getSession();
@@ -122,47 +166,45 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 		}
 	}, [eventId, userId]);
 
-	const buildThreads = (rows: {
-		sender_id: string;
-		recipient_id: string;
-		sender_name: string;
-		recipient_name: string;
-		text: string;
-		is_read: boolean;
-		created_at: string;
-	}[]) => {
-		const map = new Map<string, DMThread>();
-		for (const row of rows) {
-			const isSender = row.sender_id === userId;
-			const peerId = isSender ? row.recipient_id : row.sender_id;
-			const peerName = isSender ? row.recipient_name : row.sender_name;
-			const existing = map.get(peerId);
-			const unreadDelta = !isSender && !row.is_read ? 1 : 0;
-			if (!existing || row.created_at > existing.lastAt) {
-				map.set(peerId, {
-					peerId,
-					peerName,
-					lastMessage: row.text,
-					lastAt: row.created_at,
-					unread: (existing?.unread ?? 0) + unreadDelta,
-				});
+	const loadThreads = useCallback(async () => {
+		if (!eventId || !userId) return;
+		setLoading(true);
+		const { data } = await supabase
+			.from("direct_messages")
+			.select("sender_id, recipient_id, sender_name, recipient_name, text, is_read, created_at")
+			.eq("event_id", eventId)
+			.or(`sender_id.eq.${userId},recipient_id.eq.${userId}`)
+			.order("created_at", { ascending: true });
+		if (data) {
+			const builtThreads = buildThreads(userId, data as Parameters<typeof buildThreads>[1]);
+			const peerIds = builtThreads.map((t) => t.peerId);
+			if (peerIds.length > 0) {
+				const { data: investors } = await supabase
+					.from("investors")
+					.select("id, name, users!investors_profile_user_id_fkey(profile_picture_url)")
+					.in("id", peerIds);
+				if (investors) {
+					const infoMap = new Map(investors.map((inv: any) => [inv.id, { name: inv.name, avatar: inv.users?.profile_picture_url ?? null }]));
+					setThreads(builtThreads.map((t) => {
+						const info = infoMap.get(t.peerId);
+						return { ...t, peerName: info?.name ?? t.peerName, peerAvatar: info?.avatar ?? null };
+					}));
+				} else {
+					setThreads(builtThreads);
+				}
 			} else {
-				map.set(peerId, {
-					...existing,
-					unread: existing.unread + unreadDelta,
-				});
+				setThreads(builtThreads);
 			}
 		}
-		return Array.from(map.values()).sort(
-			(a, b) => new Date(b.lastAt).getTime() - new Date(a.lastAt).getTime(),
-		);
-	};
+		setLoading(false);
+	}, [eventId, userId]);
 
+	// Re-fetch threads and recommendations whenever the panel opens
 	useEffect(() => {
-		if (isOpen && eventId && userId) {
-			fetchRecommendations();
-		}
-	}, [isOpen, eventId, userId, fetchRecommendations]);
+		if (!isOpen || !eventId || !userId) return;
+		loadThreads();
+		fetchRecommendations();
+	}, [isOpen, eventId, userId, loadThreads, fetchRecommendations]);
 
 	// Mark all unread DMs as read when the panel opens
 	useEffect(() => {
@@ -181,19 +223,6 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 	useEffect(() => {
 		if (!eventId || !userId) return;
 
-		const load = async () => {
-			setLoading(true);
-			const { data } = await supabase
-				.from("direct_messages")
-				.select("sender_id, recipient_id, sender_name, recipient_name, text, is_read, created_at")
-				.eq("event_id", eventId)
-				.or(`sender_id.eq.${userId},recipient_id.eq.${userId}`)
-				.order("created_at", { ascending: true });
-			if (data) setThreads(buildThreads(data as Parameters<typeof buildThreads>[0]));
-			setLoading(false);
-		};
-		load();
-
 		const channel = supabase
 			.channel(`conversations_${eventId}_${userId}`)
 			.on(
@@ -205,7 +234,7 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 					filter: `event_id=eq.${eventId}`,
 				},
 				(payload) => {
-					const row = payload.new as Parameters<typeof buildThreads>[0][number];
+					const row = payload.new as Parameters<typeof buildThreads>[1][number];
 					if (row.sender_id !== userId && row.recipient_id !== userId) return;
 					setThreads((prev) => {
 						const isSender = row.sender_id === userId;
@@ -216,6 +245,7 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 						const updated: DMThread = {
 							peerId,
 							peerName,
+							peerAvatar: existing?.peerAvatar ?? null,
 							lastMessage: row.text,
 							lastAt: row.created_at,
 							unread: (existing?.unread ?? 0) + unreadDelta,
@@ -233,7 +263,7 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 					filter: `event_id=eq.${eventId}`,
 				},
 				(payload) => {
-					const row = payload.new as Parameters<typeof buildThreads>[0][number];
+					const row = payload.new as Parameters<typeof buildThreads>[1][number];
 					if (row.recipient_id !== userId) return;
 					// Recalculate unread when a message is marked read
 					if (row.is_read) {
@@ -254,9 +284,11 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 		return () => {
 			supabase.removeChannel(channel);
 		};
-	}, [eventId, userId]);
+	}, [eventId, userId, loadThreads]);
 
 	const totalUnread = threads.reduce((s, t) => s + t.unread, 0);
+	const dmPeerIds = new Set(threads.map((t) => t.peerId));
+	const filteredRecommendations = recommendations.filter((r) => !dmPeerIds.has(r.investor_id));
 
 	return (
 		<div
@@ -397,7 +429,7 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 										<div className="w-4 h-4 rounded-full border-2 border-white/10 border-t-white/40 animate-spin flex-shrink-0" />
 										<p className="text-white/25 text-xs">Finding connections...</p>
 									</div>
-								) : recEmpty ? (
+								) : recEmpty || filteredRecommendations.length === 0 ? (
 									<div
 										className="mx-5 mb-3 rounded-2xl px-4 py-3.5 flex items-start gap-3"
 										style={{
@@ -419,39 +451,44 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 										</div>
 									</div>
 								) : (
-									recommendations.map((rec) => (
-										<button
+									filteredRecommendations.map((rec) => (
+										<div
 											key={rec.investor_id}
-											onClick={() => onOpenDM(rec.investor_id, rec.name)}
-											className="w-full flex items-start gap-3 px-5 py-3.5 text-left transition-all active:scale-[0.98]"
+											className="flex items-start gap-3 px-5 py-3.5"
 											style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
 										>
-											{rec.profile_picture_url ? (
-												<img
-													src={rec.profile_picture_url}
-													alt={rec.name}
-													className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-												/>
-											) : (
-												<Avatar name={rec.name} size={40} />
-											)}
-											<div className="flex-1 min-w-0">
-												<p className="text-white font-bold text-sm leading-none mb-0.5">{rec.name}</p>
-												{rec.bio && (
-													<p className="text-white/40 text-xs leading-snug line-clamp-1 mb-1">{rec.bio}</p>
+											<button
+												onClick={() => { onClose(); navigate(`/profile/${rec.profile_auth_id}`); }}
+												className="flex items-start gap-3 flex-1 min-w-0 text-left transition-all active:scale-[0.98]"
+											>
+												{rec.profile_picture_url ? (
+													<img
+														src={rec.profile_picture_url}
+														alt={rec.name}
+														className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+													/>
+												) : (
+													<Avatar name={rec.name} size={40} />
 												)}
-												<div className="flex items-start gap-1 mt-1">
-													<Sparkles size={10} className="text-violet-400/60 mt-0.5 flex-shrink-0" />
-													<p className="text-violet-300/70 text-xs leading-snug line-clamp-2">{rec.reason}</p>
+												<div className="flex-1 min-w-0">
+													<p className="text-white font-bold text-sm leading-none mb-0.5">{rec.name}</p>
+													{rec.bio && (
+														<p className="text-white/40 text-xs leading-snug line-clamp-1 mb-1">{rec.bio}</p>
+													)}
+													<div className="flex items-start gap-1 mt-1">
+														<Sparkles size={10} className="text-violet-400/60 mt-0.5 flex-shrink-0" />
+														<p className="text-violet-300/70 text-xs leading-snug line-clamp-2">{rec.reason}</p>
+													</div>
 												</div>
-											</div>
-											<div
-												className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 mt-1"
+											</button>
+											<button
+												onClick={() => onOpenDM(rec.investor_id, rec.name)}
+												className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 mt-1 transition-all active:scale-90"
 												style={{ background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.2)" }}
 											>
 												<MessageCircle size={13} className="text-indigo-300/70" />
-											</div>
-										</button>
+											</button>
+										</div>
 									))
 								)}
 							</div>
@@ -494,7 +531,11 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 										className="w-full flex items-center gap-3 px-5 py-3.5 text-left transition-all active:scale-[0.98]"
 										style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
 									>
-										<Avatar name={thread.peerName} size={40} />
+										{thread.peerAvatar ? (
+											<img src={thread.peerAvatar} alt={thread.peerName} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+										) : (
+											<Avatar name={thread.peerName} size={40} />
+										)}
 										<div className="flex-1 min-w-0">
 											<div className="flex items-center gap-1.5 mb-0.5">
 												<p className="text-white font-bold text-sm leading-none truncate">

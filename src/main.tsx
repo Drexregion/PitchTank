@@ -9,6 +9,7 @@ import ApplyPage from "./pages/apply";
 import AdminEventApplicationsPage from "./pages/admin-event-applications";
 import ProfilePage from "./pages/profile";
 import SettingsPage from "./pages/settings";
+import ForgotPasswordPage from "./pages/forgot-password";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -17,6 +18,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 			<Routes>
 				<Route path="/" element={<HomePage />} />
 				<Route path="/events/:eventId" element={<EventPage />} />
+				<Route path="/events/:eventId/conversations" element={<EventPage />} />
+				<Route path="/events/:eventId/chat" element={<EventPage />} />
+				<Route path="/events/:eventId/dm/:peerId" element={<EventPage />} />
 				<Route path="/admin" element={<AdminPage />} />
 				<Route path="/admin/events/new" element={<AdminPage />} />
 				<Route path="/admin/events/:eventId" element={<AdminPage />} />
@@ -30,6 +34,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 				<Route path="/profile" element={<ProfilePage />} />
 				<Route path="/profile/:profileId" element={<ProfilePage />} />
 				<Route path="/settings" element={<SettingsPage />} />
+				<Route path="/forgot-password" element={<ForgotPasswordPage />} />
 			</Routes>
 		</AuthProvider>
 	</BrowserRouter>,
