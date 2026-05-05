@@ -857,6 +857,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const [showTradingClosedNotification, setShowTradingClosedNotification] =
 		useState(false);
 	const [showClosingCountdown, setShowClosingCountdown] = useState(false);
+	const [showClosingPopup, setShowClosingPopup] = useState(false);
 	const [closingSecondsLeft, setClosingSecondsLeft] = useState(0);
 	const [totalClosingSeconds, setTotalClosingSeconds] = useState(60);
 	const [showTradingStartedToast, setShowTradingStartedToast] = useState(false);
@@ -877,6 +878,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 					setTotalClosingSeconds(secs);
 					setClosingSecondsLeft(secs);
 					setShowClosingCountdown(true);
+					setShowClosingPopup(true);
 				}
 			}
 			return;
@@ -893,10 +895,12 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				setTotalClosingSeconds(secs);
 				setClosingSecondsLeft(secs);
 				setShowClosingCountdown(true);
+				setShowClosingPopup(true);
 			}
 		}
 		if (!closingAt && prev) {
 			setShowClosingCountdown(false);
+			setShowClosingPopup(false);
 			setClosingSecondsLeft(0);
 		}
 	}, [closingAt]);
@@ -916,7 +920,10 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 		const t = setTimeout(() => {
 			const next = closingSecondsLeft - 1;
 			setClosingSecondsLeft(next);
-			if (next <= 0) setShowClosingCountdown(false);
+			if (next <= 0) {
+				setShowClosingCountdown(false);
+				setShowClosingPopup(false);
+			}
 		}, 1000);
 		return () => clearTimeout(t);
 	}, [showClosingCountdown, closingSecondsLeft]);
@@ -2564,41 +2571,56 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				</div>
 			)}
 
-			{showClosingCountdown && closingSecondsLeft > 0 && (
+			{showClosingPopup && closingSecondsLeft > 0 && (
 				<div className="fixed bottom-24 right-4 z-50 pointer-events-auto">
-					<div className="bg-[#0d0e24] border border-amber-500/40 rounded-xl shadow-xl px-3 py-2.5 w-44">
-						<div className="flex items-center justify-between gap-2 mb-1.5">
-							<p className="text-amber-300 font-semibold text-xs">
-								Closing soon
-							</p>
+					<div
+						className="rounded-2xl px-4 py-3.5 w-48 shadow-2xl"
+						style={{
+							background:
+								"linear-gradient(rgba(16,14,35,0.96), rgba(16,14,35,0.96)) padding-box, " +
+								"linear-gradient(140deg, rgba(251,191,36,0.6) 0%, rgba(245,158,11,0.3) 100%) border-box",
+							border: "1.5px solid transparent",
+							backdropFilter: "blur(20px)",
+							boxShadow:
+								"0 8px 32px rgba(0,0,0,0.5), 0 0 24px rgba(251,191,36,0.08), inset 0 1px 0 rgba(255,255,255,0.06)",
+						}}
+					>
+						<div className="flex items-center justify-between gap-2 mb-2">
+							<div className="flex items-center gap-1.5">
+								<Clock size={12} color="#FCD34D" strokeWidth={2} />
+								<p className="text-amber-300 font-semibold text-[11px] uppercase tracking-wider">
+									Closing soon
+								</p>
+							</div>
 							<button
-								onClick={() => setShowClosingCountdown(false)}
-								className="text-white/30 hover:text-white transition-colors"
+								onClick={() => setShowClosingPopup(false)}
+								className="text-white/25 hover:text-white/60 transition-colors flex-shrink-0"
+								aria-label="Dismiss"
 							>
-								<svg
-									className="w-3 h-3"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										strokeLinecap="round"
-										strokeLinejoin="round"
-										strokeWidth={2}
-										d="M6 18L18 6M6 6l12 12"
-									/>
+								<svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
 								</svg>
 							</button>
 						</div>
-						<span className="text-white font-black tabular-nums text-xl leading-none block mb-2">
+						<span
+							className="font-display font-black tabular-nums text-[28px] leading-none block mb-2.5 num"
+							style={{
+								background: "linear-gradient(135deg, #FDE68A 0%, #F59E0B 100%)",
+								WebkitBackgroundClip: "text",
+								WebkitTextFillColor: "transparent",
+								backgroundClip: "text",
+							}}
+						>
 							{Math.floor(closingSecondsLeft / 60)}:
 							{String(closingSecondsLeft % 60).padStart(2, "0")}
 						</span>
-						<div className="h-1 bg-white/10 rounded-full overflow-hidden">
+						<div className="h-[3px] bg-white/8 rounded-full overflow-hidden">
 							<div
-								className="h-full bg-amber-400 rounded-full transition-all duration-1000"
+								className="h-full rounded-full transition-all duration-1000"
 								style={{
 									width: `${(closingSecondsLeft / totalClosingSeconds) * 100}%`,
+									background: "linear-gradient(90deg, #FCD34D, #F59E0B)",
+									boxShadow: "0 0 8px rgba(252,211,77,0.5)",
 								}}
 							/>
 						</div>

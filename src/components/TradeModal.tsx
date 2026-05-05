@@ -434,7 +434,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 						>
 							<Button
 								type="button"
-								variant={isBuy ? "buy" : "secondary"}
+								variant={isBuy ? "buy-solid" : "secondary"}
 								size="lg"
 								aria-pressed={isBuy}
 								className="w-full"
@@ -445,7 +445,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 							</Button>
 							<Button
 								type="button"
-								variant={!isBuy ? "sell" : "secondary"}
+								variant={!isBuy ? "sell-solid" : "secondary"}
 								size="lg"
 								aria-pressed={!isBuy}
 								className="w-full"
