@@ -4,7 +4,9 @@ import { cn } from "./utils";
 const VARIANT_CLASS = {
   primary: "pt-btn-primary",
   buy: "pt-btn-buy",
+  "buy-solid": "pt-btn-buy-solid",
   sell: "pt-btn-sell",
+  "sell-solid": "pt-btn-sell-solid",
   secondary: "pt-btn-secondary",
 } as const;
 

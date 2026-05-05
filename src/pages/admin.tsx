@@ -12,11 +12,11 @@ import { AdminServiceMonitor } from "../components/AdminServiceMonitor";
 
 const CountdownDisplay: React.FC<{ target: string }> = ({ target }) => {
 	const [secs, setSecs] = useState(() =>
-		Math.max(0, Math.round((new Date(target).getTime() - Date.now()) / 1000))
+		Math.max(0, Math.round((new Date(target).getTime() - Date.now()) / 1000)),
 	);
 	useEffect(() => {
 		if (secs <= 0) return;
-		const t = setTimeout(() => setSecs(s => Math.max(0, s - 1)), 1000);
+		const t = setTimeout(() => setSecs((s) => Math.max(0, s - 1)), 1000);
 		return () => clearTimeout(t);
 	}, [secs]);
 	return (
@@ -35,11 +35,21 @@ const AdminPage: React.FC = () => {
 	const [editingEventId, setEditingEventId] = useState<string | null>(null);
 	const { user, isAdmin, isLoading } = useAuth();
 	const location = useLocation();
-	const [closingMinutes, setClosingMinutes] = useState<Record<string, number>>({});
-	const adminTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-	const [resetCountdown, setResetCountdown] = useState<Record<string, number | null>>({});
-	const resetIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
-	const [expandedPitchs, setExpandedPitchs] = useState<Record<string, boolean>>({});
+	const [closingMinutes, setClosingMinutes] = useState<Record<string, number>>(
+		{},
+	);
+	const adminTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>(
+		{},
+	);
+	const [resetCountdown, setResetCountdown] = useState<
+		Record<string, number | null>
+	>({});
+	const resetIntervalsRef = useRef<
+		Record<string, ReturnType<typeof setInterval>>
+	>({});
+	const [expandedPitchs, setExpandedPitchs] = useState<Record<string, boolean>>(
+		{},
+	);
 	const [analyticsPitch, setAnalyticsPitch] = useState<Pitch | null>(null);
 
 	const fetchEvents = useCallback(async () => {
@@ -94,7 +104,7 @@ const AdminPage: React.FC = () => {
 				},
 				() => {
 					fetchEvents();
-				}
+				},
 			)
 			.subscribe();
 
@@ -163,7 +173,10 @@ const AdminPage: React.FC = () => {
 			.from("events")
 			.update({ closing_at: closingAt })
 			.eq("id", eventId);
-		if (updateError) { setError(updateError.message); return; }
+		if (updateError) {
+			setError(updateError.message);
+			return;
+		}
 		fetchEvents();
 		// Admin browser drives the final status update when timer fires
 		adminTimersRef.current[eventId] = setTimeout(async () => {
@@ -177,9 +190,9 @@ const AdminPage: React.FC = () => {
 	};
 
 	const handleResetTradingArm = (eventId: string) => {
-		setResetCountdown(p => ({ ...p, [eventId]: 5 }));
+		setResetCountdown((p) => ({ ...p, [eventId]: 5 }));
 		const interval = setInterval(() => {
-			setResetCountdown(p => {
+			setResetCountdown((p) => {
 				const cur = p[eventId];
 				if (cur == null || cur <= 1) {
 					clearInterval(resetIntervalsRef.current[eventId]);
@@ -195,39 +208,54 @@ const AdminPage: React.FC = () => {
 	const handleResetTradingCancel = (eventId: string) => {
 		clearInterval(resetIntervalsRef.current[eventId]);
 		delete resetIntervalsRef.current[eventId];
-		setResetCountdown(p => ({ ...p, [eventId]: null }));
+		setResetCountdown((p) => ({ ...p, [eventId]: null }));
 	};
 
+	// Comment for redeploy
 	const handleResetTradingConfirm = async (eventId: string) => {
 		clearInterval(resetIntervalsRef.current[eventId]);
 		delete resetIntervalsRef.current[eventId];
-		setResetCountdown(p => ({ ...p, [eventId]: null }));
+		setResetCountdown((p) => ({ ...p, [eventId]: null }));
 
 		const { error: tradesError } = await supabase
 			.from("trades")
 			.delete()
 			.eq("event_id", eventId);
-		if (tradesError) { setError(tradesError.message); return; }
+		if (tradesError) {
+			setError(tradesError.message);
+			return;
+		}
 
 		const { data: founders, error: foundersError } = await supabase
 			.from("pitches")
 			.select("id, k_constant")
 			.eq("event_id", eventId);
-		if (foundersError) { setError(foundersError.message); return; }
+		if (foundersError) {
+			setError(foundersError.message);
+			return;
+		}
 
-		const founderIds = (founders || []).map((f: { id: string; k_constant: number }) => f.id);
+		const founderIds = (founders || []).map(
+			(f: { id: string; k_constant: number }) => f.id,
+		);
 		if (founderIds.length > 0) {
 			const { error: priceError } = await supabase
 				.from("price_history")
 				.delete()
 				.in("pitch_id", founderIds);
-			if (priceError) { setError(priceError.message); return; }
+			if (priceError) {
+				setError(priceError.message);
+				return;
+			}
 
 			const { error: holdingsError } = await supabase
 				.from("investor_holdings")
 				.delete()
 				.in("pitch_id", founderIds);
-			if (holdingsError) { setError(holdingsError.message); return; }
+			if (holdingsError) {
+				setError(holdingsError.message);
+				return;
+			}
 
 			for (const f of founders || []) {
 				const initialShares = 100000;
@@ -240,7 +268,10 @@ const AdminPage: React.FC = () => {
 						k_constant: f.k_constant,
 					})
 					.eq("id", f.id);
-				if (founderResetError) { setError(founderResetError.message); return; }
+				if (founderResetError) {
+					setError(founderResetError.message);
+					return;
+				}
 			}
 		}
 
@@ -248,34 +279,48 @@ const AdminPage: React.FC = () => {
 		const STARTING_CASH = 500000;
 		const INITIAL_PRICE_PER_SHARE = 10;
 		const SHARES_POOL_BUDGET = 500000;
-		const sharesPerPitch = founders && founders.length > 0
-			? Math.floor(SHARES_POOL_BUDGET / founders.length / INITIAL_PRICE_PER_SHARE)
-			: 0;
+		const sharesPerPitch =
+			founders && founders.length > 0
+				? Math.floor(
+						SHARES_POOL_BUDGET / founders.length / INITIAL_PRICE_PER_SHARE,
+					)
+				: 0;
 
 		const { data: investors, error: investorsError } = await supabase
 			.from("investors")
 			.select("id")
 			.eq("event_id", eventId);
-		if (investorsError) { setError(investorsError.message); return; }
+		if (investorsError) {
+			setError(investorsError.message);
+			return;
+		}
 
 		for (const investor of investors || []) {
 			const { error: balanceError } = await supabase
 				.from("investors")
 				.update({ current_balance: STARTING_CASH })
 				.eq("id", investor.id);
-			if (balanceError) { setError(balanceError.message); return; }
+			if (balanceError) {
+				setError(balanceError.message);
+				return;
+			}
 
 			if (sharesPerPitch > 0) {
-				const holdingsToInsert = (founders || []).map((f: { id: string; k_constant: number }) => ({
-					investor_id: investor.id,
-					pitch_id: f.id,
-					shares: sharesPerPitch,
-					cost_basis: INITIAL_PRICE_PER_SHARE,
-				}));
+				const holdingsToInsert = (founders || []).map(
+					(f: { id: string; k_constant: number }) => ({
+						investor_id: investor.id,
+						pitch_id: f.id,
+						shares: sharesPerPitch,
+						cost_basis: INITIAL_PRICE_PER_SHARE,
+					}),
+				);
 				const { error: holdingsInsertError } = await supabase
 					.from("investor_holdings")
 					.insert(holdingsToInsert);
-				if (holdingsInsertError) { setError(holdingsInsertError.message); return; }
+				if (holdingsInsertError) {
+					setError(holdingsInsertError.message);
+					return;
+				}
 			}
 		}
 
@@ -309,14 +354,18 @@ const AdminPage: React.FC = () => {
 								Create New Event
 							</button>
 						)}
-						{activeTab === "events" && (activeView === "new" || activeView === "edit") && (
-							<button
-								onClick={() => { setActiveView("list"); setEditingEventId(null); }}
-								className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg"
-							>
-								Back to Events
-							</button>
-						)}
+						{activeTab === "events" &&
+							(activeView === "new" || activeView === "edit") && (
+								<button
+									onClick={() => {
+										setActiveView("list");
+										setEditingEventId(null);
+									}}
+									className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg"
+								>
+									Back to Events
+								</button>
+							)}
 					</div>
 				</div>
 
@@ -324,7 +373,11 @@ const AdminPage: React.FC = () => {
 				<div className="mb-6 border-b border-gray-200">
 					<nav className="flex space-x-8">
 						<button
-							onClick={() => { setActiveTab("events"); if (activeView !== "new" && activeView !== "edit") setActiveView("list"); }}
+							onClick={() => {
+								setActiveTab("events");
+								if (activeView !== "new" && activeView !== "edit")
+									setActiveView("list");
+							}}
 							className={`py-2 px-1 border-b-2 font-medium text-sm ${
 								activeTab === "events"
 									? "border-blue-500 text-blue-600"
@@ -384,7 +437,9 @@ const AdminPage: React.FC = () => {
 						) : (
 							<div className="space-y-4">
 								{events.map((event) => {
-									const countdownActive = !!event.closing_at && new Date(event.closing_at) > new Date();
+									const countdownActive =
+										!!event.closing_at &&
+										new Date(event.closing_at) > new Date();
 									const statusStyles: Record<string, string> = {
 										active: "bg-green-100 text-green-800 border-green-200",
 										draft: "bg-yellow-100 text-yellow-800 border-yellow-200",
@@ -392,17 +447,25 @@ const AdminPage: React.FC = () => {
 										cancelled: "bg-red-100 text-red-800 border-red-200",
 									};
 									return (
-										<div key={event.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+										<div
+											key={event.id}
+											className="bg-white rounded-xl shadow-sm border border-gray-200 p-5"
+										>
 											{/* Header row */}
 											<div className="flex items-start justify-between gap-4 mb-4">
 												<div>
-													<h3 className="text-base font-semibold text-gray-900">{event.name}</h3>
+													<h3 className="text-base font-semibold text-gray-900">
+														{event.name}
+													</h3>
 													<p className="text-xs text-gray-400 mt-0.5">
-														{formatDate(event.start_time)} &mdash; created {formatDate(event.created_at)}
+														{formatDate(event.start_time)} &mdash; created{" "}
+														{formatDate(event.created_at)}
 													</p>
 												</div>
 												<div className="flex items-center gap-2 flex-shrink-0">
-													<span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${statusStyles[event.status] ?? "bg-gray-100 text-gray-700 border-gray-200"}`}>
+													<span
+														className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${statusStyles[event.status] ?? "bg-gray-100 text-gray-700 border-gray-200"}`}
+													>
 														{event.status}
 													</span>
 													<Link
@@ -412,7 +475,10 @@ const AdminPage: React.FC = () => {
 														View →
 													</Link>
 													<button
-														onClick={() => { setEditingEventId(event.id); setActiveView("edit"); }}
+														onClick={() => {
+															setEditingEventId(event.id);
+															setActiveView("edit");
+														}}
 														className="text-xs text-gray-500 hover:underline font-medium"
 													>
 														Edit →
@@ -430,9 +496,18 @@ const AdminPage: React.FC = () => {
 											<div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-4 border-t border-gray-100">
 												{/* Status switcher */}
 												<div className="flex-1">
-													<p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">Set Status</p>
+													<p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">
+														Set Status
+													</p>
 													<div className="flex flex-wrap gap-1.5">
-														{(["draft", "active", "completed", "cancelled"] as const).map((s) => (
+														{(
+															[
+																"draft",
+																"active",
+																"completed",
+																"cancelled",
+															] as const
+														).map((s) => (
 															<button
 																key={s}
 																onClick={() => handleSetStatus(event.id, s)}
@@ -451,17 +526,23 @@ const AdminPage: React.FC = () => {
 
 												{/* Reset trading data */}
 												<div className="flex-shrink-0">
-													<p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">Reset Data</p>
+													<p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">
+														Reset Data
+													</p>
 													{resetCountdown[event.id] != null ? (
 														<div className="flex items-center gap-1.5">
 															<button
-																onClick={() => handleResetTradingConfirm(event.id)}
+																onClick={() =>
+																	handleResetTradingConfirm(event.id)
+																}
 																className="px-3 py-1 rounded-lg text-xs font-medium bg-red-600 text-white border border-red-700 hover:bg-red-700 transition-all"
 															>
 																Confirm Reset ({resetCountdown[event.id]}s)
 															</button>
 															<button
-																onClick={() => handleResetTradingCancel(event.id)}
+																onClick={() =>
+																	handleResetTradingCancel(event.id)
+																}
 																className="px-3 py-1 rounded-lg text-xs font-medium bg-white text-gray-500 border border-gray-200 hover:border-gray-400 transition-all"
 															>
 																Cancel
@@ -480,14 +561,21 @@ const AdminPage: React.FC = () => {
 												{/* Countdown controls — only relevant when active */}
 												{event.status === "active" && (
 													<div className="flex-shrink-0">
-														<p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">Close Countdown</p>
+														<p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">
+															Close Countdown
+														</p>
 														{countdownActive ? (
 															<div className="flex items-center gap-2">
 																<span className="text-sm font-semibold text-yellow-700 bg-yellow-50 border border-yellow-200 px-3 py-1 rounded-lg">
-																	⏱ Closes in <CountdownDisplay target={event.closing_at!} />
+																	⏱ Closes in{" "}
+																	<CountdownDisplay
+																		target={event.closing_at!}
+																	/>
 																</span>
 																<button
-																	onClick={() => handleCancelCountdown(event.id)}
+																	onClick={() =>
+																		handleCancelCountdown(event.id)
+																	}
 																	className="px-3 py-1 rounded-lg text-xs font-medium bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-all"
 																>
 																	Cancel
@@ -498,7 +586,10 @@ const AdminPage: React.FC = () => {
 																<select
 																	value={closingMinutes[event.id] ?? 5}
 																	onChange={(e) =>
-																		setClosingMinutes(p => ({ ...p, [event.id]: Number(e.target.value) }))
+																		setClosingMinutes((p) => ({
+																			...p,
+																			[event.id]: Number(e.target.value),
+																		}))
 																	}
 																	className="text-xs border border-gray-300 rounded-lg px-2 py-1 bg-white"
 																>
@@ -511,7 +602,12 @@ const AdminPage: React.FC = () => {
 																	<option value={30}>30 min</option>
 																</select>
 																<button
-																	onClick={() => handleStartCountdown(event.id, closingMinutes[event.id] ?? 5)}
+																	onClick={() =>
+																		handleStartCountdown(
+																			event.id,
+																			closingMinutes[event.id] ?? 5,
+																		)
+																	}
 																	className="px-3 py-1 rounded-lg text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-200 hover:bg-yellow-100 transition-all"
 																>
 																	Start Countdown
@@ -525,11 +621,26 @@ const AdminPage: React.FC = () => {
 											{/* Pitchers panel */}
 											<div className="pt-3 border-t border-gray-100 mt-1">
 												<button
-													onClick={() => setExpandedPitchs(p => ({ ...p, [event.id]: !p[event.id] }))}
+													onClick={() =>
+														setExpandedPitchs((p) => ({
+															...p,
+															[event.id]: !p[event.id],
+														}))
+													}
 													className="flex items-center gap-1.5 text-xs font-semibold text-purple-600 hover:text-purple-800 transition-colors"
 												>
-													<svg className={`w-3.5 h-3.5 transition-transform ${expandedPitchs[event.id] ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-														<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+													<svg
+														className={`w-3.5 h-3.5 transition-transform ${expandedPitchs[event.id] ? "rotate-90" : ""}`}
+														fill="none"
+														stroke="currentColor"
+														viewBox="0 0 24 24"
+													>
+														<path
+															strokeLinecap="round"
+															strokeLinejoin="round"
+															strokeWidth={2}
+															d="M9 5l7 7-7 7"
+														/>
 													</svg>
 													Pitchers
 												</button>
@@ -551,11 +662,24 @@ const AdminPage: React.FC = () => {
 
 			{/* Analytics modal */}
 			{analyticsPitch && (
-				<div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm overflow-y-auto py-8 px-4" onClick={() => setAnalyticsPitch(null)}>
-					<div className="w-full max-w-4xl" onClick={e => e.stopPropagation()}>
+				<div
+					className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm overflow-y-auto py-8 px-4"
+					onClick={() => setAnalyticsPitch(null)}
+				>
+					<div
+						className="w-full max-w-4xl"
+						onClick={(e) => e.stopPropagation()}
+					>
 						<div className="flex justify-between items-center mb-4">
-							<h2 className="text-lg font-bold text-white">{analyticsPitch.name} — Analytics</h2>
-							<button onClick={() => setAnalyticsPitch(null)} className="text-white/60 hover:text-white text-sm">✕ Close</button>
+							<h2 className="text-lg font-bold text-white">
+								{analyticsPitch.name} — Analytics
+							</h2>
+							<button
+								onClick={() => setAnalyticsPitch(null)}
+								className="text-white/60 hover:text-white text-sm"
+							>
+								✕ Close
+							</button>
 						</div>
 						<AdminPitchAnalytics founder={analyticsPitch} />
 					</div>

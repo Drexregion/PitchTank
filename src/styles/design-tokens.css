@@ -323,6 +323,28 @@
     rgba(180,60,30,0.4) 75%, rgba(255,138,0,0.4));
 }
 
+/* === BUY SOLID · filled cyan === */
+.pt-btn-buy-solid {
+  color: #03040D; text-shadow: none;
+  background: var(--c-cyan);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 0 24px rgba(0,229,255,0.4);
+}
+.pt-btn-buy-solid::after {
+  background: rgba(255,255,255,0.15);
+}
+.pt-btn-buy-solid:hover { background: #33eeff; }
+
+/* === SELL SOLID · filled orange === */
+.pt-btn-sell-solid {
+  color: #03040D; text-shadow: none;
+  background: var(--c-orange);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 0 24px rgba(255,138,0,0.4);
+}
+.pt-btn-sell-solid::after {
+  background: rgba(255,255,255,0.15);
+}
+.pt-btn-sell-solid:hover { background: #ffa033; }
+
 .featured-timer-text,
 .featured-timer-text * {
   background: linear-gradient(90deg, #DCC8FF 0%, #FFC896 100%);
