@@ -15,4 +15,15 @@ export {
   type SparklineProps,
   type ExpandedSparklineProps,
 } from "./Charts";
-export { cn, formatMoney, formatTimer, ringGradient, gradientForId } from "./utils";
+export {
+  cn,
+  formatMoney,
+  formatTimer,
+  ringGradient,
+  gradientForId,
+  gradientForUser,
+  GRADIENT_PRESETS,
+  GRADIENT_PRESET_KEYS,
+  DEFAULT_USER_GRADIENT,
+  type GradientPresetKey,
+} from "./utils";

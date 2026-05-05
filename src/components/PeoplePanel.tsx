@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { MessageCircle, Sparkles, RefreshCw, ArrowRight } from "lucide-react";
 import { supabase, supabaseUrl, supabaseAnonKey } from "../lib/supabaseClient";
+import { gradientForUser } from "./design-system";
 
 interface PeoplePanelProps {
 	isOpen: boolean;
@@ -15,6 +16,7 @@ interface Attendee {
 	id: string;
 	name: string;
 	profile_picture_url: string | null;
+	profile_color: string | null;
 	bio: string | null;
 	role: string | null;
 	linkedin_url: string | null;
@@ -29,6 +31,7 @@ interface Recommendation {
 	reason: string;
 	bio: string | null;
 	profile_picture_url: string | null;
+	profile_color: string | null;
 	profile_auth_id: string | null;
 }
 
@@ -48,16 +51,40 @@ function avatarGradient(name: string): [string, string] {
 	return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length] as [string, string];
 }
 
-function Avatar({ name, url, size = 40 }: { name: string; url?: string | null; size?: number }) {
-	const [from, to] = avatarGradient(name);
+function Avatar({
+	name,
+	url,
+	size = 40,
+	gradient,
+}: {
+	name: string;
+	url?: string | null;
+	size?: number;
+	gradient?: [string, string];
+}) {
+	const [from, to] = gradient ?? avatarGradient(name);
 	if (url) {
+		const ringWidth = gradient ? 2 : 0;
+		const inner = size - ringWidth * 2;
 		return (
-			<img
-				src={url}
-				alt={name}
-				className="rounded-full object-cover flex-shrink-0"
-				style={{ width: size, height: size }}
-			/>
+			<div
+				className="rounded-full flex-shrink-0"
+				style={{
+					width: size,
+					height: size,
+					padding: ringWidth,
+					background: gradient
+						? `linear-gradient(135deg, ${from}, ${to})`
+						: "transparent",
+				}}
+			>
+				<img
+					src={url}
+					alt={name}
+					className="rounded-full object-cover"
+					style={{ width: inner, height: inner }}
+				/>
+			</div>
 		);
 	}
 	return (
@@ -197,7 +224,9 @@ export const PeoplePanel: React.FC<PeoplePanelProps> = ({
 				if (profileIds.length > 0) {
 					const { data: userData } = await supabase
 						.from("users")
-						.select("id, auth_user_id, profile_picture_url, bio, role, linkedin_url, twitter_url")
+						.select(
+							"id, auth_user_id, profile_picture_url, profile_color, bio, role, linkedin_url, twitter_url",
+						)
 						.in("id", profileIds);
 					if (userData) {
 						for (const u of userData) userMap[u.id] = u;
@@ -212,6 +241,7 @@ export const PeoplePanel: React.FC<PeoplePanelProps> = ({
 						profile_user_id: row.profile_user_id,
 						auth_user_id: u.auth_user_id ?? null,
 						profile_picture_url: u.profile_picture_url ?? null,
+						profile_color: u.profile_color ?? null,
 						bio: u.bio ?? null,
 						role: u.role ?? null,
 						linkedin_url: u.linkedin_url ?? null,
@@ -379,15 +409,19 @@ export const PeoplePanel: React.FC<PeoplePanelProps> = ({
 										}}
 										className="flex items-start gap-3 flex-1 min-w-0 text-left transition-all active:scale-[0.98]"
 									>
-										{rec.profile_picture_url ? (
-											<img
-												src={rec.profile_picture_url}
-												alt={rec.name}
-												className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-											/>
-										) : (
-											<Avatar name={rec.name} size={40} />
-										)}
+										<Avatar
+											name={rec.name}
+											url={rec.profile_picture_url}
+											size={40}
+											gradient={
+												rec.profile_color
+													? gradientForUser(
+															rec.profile_color,
+															rec.profile_auth_id ?? rec.investor_id,
+													  )
+													: undefined
+											}
+										/>
 										<div className="flex-1 min-w-0">
 											<p className="text-white font-bold text-sm leading-none mb-0.5">{rec.name}</p>
 											{rec.bio && (
@@ -476,7 +510,19 @@ export const PeoplePanel: React.FC<PeoplePanelProps> = ({
 											className="flex items-center gap-3 px-6 py-3.5"
 											style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
 										>
-											<Avatar name={person.name} url={person.profile_picture_url} size={44} />
+											<Avatar
+												name={person.name}
+												url={person.profile_picture_url}
+												size={44}
+												gradient={
+													person.profile_color
+														? gradientForUser(
+																person.profile_color,
+																person.auth_user_id ?? person.id,
+														  )
+														: undefined
+												}
+											/>
 											<div className="flex-1 min-w-0">
 												<div className="flex items-center gap-2 flex-wrap">
 													<p className="text-white font-bold text-sm leading-none">

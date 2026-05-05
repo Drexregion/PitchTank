@@ -5,6 +5,7 @@ const VARIANT_CLASS = {
   primary: "pt-btn-primary",
   buy: "pt-btn-buy",
   sell: "pt-btn-sell",
+  secondary: "pt-btn-secondary",
 } as const;
 
 const SIZE_CLASS = {

@@ -1,15 +1,42 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, type ReactNode } from "react";
 import {
 	useSearchParams,
 	Navigate,
 	useNavigate,
 	useParams,
+	useLocation,
 } from "react-router-dom";
-import { MessageCircle } from "lucide-react";
+import {
+	ArrowLeft,
+	Briefcase,
+	Sparkles,
+	Mail,
+	Share2,
+	Pencil,
+	Check,
+	MessageCircle,
+	X as XIconLucide,
+	Home,
+	User as UserIcon,
+	Settings as SettingsIcon,
+} from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
+import { useGlobalUnreadDMs } from "../hooks/useGlobalUnreadDMs";
 import { ScannerModal } from "../components/ScannerModal";
 import { DMPanel } from "../components/DMPanel";
+import {
+	Avatar,
+	Button as PtButton,
+	GlassCard,
+	IconButton,
+	IridescentArc,
+	gradientForUser,
+	GRADIENT_PRESETS,
+	GRADIENT_PRESET_KEYS,
+	DEFAULT_USER_GRADIENT,
+	type GradientPresetKey,
+} from "../components/design-system";
 
 interface ApplicationData {
 	id: string;
@@ -33,6 +60,7 @@ interface ProfileData {
 	twitter_url: string;
 	role: "pitcher" | "sponsor" | "judge" | "member" | "";
 	looking_to_connect: string;
+	profile_color: GradientPresetKey | null;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -40,13 +68,6 @@ const ROLE_LABELS: Record<string, string> = {
 	pitcher: "Pitcher",
 	sponsor: "Sponsor",
 	judge: "Judge",
-};
-
-const ROLE_COLORS: Record<string, string> = {
-	member: "bg-white/10 text-white/50 border-white/20",
-	pitcher: "bg-violet-500/20 text-violet-300 border-violet-500/40",
-	sponsor: "bg-cyan-500/20 text-cyan-300 border-cyan-500/40",
-	judge: "bg-amber-500/20 text-amber-300 border-amber-500/40",
 };
 
 // ─── Background glows shared by both views ────────────────────────────────────
@@ -76,6 +97,316 @@ const BgGlow: React.FC = () => (
 	</div>
 );
 
+// ─── Local helpers ────────────────────────────────────────────────────────────
+
+type PillTone = "role" | "featured" | "frame";
+
+const PILL_TONE_CLASS: Record<PillTone, string> = {
+	role: "bg-gradient-to-r from-pt-blue/25 to-pt-cyan/15 text-white shadow-[inset_0_0_0_1px_rgba(140,180,255,0.55),0_0_14px_rgba(79,124,255,0.35)]",
+	featured:
+		"bg-gradient-to-r from-pt-purple/30 to-pt-orange/25 text-white shadow-[inset_0_0_0_1px_rgba(220,200,255,0.45),0_0_14px_rgba(162,89,255,0.35)]",
+	frame:
+		"bg-white/[0.02] text-pt-text-1 shadow-[inset_0_0_0_1px_rgba(184,212,255,0.35)]",
+};
+
+const Pill: React.FC<{
+	tone: PillTone;
+	icon?: ReactNode;
+	children: ReactNode;
+}> = ({ tone, icon, children }) => (
+	<span
+		className={`inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-[5px] text-[10px] font-display font-medium uppercase tracking-[0.16em] rounded-full ${PILL_TONE_CLASS[tone]}`}
+	>
+		{icon && <span className="inline-flex">{icon}</span>}
+		{children}
+	</span>
+);
+
+const SectionHeading: React.FC<{ children: ReactNode }> = ({ children }) => (
+	<h2 className="font-display text-[15px] uppercase tracking-[0.18em] text-white relative inline-block pb-1.5">
+		{children}
+		<span
+			aria-hidden
+			className="absolute left-0 bottom-0 h-[2px] w-12 rounded-full"
+			style={{
+				background:
+					"linear-gradient(90deg, var(--c-purple), var(--c-cyan) 60%, transparent)",
+			}}
+		/>
+	</h2>
+);
+
+const SocialCard: React.FC<{
+	icon: ReactNode;
+	label: string;
+	href: string;
+}> = ({ icon, label, href }) => (
+	<a
+		href={href}
+		target="_blank"
+		rel="noopener noreferrer"
+		className="block transition-transform active:scale-95"
+	>
+		<GlassCard tone="frame" size="sm" className="!p-2.5">
+			<div className="flex flex-col items-center gap-1.5">
+				<div className="h-7 flex items-center justify-center">{icon}</div>
+				<span className="text-[10px] uppercase tracking-[0.14em] font-display text-pt-text-2">
+					{label}
+				</span>
+			</div>
+		</GlassCard>
+	</a>
+);
+
+const hasSocialLinks = (p: Pick<ProfileData, "linkedin_url" | "twitter_url">) =>
+	!!(p.linkedin_url || p.twitter_url);
+
+const SocialInput: React.FC<{
+	label: string;
+	value: string;
+	placeholder?: string;
+	onChange?: (v: string) => void;
+	type?: string;
+	readOnly?: boolean;
+}> = ({ label, value, placeholder, onChange, type = "text", readOnly }) => (
+	<label className="flex items-center gap-3 bg-white/[0.02] rounded-xl px-3 py-2 shadow-[inset_0_0_0_1px_rgba(184,212,255,0.18)]">
+		<span className="text-[10px] uppercase tracking-[0.16em] font-display text-pt-text-3 w-16 shrink-0">
+			{label}
+		</span>
+		<input
+			value={value}
+			type={type}
+			placeholder={placeholder}
+			onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+			readOnly={readOnly}
+			className={`flex-1 bg-transparent text-sm outline-none placeholder-white/20 ${readOnly ? "text-pt-text-3 cursor-not-allowed" : "text-pt-text-1"}`}
+		/>
+	</label>
+);
+
+const LinkedinIcon: React.FC = () => (
+	<svg
+		viewBox="0 0 24 24"
+		width="22"
+		height="22"
+		fill="#0A66C2"
+		aria-hidden
+		className="rounded-[4px]"
+	>
+		<rect width="24" height="24" rx="4" />
+		<path
+			fill="#fff"
+			d="M7.1 9.4h2.6V17H7.1V9.4Zm1.3-3.6a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm3.4 3.6h2.5v1h.04c.35-.66 1.2-1.36 2.46-1.36 2.64 0 3.13 1.74 3.13 4V17H17.4v-3.5c0-.84-.02-1.92-1.17-1.92-1.17 0-1.35.92-1.35 1.86V17h-2.5V9.4Z"
+		/>
+	</svg>
+);
+
+const XIcon: React.FC = () => (
+	<svg viewBox="0 0 24 24" width="20" height="20" fill="#fff" aria-hidden>
+		<path d="M18.244 2H21.5l-7.5 8.57L23 22h-6.94l-5.43-6.4L4.4 22H1.14l8.05-9.2L1 2h7.13l4.91 6.05L18.244 2Zm-2.43 18h1.93L7.27 4H5.2l10.62 16Z" />
+	</svg>
+);
+
+// ─── Bottom navigation bar ────────────────────────────────────────────────────
+const BottomNav: React.FC = () => {
+	const navigate = useNavigate();
+	const location = useLocation();
+	const { user } = useAuth();
+	const unreadDMs = useGlobalUnreadDMs(user?.id ?? null);
+
+	const items: {
+		label: string;
+		to: string;
+		icon: ReactNode;
+		isActive: boolean;
+		badge?: number;
+	}[] = [
+		{
+			label: "Home",
+			to: "/",
+			icon: <Home size={20} strokeWidth={1.9} />,
+			isActive: location.pathname === "/",
+		},
+		{
+			label: "Messages",
+			to: "/messages",
+			icon: <MessageCircle size={20} strokeWidth={1.9} />,
+			isActive: location.pathname.startsWith("/messages"),
+			badge: unreadDMs,
+		},
+		{
+			label: "Profile",
+			to: "/profile",
+			icon: <UserIcon size={20} strokeWidth={1.9} />,
+			isActive: location.pathname.startsWith("/profile"),
+		},
+		{
+			label: "Settings",
+			to: "/settings",
+			icon: <SettingsIcon size={20} strokeWidth={1.9} />,
+			isActive: location.pathname.startsWith("/settings"),
+		},
+	];
+
+	return (
+		<div
+			className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-3 py-2 rounded-full"
+			style={{
+				background:
+					"linear-gradient(rgba(16,14,35,0.92), rgba(16,14,35,0.92)) padding-box, linear-gradient(140deg, #22d3ee 0%, #6366f1 100%) border-box",
+				backdropFilter: "blur(20px)",
+				border: "2px solid transparent",
+				boxShadow:
+					"0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08)",
+			}}
+		>
+			{items.map((item) => (
+				<button
+					key={item.label}
+					type="button"
+					onClick={() => navigate(item.to)}
+					className={`relative flex flex-col items-center gap-0.5 px-4 py-2 rounded-full transition-all ${
+						item.isActive
+							? "text-cyan-400"
+							: "text-white/40 hover:text-white/70"
+					}`}
+				>
+					{item.badge && item.badge > 0 ? (
+						<span
+							className="absolute -top-0.5 right-2 min-w-[16px] h-4 rounded-full flex items-center justify-center text-white font-black tabular-nums"
+							style={{
+								background: "#6366f1",
+								fontSize: 9,
+								padding: "0 3px",
+								boxShadow: "0 0 8px rgba(99,102,241,0.7)",
+							}}
+						>
+							{item.badge > 99 ? "99+" : item.badge}
+						</span>
+					) : null}
+					{item.icon}
+					<span className="text-[9px] font-medium">{item.label}</span>
+				</button>
+			))}
+		</div>
+	);
+};
+
+// ─── Social-media-style profile header ────────────────────────────────────────
+const CoverBanner: React.FC<{
+	gradient: [string, string];
+	onBack: () => void;
+	onShare?: () => void;
+	shareDisabled?: boolean;
+}> = ({ gradient, onBack, onShare, shareDisabled }) => (
+	<div
+		className="relative -mx-5 h-[160px] overflow-hidden"
+		style={{
+			background: `linear-gradient(135deg, ${gradient[0]} 0%, ${gradient[1]} 100%)`,
+		}}
+	>
+		<div
+			aria-hidden
+			className="absolute inset-0"
+			style={{
+				background:
+					"radial-gradient(120% 80% at 50% 0%, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.04) 35%, transparent 70%)",
+			}}
+		/>
+		<div
+			aria-hidden
+			className="absolute inset-x-0 bottom-0 h-24"
+			style={{
+				background:
+					"linear-gradient(to bottom, transparent 0%, rgba(6,5,18,0.55) 70%, rgba(6,5,18,0.95) 100%)",
+			}}
+		/>
+		<IridescentArc className="absolute inset-x-0 -bottom-[1px]" />
+		<div className="absolute top-4 left-4 right-4 flex items-center justify-between">
+			<IconButton
+				aria-label="Back"
+				icon={<ArrowLeft size={20} />}
+				onClick={onBack}
+			/>
+			{onShare && (
+				<IconButton
+					aria-label="Share QR"
+					icon={<Share2 size={18} />}
+					onClick={onShare}
+					disabled={shareDisabled}
+				/>
+			)}
+		</div>
+	</div>
+);
+
+const StatChip: React.FC<{ value: string; label: string }> = ({
+	value,
+	label,
+}) => (
+	<div
+		className="flex-1 rounded-xl px-2.5 py-2 text-center"
+		style={{
+			background: "rgba(255,255,255,0.03)",
+			border: "1px solid rgba(255,255,255,0.06)",
+		}}
+	>
+		<p className="font-display text-white text-[15px] font-bold leading-tight num truncate">
+			{value}
+		</p>
+		<p className="text-pt-text-3 text-[9px] uppercase tracking-[0.16em] font-display mt-0.5">
+			{label}
+		</p>
+	</div>
+);
+
+const handleFromName = (
+	first: string,
+	last: string,
+	emailFallback?: string | null,
+): string | null => {
+	const f = first.trim().toLowerCase();
+	const l = last.trim().toLowerCase();
+	if (f || l) return `@${[f, l].filter(Boolean).join(".")}`;
+	if (emailFallback) {
+		const prefix = emailFallback.split("@")[0];
+		if (prefix) return `@${prefix.toLowerCase()}`;
+	}
+	return null;
+};
+
+// ─── Frame layout shared by both views ────────────────────────────────────────
+const ProfileFrame: React.FC<{ children: ReactNode }> = ({ children }) => (
+	<div className="min-h-screen relative" style={{ background: "var(--c-bg-deep)" }}>
+		<BgGlow />
+		<div
+			className="fixed inset-y-0 left-0 z-[9] pointer-events-none"
+			style={{
+				width: "calc((100vw - 430px) / 2)",
+				background: "rgba(4,3,12,0.92)",
+			}}
+		/>
+		<div
+			className="fixed inset-y-0 right-0 z-[9] pointer-events-none"
+			style={{
+				width: "calc((100vw - 430px) / 2)",
+				background: "rgba(4,3,12,0.92)",
+			}}
+		/>
+		<div
+			className="relative z-10 xl:max-w-[430px] mx-auto px-5 pt-0 pb-32 min-h-screen"
+			style={{
+				background: "rgba(6,5,18,0.72)",
+				borderLeft: "1px solid rgba(255,255,255,0.08)",
+				borderRight: "1px solid rgba(255,255,255,0.08)",
+			}}
+		>
+			{children}
+		</div>
+		<BottomNav />
+	</div>
+);
+
 // ─── Public view ──────────────────────────────────────────────────────────────
 const PublicProfileView: React.FC<{ founderUserId: string }> = ({
 	founderUserId,
@@ -90,14 +421,13 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({
 	const [currentUserDisplayName, setCurrentUserDisplayName] = useState("");
 
 	const profileUrl = `${window.location.origin}/profile/${founderUserId}`;
-
 	const isOwnProfile = user?.id === founderUserId;
 
 	useEffect(() => {
 		supabase
 			.from("users")
 			.select(
-				"id, first_name, last_name, bio, profile_picture_url, linkedin_url, twitter_url, role",
+				"id, first_name, last_name, bio, profile_picture_url, linkedin_url, twitter_url, role, profile_color",
 			)
 			.eq("auth_user_id", founderUserId)
 			.maybeSingle()
@@ -113,13 +443,13 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({
 						twitter_url: data.twitter_url ?? "",
 						role: (data.role as ProfileData["role"]) ?? "",
 						looking_to_connect: "",
+						profile_color: (data.profile_color as GradientPresetKey | null) ?? null,
 					});
 				}
 				setIsLoading(false);
 			});
 	}, [founderUserId]);
 
-	// Fetch current user's display name for DM sender label
 	useEffect(() => {
 		if (!user) return;
 		supabase
@@ -137,217 +467,134 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({
 		return (
 			<div
 				className="min-h-screen flex items-center justify-center"
-				style={{ background: "#080a14" }}
+				style={{ background: "var(--c-bg-deep)" }}
 			>
-				<div className="w-8 h-8 rounded-full border-2 border-violet-400 border-t-transparent animate-spin" />
+				<div className="w-8 h-8 rounded-full border-2 border-pt-purple border-t-transparent animate-spin" />
 			</div>
 		);
 	}
 
 	if (!profile) {
 		return (
-			<div
-				className="min-h-screen flex items-center justify-center"
-				style={{ background: "#080a14" }}
-			>
-				<p className="text-white/40">Profile not found.</p>
-			</div>
+			<ProfileFrame>
+				<CoverBanner
+					gradient={gradientForUser(null, founderUserId)}
+					onBack={() => navigate(-1)}
+				/>
+				<GlassCard tone="frame" size="lg" className="text-center mt-10">
+					<p className="font-display text-pt-text-1 font-semibold text-[15px] mb-1">
+						No profile yet
+					</p>
+					<p className="text-pt-text-2 text-sm">
+						This user hasn't set up their profile.
+					</p>
+				</GlassCard>
+			</ProfileFrame>
 		);
 	}
 
-	const initials =
-		profile.first_name || profile.last_name
-			? `${profile.first_name.charAt(0)}${profile.last_name.charAt(0)}`.toUpperCase()
-			: "?";
+	const fullName =
+		`${profile.first_name} ${profile.last_name}`.trim() || "Anonymous";
+	const gradient = gradientForUser(profile.profile_color, founderUserId);
+	const handle = handleFromName(profile.first_name, profile.last_name);
+	const hasSocials = !!(profile.linkedin_url || profile.twitter_url);
 
 	return (
 		<>
-			<div className="min-h-screen relative" style={{ background: "#080a14" }}>
-				<BgGlow />
-				<div
-					className="fixed inset-y-0 left-0 z-[9] pointer-events-none"
-					style={{
-						width: "calc((100vw - 430px) / 2)",
-						background: "rgba(4,3,12,0.92)",
-					}}
+			<ProfileFrame>
+				<CoverBanner
+					gradient={gradient}
+					onBack={() => navigate(-1)}
+					onShare={() => setShowScanner(true)}
 				/>
-				<div
-					className="fixed inset-y-0 right-0 z-[9] pointer-events-none"
-					style={{
-						width: "calc((100vw - 430px) / 2)",
-						background: "rgba(4,3,12,0.92)",
-					}}
-				/>
-				<div
-					className="relative z-10 xl:max-w-[430px] mx-auto px-5 pt-10 pb-20 min-h-screen"
-					style={{
-						background: "rgba(6,5,18,0.72)",
-						borderLeft: "1px solid rgba(255,255,255,0.08)",
-						borderRight: "1px solid rgba(255,255,255,0.08)",
-					}}
-				>
-					{/* Back + share row */}
-					<div className="flex items-center justify-between mb-8">
-						<button
-							onClick={() => navigate(-1)}
-							className="flex items-center gap-1.5 text-white/40 hover:text-white/70 text-sm transition-colors"
-						>
-							<svg
-								className="w-4 h-4"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									strokeWidth={2}
-									d="M15 19l-7-7 7-7"
-								/>
-							</svg>
-							Back
-						</button>
-						<button
-							onClick={() => setShowScanner(true)}
-							className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold text-white/70 hover:text-white transition-all"
-							style={{
-								background: "rgba(255,255,255,0.06)",
-								border: "1px solid rgba(255,255,255,0.1)",
-							}}
-						>
-							<svg
-								className="w-4 h-4"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									strokeWidth={2}
-									d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
-								/>
-							</svg>
-							Share
-						</button>
+
+				{/* Avatar overlapping cover + action button */}
+				<div className="flex items-end justify-between -mt-12 mb-3 relative z-10">
+					<div
+						className="rounded-full p-1"
+						style={{
+							background: "rgba(6,5,18,0.95)",
+						}}
+					>
+						<Avatar
+							size="xl"
+							photo={profile.profile_picture_url || null}
+							name={fullName}
+							gradient={gradient}
+							className="w-[104px] h-[104px]"
+						/>
 					</div>
-
-					{/* Avatar + name */}
-					<div className="flex items-center gap-5 mb-6">
-						<div className="w-24 h-24 rounded-full overflow-hidden border-2 border-white/15 flex-shrink-0 shadow-lg shadow-violet-500/20">
-							{profile.profile_picture_url ? (
-								<img
-									src={profile.profile_picture_url}
-									alt={profile.first_name}
-									className="w-full h-full object-cover"
-								/>
-							) : (
-								<div className="w-full h-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white font-black text-3xl">
-									{initials}
-								</div>
-							)}
-						</div>
-						<div>
-							<h1 className="text-2xl font-black text-white leading-tight">
-								{`${profile.first_name} ${profile.last_name}`.trim() ||
-									"Anonymous"}
-							</h1>
-							{profile.role && (
-								<span
-									className={`inline-block mt-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${ROLE_COLORS[profile.role] ?? ""}`}
-								>
-									{ROLE_LABELS[profile.role] ?? profile.role}
-								</span>
-							)}
-							{user && !isOwnProfile && (
-								<button
-									onClick={() => setShowDM(true)}
-									className="flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95"
-									style={{
-										background: "rgba(99,102,241,0.15)",
-										border: "1px solid rgba(99,102,241,0.3)",
-										color: "#a5b4fc",
-									}}
-								>
-									<MessageCircle size={12} />
-									Start chat
-								</button>
-							)}
-						</div>
-					</div>
-
-					{/* Bio */}
-					{profile.bio && (
-						<div
-							className="rounded-2xl px-4 py-4 mb-4"
+					{user && !isOwnProfile && (
+						<button
+							onClick={() => setShowDM(true)}
+							className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold transition-all active:scale-95 mb-1"
 							style={{
-								background: "rgba(255,255,255,0.04)",
-								border: "1px solid rgba(255,255,255,0.06)",
+								background:
+									"linear-gradient(140deg, rgba(34,211,238,0.18), rgba(99,102,241,0.22))",
+								border: "1px solid rgba(140,180,255,0.4)",
+								color: "#dbe6ff",
+								boxShadow:
+									"inset 0 1px 0 rgba(255,255,255,0.1), 0 0 14px rgba(99,102,241,0.25)",
 							}}
 						>
-							<p className="text-white/35 text-[10px] font-semibold uppercase tracking-wider mb-2">
-								Bio
-							</p>
-							<p className="text-white/75 text-sm leading-relaxed">
-								{profile.bio}
-							</p>
-						</div>
-					)}
-
-					{/* Contact */}
-					{(profile.linkedin_url || profile.twitter_url) && (
-						<div
-							className="rounded-2xl px-4 py-4 space-y-3"
-							style={{
-								background: "rgba(255,255,255,0.04)",
-								border: "1px solid rgba(255,255,255,0.06)",
-							}}
-						>
-							<p className="text-white/35 text-[10px] font-semibold uppercase tracking-wider">
-								Contact
-							</p>
-							{profile.linkedin_url && (
-								<a
-									href={profile.linkedin_url}
-									target="_blank"
-									rel="noopener noreferrer"
-									className="flex items-center gap-3 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
-								>
-									<svg
-										className="w-4 h-4 flex-shrink-0"
-										fill="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
-									</svg>
-									<span className="truncate">
-										{profile.linkedin_url.replace(/^https?:\/\/(www\.)?/, "")}
-									</span>
-								</a>
-							)}
-							{profile.twitter_url && (
-								<a
-									href={profile.twitter_url}
-									target="_blank"
-									rel="noopener noreferrer"
-									className="flex items-center gap-3 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
-								>
-									<svg
-										className="w-4 h-4 flex-shrink-0"
-										fill="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.253 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" />
-									</svg>
-									<span className="truncate">
-										{profile.twitter_url.replace(/^https?:\/\/(www\.)?/, "")}
-									</span>
-								</a>
-							)}
-						</div>
+							<MessageCircle size={14} strokeWidth={2.2} />
+							Message
+						</button>
 					)}
 				</div>
-			</div>
+
+				{/* Name + handle + role */}
+				<div className="mb-4">
+					<h1 className="font-display font-bold text-[26px] leading-tight text-white">
+						{fullName}
+					</h1>
+					<div className="flex items-center gap-2 mt-1.5 flex-wrap">
+						{handle && (
+							<span className="text-pt-text-3 text-[13px] font-medium">
+								{handle}
+							</span>
+						)}
+						{handle && profile.role && (
+							<span className="text-pt-text-3 text-[10px]">·</span>
+						)}
+						{profile.role && (
+							<Pill
+								tone="role"
+								icon={<Briefcase size={11} strokeWidth={2.4} />}
+							>
+								{ROLE_LABELS[profile.role] ?? profile.role}
+							</Pill>
+						)}
+					</div>
+				</div>
+
+				{/* Bio */}
+				<p className="text-pt-text-2 text-[14px] leading-relaxed mb-4">
+					{profile.bio || (
+						<span className="text-pt-text-3 italic">No bio yet.</span>
+					)}
+				</p>
+
+				{/* Social links — inline social-media-style row */}
+				{hasSocials && (
+					<div className="flex items-center gap-2 mb-5">
+						{profile.linkedin_url && (
+							<SocialCard
+								icon={<LinkedinIcon />}
+								label="LinkedIn"
+								href={profile.linkedin_url}
+							/>
+						)}
+						{profile.twitter_url && (
+							<SocialCard
+								icon={<XIcon />}
+								label="X"
+								href={profile.twitter_url}
+							/>
+						)}
+					</div>
+				)}
+			</ProfileFrame>
 			<ScannerModal
 				isOpen={showScanner}
 				onClose={() => setShowScanner(false)}
@@ -382,13 +629,12 @@ const ProfilePage: React.FC = () => {
 	const { profileId: profileIdParam } = useParams<{ profileId: string }>();
 	const claimId = searchParams.get("id");
 
-	// Path-param takes priority; fall back to query param for legacy claim tokens
 	const isLikelyProfileId =
 		!!profileIdParam || (!!claimId && /^[0-9a-f-]{36}$/i.test(claimId));
 	const resolvedProfileId =
 		profileIdParam ?? (isLikelyProfileId ? claimId : null);
 
-	const [tab, setTab] = useState<"view" | "edit">("view");
+	const [isEditing, setIsEditing] = useState(false);
 	const [showScanner, setShowScanner] = useState(false);
 	const [application, setApplication] = useState<ApplicationData | null>(null);
 	const [claimed, setClaimed] = useState(false);
@@ -405,6 +651,7 @@ const ProfilePage: React.FC = () => {
 		twitter_url: "",
 		role: "member",
 		looking_to_connect: "",
+		profile_color: null,
 	});
 	const [draft, setDraft] = useState<ProfileData>(profile);
 	const [isSaving, setIsSaving] = useState(false);
@@ -421,7 +668,7 @@ const ProfilePage: React.FC = () => {
 		supabase
 			.from("users")
 			.select(
-				"id, first_name, last_name, bio, profile_picture_url, linkedin_url, twitter_url, role, looking_to_connect",
+				"id, first_name, last_name, bio, profile_picture_url, linkedin_url, twitter_url, role, looking_to_connect, profile_color",
 			)
 			.eq("auth_user_id", user.id)
 			.maybeSingle()
@@ -437,6 +684,8 @@ const ProfilePage: React.FC = () => {
 						twitter_url: data.twitter_url ?? "",
 						role: (data.role as ProfileData["role"]) ?? "",
 						looking_to_connect: data.looking_to_connect ?? "",
+						profile_color:
+							(data.profile_color as GradientPresetKey | null) ?? null,
 					};
 					setProfile(p);
 					setDraft(p);
@@ -463,7 +712,6 @@ const ProfilePage: React.FC = () => {
 				return;
 			}
 
-			// Resolve users.id for the FK
 			const { data: userRow } = await supabase
 				.from("users")
 				.select("id")
@@ -484,7 +732,6 @@ const ProfilePage: React.FC = () => {
 			setApplication(app);
 			setClaimed(true);
 
-			// Auto-link any pitch assigned to this application
 			if (userRow) {
 				await supabase
 					.from("pitches")
@@ -579,27 +826,31 @@ const ProfilePage: React.FC = () => {
 		setIsUploadingAvatar(false);
 	};
 
-	const handleSave = async (e: React.FormEvent) => {
-		e.preventDefault();
+	const handleSave = async () => {
 		if (!user) return;
 		setIsSaving(true);
 		setSaveMsg(null);
 
-		const { data: upsertedUser, error } = await supabase.from("users").upsert(
-			{
-				auth_user_id: user.id,
-				email: user.email ?? "",
-				first_name: draft.first_name,
-				last_name: draft.last_name,
-				bio: draft.bio || null,
-				profile_picture_url: draft.profile_picture_url || null,
-				linkedin_url: draft.linkedin_url || null,
-				twitter_url: draft.twitter_url || null,
-				role: draft.role || "member",
-				looking_to_connect: draft.looking_to_connect || null,
-			},
-			{ onConflict: "auth_user_id" },
-		).select("id").maybeSingle();
+		const { data: upsertedUser, error } = await supabase
+			.from("users")
+			.upsert(
+				{
+					auth_user_id: user.id,
+					email: user.email ?? "",
+					first_name: draft.first_name,
+					last_name: draft.last_name,
+					bio: draft.bio || null,
+					profile_picture_url: draft.profile_picture_url || null,
+					linkedin_url: draft.linkedin_url || null,
+					twitter_url: draft.twitter_url || null,
+					role: draft.role || "member",
+					looking_to_connect: draft.looking_to_connect || null,
+					profile_color: draft.profile_color || null,
+				},
+				{ onConflict: "auth_user_id" },
+			)
+			.select("id")
+			.maybeSingle();
 
 		if (error) {
 			setSaveMsg({ ok: false, text: "Failed to save. Please try again." });
@@ -616,8 +867,8 @@ const ProfilePage: React.FC = () => {
 			setSaveMsg({ ok: true, text: "Profile saved!" });
 			setTimeout(() => {
 				setSaveMsg(null);
-				setTab("view");
-			}, 1500);
+				setIsEditing(false);
+			}, 1200);
 		}
 		setIsSaving(false);
 	};
@@ -630,14 +881,13 @@ const ProfilePage: React.FC = () => {
 		return (
 			<div
 				className="min-h-screen flex items-center justify-center"
-				style={{ background: "#080a14" }}
+				style={{ background: "var(--c-bg-deep)" }}
 			>
-				<div className="w-8 h-8 rounded-full border-2 border-violet-400 border-t-transparent animate-spin" />
+				<div className="w-8 h-8 rounded-full border-2 border-pt-purple border-t-transparent animate-spin" />
 			</div>
 		);
 	}
 
-	// Public view — show for anyone (including logged-in users) viewing someone else's profile
 	if (isLikelyProfileId && resolvedProfileId) {
 		return <PublicProfileView founderUserId={resolvedProfileId} />;
 	}
@@ -648,596 +898,537 @@ const ProfilePage: React.FC = () => {
 		);
 	}
 
-	const initials =
-		profile.first_name || profile.last_name
-			? `${profile.first_name.charAt(0)}${profile.last_name.charAt(0)}`.toUpperCase()
-			: (user.email ?? "?").charAt(0).toUpperCase();
+	const value = isEditing ? draft : profile;
+	const fullName =
+		`${value.first_name} ${value.last_name}`.trim() || "Your Name";
+	const gradient = gradientForUser(value.profile_color, user.id);
 
-	const inputClass =
-		"w-full rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none transition-colors";
-	const inputStyle = {
-		background: "rgba(255,255,255,0.06)",
-		border: "1px solid rgba(255,255,255,0.12)",
+	const statusToneClass: Record<string, string> = {
+		pending:
+			"text-yellow-300 border-yellow-700/60 bg-yellow-500/10",
+		approved: "text-green-300 border-green-700/60 bg-green-500/10",
+		rejected: "text-red-300 border-red-700/60 bg-red-500/10",
 	};
 
-	const statusColors: Record<string, string> = {
-		pending: "text-yellow-400 border-yellow-700/60 bg-yellow-500/10",
-		approved: "text-green-400 border-green-700/60 bg-green-500/10",
-		rejected: "text-red-400 border-red-700/60 bg-red-500/10",
-	};
+	const handle = handleFromName(value.first_name, value.last_name, user.email);
+	const appliedCount = application ? 1 : 0;
 
 	return (
 		<>
-			<div className="min-h-screen relative" style={{ background: "#080a14" }}>
-				<BgGlow />
-				<div
-					className="fixed inset-y-0 left-0 z-[9] pointer-events-none"
-					style={{
-						width: "calc((100vw - 430px) / 2)",
-						background: "rgba(4,3,12,0.92)",
-					}}
+			<ProfileFrame>
+				<CoverBanner
+					gradient={gradient}
+					onBack={() => navigate(-1)}
+					onShare={() => setShowScanner(true)}
+					shareDisabled={!profileUrl}
 				/>
-				<div
-					className="fixed inset-y-0 right-0 z-[9] pointer-events-none"
-					style={{
-						width: "calc((100vw - 430px) / 2)",
-						background: "rgba(4,3,12,0.92)",
-					}}
-				/>
-				<div
-					className="relative z-10 xl:max-w-[430px] mx-auto px-5 pt-8 pb-20 min-h-screen"
-					style={{
-						background: "rgba(6,5,18,0.72)",
-						borderLeft: "1px solid rgba(255,255,255,0.08)",
-						borderRight: "1px solid rgba(255,255,255,0.08)",
-					}}
-				>
-					{/* Top bar */}
-					<div className="flex items-center justify-between mb-6">
-						<button
-							onClick={() => navigate(-1)}
-							className="flex items-center gap-1.5 text-white/40 hover:text-white/70 text-sm transition-colors"
-						>
-							<svg
-								className="w-4 h-4"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									strokeWidth={2}
-									d="M15 19l-7-7 7-7"
+
+				{/* Avatar overlap + edit-action button */}
+				<div className="flex items-end justify-between -mt-12 mb-3 relative z-10">
+					{isEditing ? (
+						<label className="cursor-pointer rounded-full p-1 block" style={{ background: "rgba(6,5,18,0.95)" }}>
+							<input
+								type="file"
+								accept="image/*"
+								className="hidden"
+								onChange={handleAvatarUpload}
+								disabled={isUploadingAvatar}
+							/>
+							<div className="relative">
+								<Avatar
+									size="xl"
+									photo={
+										isUploadingAvatar
+											? null
+											: draft.profile_picture_url || null
+									}
+									name={fullName}
+									gradient={gradient}
+									className="w-[104px] h-[104px]"
 								/>
-							</svg>
-							Back
-						</button>
-						<div>
-							<p className="text-white/30 text-[10px] font-semibold uppercase tracking-widest text-right">
-								Account
-							</p>
-							<h1 className="text-xl font-black text-white">My Profile</h1>
-						</div>
-					</div>
-
-					{/* Banners */}
-					{claimed && (
-						<div
-							className="mb-5 rounded-2xl px-4 py-3.5 text-sm text-green-300"
-							style={{
-								background: "rgba(34,197,94,0.08)",
-								border: "1px solid rgba(34,197,94,0.25)",
-							}}
-						>
-							Profile linked! Application answers have been pre-filled where
-							possible.
-						</div>
-					)}
-					{claimError && (
-						<div
-							className="mb-5 rounded-2xl px-4 py-3.5 text-sm text-red-300"
-							style={{
-								background: "rgba(239,68,68,0.08)",
-								border: "1px solid rgba(239,68,68,0.25)",
-							}}
-						>
-							{claimError}
-						</div>
-					)}
-
-					{/* Tab bar */}
-					<div className="flex gap-2 mb-5">
-						{(["view", "edit"] as const).map((t) => (
-							<button
-								key={t}
-								onClick={() => setTab(t)}
-								className="px-4 py-1.5 rounded-full text-xs font-bold transition-all border"
-								style={
-									tab === t
-										? {
-												background: "rgba(124,58,237,0.25)",
-												border: "1px solid rgba(124,58,237,0.6)",
-												color: "#c4b5fd",
-											}
-										: {
-												background: "transparent",
-												border: "1px solid rgba(255,255,255,0.12)",
-												color: "rgba(255,255,255,0.45)",
-											}
-								}
-							>
-								{t === "view" ? "Profile" : "Edit"}
-							</button>
-						))}
-						<button
-							onClick={() => setShowScanner(true)}
-							disabled={!profileUrl}
-							className="px-4 py-1.5 rounded-full text-xs font-bold transition-all border disabled:opacity-30 disabled:cursor-not-allowed"
-							style={{
-								background: "transparent",
-								border: "1px solid rgba(255,255,255,0.12)",
-								color: "rgba(255,255,255,0.45)",
-							}}
-						>
-							Share QR
-						</button>
-					</div>
-
-					{isLoadingProfile ? (
-						<div className="flex items-center justify-center py-20">
-							<div className="w-8 h-8 rounded-full border-2 border-violet-400 border-t-transparent animate-spin" />
-						</div>
+								<span
+									className="absolute inset-0 rounded-full flex items-center justify-center text-[9px] uppercase tracking-[0.18em] font-display text-white text-center px-2"
+									style={{ background: "rgba(0,0,0,0.45)" }}
+								>
+									{isUploadingAvatar ? "Uploading…" : "Tap to change"}
+								</span>
+							</div>
+						</label>
 					) : (
-						<>
-							{/* ── VIEW TAB ── */}
-							{tab === "view" && (
-								<div className="space-y-4">
-									{/* Avatar + name */}
-									<div className="flex items-center gap-4">
-										<div className="w-20 h-20 rounded-full overflow-hidden border-2 border-white/15 flex-shrink-0 shadow-lg shadow-violet-500/20">
-											{profile.profile_picture_url ? (
-												<img
-													src={profile.profile_picture_url}
-													alt={profile.first_name}
-													className="w-full h-full object-cover"
-												/>
-											) : (
-												<div className="w-full h-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white font-black text-2xl">
-													{initials}
-												</div>
-											)}
-										</div>
-										<div className="flex-1 min-w-0">
-											<h2 className="text-white font-black text-xl leading-tight">
-												{profile.first_name || profile.last_name
-													? `${profile.first_name} ${profile.last_name}`.trim()
-													: "Your Name"}
-											</h2>
-											<p className="text-white/40 text-sm mt-0.5 truncate">
-												{user.email}
-											</p>
-											{profile.role && (
-												<span
-													className={`inline-block mt-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${ROLE_COLORS[profile.role] ?? ""}`}
-												>
-													{ROLE_LABELS[profile.role] ?? profile.role}
-												</span>
-											)}
-										</div>
-									</div>
+						<div className="rounded-full p-1" style={{ background: "rgba(6,5,18,0.95)" }}>
+							<Avatar
+								size="xl"
+								photo={profile.profile_picture_url || null}
+								name={fullName}
+								gradient={gradient}
+								className="w-[104px] h-[104px]"
+							/>
+						</div>
+					)}
 
-									{/* Bio */}
-									{profile.bio && (
-										<div
-											className="rounded-2xl px-4 py-3.5"
-											style={{
-												background: "rgba(255,255,255,0.04)",
-												border: "1px solid rgba(255,255,255,0.06)",
-											}}
-										>
-											<p className="text-white/35 text-[10px] font-semibold uppercase tracking-wider mb-1.5">
-												Bio
-											</p>
-											<p className="text-white/75 text-sm leading-relaxed">
-												{profile.bio}
-											</p>
-										</div>
-									)}
+					<div className="flex items-center gap-2 mb-1">
+						{!isEditing ? (
+							<button
+								onClick={() => {
+									setDraft(profile);
+									setIsEditing(true);
+								}}
+								className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold transition-all active:scale-95"
+								style={{
+									background:
+										"linear-gradient(140deg, rgba(34,211,238,0.18), rgba(99,102,241,0.22))",
+									border: "1px solid rgba(140,180,255,0.4)",
+									color: "#dbe6ff",
+									boxShadow:
+										"inset 0 1px 0 rgba(255,255,255,0.1), 0 0 14px rgba(99,102,241,0.25)",
+								}}
+							>
+								<Pencil size={14} strokeWidth={2.2} />
+								Edit profile
+							</button>
+						) : (
+							<button
+								onClick={() => {
+									setDraft(profile);
+									setIsEditing(false);
+									setAvatarError(null);
+								}}
+								disabled={isSaving}
+								className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold transition-all active:scale-95 disabled:opacity-50"
+								style={{
+									background: "rgba(255,255,255,0.04)",
+									border: "1px solid rgba(255,255,255,0.12)",
+									color: "rgba(255,255,255,0.75)",
+								}}
+							>
+								<XIconLucide size={14} strokeWidth={2.2} />
+								Cancel
+							</button>
+						)}
+					</div>
+				</div>
 
-									{/* Contact */}
-									{(profile.linkedin_url || profile.twitter_url) && (
-										<div
-											className="rounded-2xl px-4 py-3.5 space-y-2.5"
-											style={{
-												background: "rgba(255,255,255,0.04)",
-												border: "1px solid rgba(255,255,255,0.06)",
-											}}
-										>
-											<p className="text-white/35 text-[10px] font-semibold uppercase tracking-wider">
-												Contact
-											</p>
-											{profile.linkedin_url && (
-												<a
-													href={profile.linkedin_url}
-													target="_blank"
-													rel="noopener noreferrer"
-													className="flex items-center gap-2.5 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
-												>
-													<svg
-														className="w-4 h-4 flex-shrink-0"
-														fill="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
-													</svg>
-													<span className="truncate">
-														{profile.linkedin_url.replace(
-															/^https?:\/\/(www\.)?/,
-															"",
-														)}
-													</span>
-												</a>
-											)}
-											{profile.twitter_url && (
-												<a
-													href={profile.twitter_url}
-													target="_blank"
-													rel="noopener noreferrer"
-													className="flex items-center gap-2.5 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
-												>
-													<svg
-														className="w-4 h-4 flex-shrink-0"
-														fill="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.253 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" />
-													</svg>
-													<span className="truncate">
-														{profile.twitter_url.replace(
-															/^https?:\/\/(www\.)?/,
-															"",
-														)}
-													</span>
-												</a>
-											)}
-										</div>
-									)}
+				{avatarError && (
+					<p className="text-red-400 text-xs mt-1 mb-2">{avatarError}</p>
+				)}
 
-									{/* Empty state */}
-									{!profile.first_name &&
-										!profile.last_name &&
-										!profile.bio && (
-											<div className="text-center py-8">
-												<p className="text-white/30 text-sm mb-3">
-													Your profile is empty.
-												</p>
-												<button
-													onClick={() => setTab("edit")}
-													className="px-5 py-2.5 rounded-xl font-bold text-sm text-white"
-													style={{
-														background:
-															"linear-gradient(135deg, #22d3ee, #6366f1)",
-														boxShadow: "0 0 16px rgba(34,211,238,0.25)",
-													}}
-												>
-													Set up profile
-												</button>
-											</div>
-										)}
+				{/* Banners */}
+				{claimed && (
+					<div
+						className="mb-3 rounded-2xl px-4 py-3 text-sm text-green-300"
+						style={{
+							background: "rgba(34,197,94,0.08)",
+							border: "1px solid rgba(34,197,94,0.25)",
+						}}
+					>
+						Profile linked! Application answers have been pre-filled where
+						possible.
+					</div>
+				)}
+				{claimError && (
+					<div
+						className="mb-3 rounded-2xl px-4 py-3 text-sm text-red-300"
+						style={{
+							background: "rgba(239,68,68,0.08)",
+							border: "1px solid rgba(239,68,68,0.25)",
+						}}
+					>
+						{claimError}
+					</div>
+				)}
 
-									{/* Application card */}
-									{application && (
-										<div
-											className="rounded-2xl px-4 py-4 mt-2"
-											style={{
-												background: "rgba(255,255,255,0.03)",
-												border: "1px solid rgba(255,255,255,0.06)",
-											}}
-										>
-											<div className="flex items-center justify-between mb-4">
-												<div>
-													<p className="text-white/35 text-[10px] font-semibold uppercase tracking-wider mb-0.5">
-														Application
-													</p>
-													{application.event?.name && (
-														<p className="text-white/70 text-sm font-semibold">
-															{application.event.name}
-														</p>
-													)}
-												</div>
-												<span
-													className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${statusColors[application.status] ?? "text-white/40 border-white/10 bg-white/5"}`}
-												>
-													{application.status.charAt(0).toUpperCase() +
-														application.status.slice(1)}
-												</span>
-											</div>
-											<div className="space-y-3">
-												{(application.questions ?? []).map((q) => {
-													const answer = application.answers[q.id];
-													if (!answer) return null;
-													return (
-														<div key={q.id}>
-															<p className="text-white/30 text-[10px] font-semibold uppercase tracking-wider mb-1">
-																{q.question_text}
-															</p>
-															{q.question_type === "image" ? (
-																<img
-																	src={answer}
-																	alt={q.question_text}
-																	className="max-h-40 rounded-xl border border-white/10 object-contain"
-																/>
-															) : q.question_type === "url" ||
-															  q.question_type === "website_url" ? (
-																<a
-																	href={answer}
-																	target="_blank"
-																	rel="noopener noreferrer"
-																	className="text-cyan-400 hover:underline text-sm break-all"
-																>
-																	{answer}
-																</a>
-															) : (
-																<p className="text-white/65 text-sm leading-relaxed">
-																	{answer}
-																</p>
-															)}
-														</div>
-													);
-												})}
-												{(application.questions ?? []).length === 0 && (
-													<p className="text-white/25 text-sm">
-														Application answers not available.
-													</p>
-												)}
-											</div>
-										</div>
+				{isLoadingProfile ? (
+					<div className="flex items-center justify-center py-20">
+						<div className="w-8 h-8 rounded-full border-2 border-pt-purple border-t-transparent animate-spin" />
+					</div>
+				) : (
+					<>
+						{/* Name + handle + role */}
+						<div className="mb-3">
+							{isEditing ? (
+								<div className="grid grid-cols-2 gap-2 mb-2">
+									<input
+										value={draft.first_name}
+										placeholder="First name"
+										onChange={(e) =>
+											setDraft((d) => ({ ...d, first_name: e.target.value }))
+										}
+										className="bg-transparent font-display font-bold text-[22px] leading-tight text-white outline-none border-b border-white/20 pb-1 placeholder-white/20"
+									/>
+									<input
+										value={draft.last_name}
+										placeholder="Last name"
+										onChange={(e) =>
+											setDraft((d) => ({ ...d, last_name: e.target.value }))
+										}
+										className="bg-transparent font-display font-bold text-[22px] leading-tight text-white outline-none border-b border-white/20 pb-1 placeholder-white/20"
+									/>
+								</div>
+							) : (
+								<h1 className="font-display font-bold text-[26px] leading-tight text-white">
+									{fullName}
+								</h1>
+							)}
+
+							<div className="flex items-center gap-2 mt-1.5 flex-wrap">
+								{handle && (
+									<span className="text-pt-text-3 text-[13px] font-medium">
+										{handle}
+									</span>
+								)}
+								{!isEditing && handle && value.role && (
+									<span className="text-pt-text-3 text-[10px]">·</span>
+								)}
+								{!isEditing && value.role && (
+									<Pill
+										tone="role"
+										icon={<Briefcase size={11} strokeWidth={2.4} />}
+									>
+										{ROLE_LABELS[value.role] ?? value.role}
+									</Pill>
+								)}
+							</div>
+
+							{isEditing && (
+								<div className="flex gap-2 mt-3 flex-wrap">
+									{(["member", "pitcher", "sponsor", "judge"] as const).map(
+										(r) => (
+											<button
+												key={r}
+												type="button"
+												onClick={() => setDraft((d) => ({ ...d, role: r }))}
+												className={`px-3 py-[5px] text-[10px] font-display font-medium uppercase tracking-[0.16em] rounded-full transition-all ${
+													draft.role === r
+														? "bg-gradient-to-r from-pt-purple/30 to-pt-orange/25 text-white shadow-[inset_0_0_0_1px_rgba(220,200,255,0.45)]"
+														: "bg-white/[0.02] text-pt-text-3 shadow-[inset_0_0_0_1px_rgba(184,212,255,0.18)]"
+												}`}
+											>
+												{ROLE_LABELS[r]}
+											</button>
+										),
 									)}
 								</div>
 							)}
+						</div>
 
-							{/* ── EDIT TAB ── */}
-							{tab === "edit" && (
-								<form onSubmit={handleSave} className="space-y-4">
-									{/* Avatar upload */}
-									<div className="flex items-center gap-4">
-										<label className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-white/15 flex-shrink-0 cursor-pointer group">
-											{isUploadingAvatar ? (
-												<div className="w-full h-full bg-white/10 flex items-center justify-center">
-													<div className="w-5 h-5 rounded-full border-2 border-violet-400 border-t-transparent animate-spin" />
-												</div>
-											) : draft.profile_picture_url ? (
-												<img
-													src={draft.profile_picture_url}
-													alt=""
-													className="w-full h-full object-cover"
-												/>
-											) : (
-												<div className="w-full h-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white font-black text-xl">
-													{(
-														draft.first_name.charAt(0) +
-														draft.last_name.charAt(0)
-													).toUpperCase() || "?"}
-												</div>
-											)}
-											<div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-												<svg
-													className="w-5 h-5 text-white"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														strokeLinecap="round"
-														strokeLinejoin="round"
-														strokeWidth={2}
-														d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-													/>
-													<path
-														strokeLinecap="round"
-														strokeLinejoin="round"
-														strokeWidth={2}
-														d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
-													/>
-												</svg>
-											</div>
-											<input
-												type="file"
-												accept="image/*"
-												className="sr-only"
-												onChange={handleAvatarUpload}
-												disabled={isUploadingAvatar}
+						{/* Profile color picker — edit-only */}
+						{isEditing && (
+							<div className="mb-4">
+								<p className="text-[10px] uppercase tracking-[0.16em] font-display text-pt-text-3 mb-2">
+									Profile color
+								</p>
+								<div className="flex items-center gap-2 flex-wrap">
+									<button
+										type="button"
+										aria-label="Default color"
+										title="Default"
+										onClick={() =>
+											setDraft((d) => ({ ...d, profile_color: null }))
+										}
+										className={`w-7 h-7 rounded-full transition-all flex items-center justify-center ${
+											draft.profile_color === null
+												? "ring-2 ring-white/80 ring-offset-2 ring-offset-[#0a0820]"
+												: "ring-1 ring-white/20 hover:ring-white/40"
+										}`}
+										style={{
+											background:
+												`linear-gradient(135deg, ${DEFAULT_USER_GRADIENT[0]} 0%, ${DEFAULT_USER_GRADIENT[1]} 100%)`,
+										}}
+									>
+										{draft.profile_color === null && (
+											<Check
+												size={12}
+												strokeWidth={3}
+												className="text-white drop-shadow"
 											/>
-										</label>
-										<div className="flex-1">
-											<p className="text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-1">
-												Profile photo
+										)}
+									</button>
+									{GRADIENT_PRESET_KEYS.map((key) => {
+										const [from, to] = GRADIENT_PRESETS[key];
+										const selected = draft.profile_color === key;
+										return (
+											<button
+												key={key}
+												type="button"
+												aria-label={key}
+												title={key}
+												onClick={() =>
+													setDraft((d) => ({ ...d, profile_color: key }))
+												}
+												className={`w-7 h-7 rounded-full transition-all flex items-center justify-center ${
+													selected
+														? "ring-2 ring-white/80 ring-offset-2 ring-offset-[#0a0820]"
+														: "ring-1 ring-white/20 hover:ring-white/40"
+												}`}
+												style={{
+													background: `linear-gradient(135deg, ${from} 0%, ${to} 100%)`,
+												}}
+											>
+												{selected && (
+													<Check
+														size={12}
+														strokeWidth={3}
+														className="text-white drop-shadow"
+													/>
+												)}
+											</button>
+										);
+									})}
+								</div>
+							</div>
+						)}
+
+						{/* Bio */}
+						{isEditing ? (
+							<textarea
+								value={draft.bio}
+								onChange={(e) =>
+									setDraft((d) => ({ ...d, bio: e.target.value }))
+								}
+								rows={3}
+								placeholder="Tell people about yourself..."
+								className="w-full bg-transparent text-pt-text-2 text-[14px] leading-relaxed outline-none border border-white/10 rounded-xl p-3 mb-4 resize-none placeholder-white/20"
+							/>
+						) : (
+							<p className="text-pt-text-2 text-[14px] leading-relaxed mb-4">
+								{profile.bio || (
+									<span className="text-pt-text-3 italic">No bio yet.</span>
+								)}
+							</p>
+						)}
+
+						{/* Stats strip */}
+						{!isEditing && (
+							<div className="flex items-stretch gap-2 mb-4">
+								<StatChip
+									value={String(appliedCount)}
+									label={appliedCount === 1 ? "Application" : "Applications"}
+								/>
+								<StatChip
+									value={value.role ? ROLE_LABELS[value.role] ?? "Member" : "Member"}
+									label="Role"
+								/>
+								<StatChip
+									value={
+										hasSocialLinks(profile) ? "Linked" : "—"
+									}
+									label="Socials"
+								/>
+							</div>
+						)}
+
+						{/* Socials — view: inline icons; edit: input list */}
+						{isEditing ? (
+							<div className="flex flex-col gap-2.5 mb-4">
+								<SocialInput
+									label="LinkedIn"
+									type="url"
+									placeholder="https://linkedin.com/in/..."
+									value={draft.linkedin_url}
+									onChange={(v) =>
+										setDraft((d) => ({ ...d, linkedin_url: v }))
+									}
+								/>
+								<SocialInput
+									label="X"
+									type="url"
+									placeholder="https://x.com/..."
+									value={draft.twitter_url}
+									onChange={(v) =>
+										setDraft((d) => ({ ...d, twitter_url: v }))
+									}
+								/>
+								<SocialInput
+									label="Email"
+									type="email"
+									value={user.email ?? ""}
+									readOnly
+								/>
+							</div>
+						) : (
+							(profile.linkedin_url || profile.twitter_url || user.email) && (
+								<div className="flex items-center gap-2 mb-4">
+									{profile.linkedin_url && (
+										<SocialCard
+											icon={<LinkedinIcon />}
+											label="LinkedIn"
+											href={profile.linkedin_url}
+										/>
+									)}
+									{profile.twitter_url && (
+										<SocialCard
+											icon={<XIcon />}
+											label="X"
+											href={profile.twitter_url}
+										/>
+									)}
+									{user.email && (
+										<SocialCard
+											icon={
+												<Mail
+													size={22}
+													strokeWidth={1.8}
+													className="text-pt-orange"
+												/>
+											}
+											label="Email"
+											href={`mailto:${user.email}`}
+										/>
+									)}
+								</div>
+							)
+						)}
+
+						{/* "Looking to connect" — edit-only */}
+						{isEditing && (
+							<GlassCard tone="frame" size="md" className="mb-4">
+								<SectionHeading>Looking to connect with</SectionHeading>
+								<p className="text-pt-text-3 text-[11px] mt-2 mb-2">
+									Private — only used to recommend relevant people.
+								</p>
+								<textarea
+									value={draft.looking_to_connect}
+									onChange={(e) =>
+										setDraft((d) => ({
+											...d,
+											looking_to_connect: e.target.value,
+										}))
+									}
+									rows={3}
+									placeholder="e.g. investors interested in B2B SaaS, other founders working on climate tech..."
+									className="w-full bg-transparent text-pt-text-2 text-[14px] leading-relaxed outline-none border border-white/10 rounded-xl p-3 resize-none placeholder-white/20"
+								/>
+							</GlassCard>
+						)}
+
+						{/* Save status */}
+						{saveMsg && (
+							<p
+								className={`text-sm font-medium mb-3 text-center ${saveMsg.ok ? "text-green-400" : "text-red-400"}`}
+							>
+								{saveMsg.text}
+							</p>
+						)}
+
+						{/* Primary actions */}
+						{isEditing ? (
+							<PtButton
+								variant="primary"
+								size="lg"
+								className="w-full"
+								onClick={handleSave}
+								disabled={isSaving}
+								loading={isSaving}
+								loadingText={
+									<>
+										<Check size={16} strokeWidth={2} />
+										Saving…
+									</>
+								}
+							>
+								<Check size={16} strokeWidth={2} />
+								Save profile
+							</PtButton>
+						) : (
+							<PtButton
+								variant="primary"
+								size="lg"
+								className="w-full"
+								onClick={() => setShowScanner(true)}
+								disabled={!profileUrl}
+							>
+								<Share2 size={16} strokeWidth={1.8} />
+								Share QR Code
+							</PtButton>
+						)}
+
+						{/* Application card */}
+						{!isEditing && application && (
+							<div className="mt-4">
+								<GlassCard tone="frame" size="md">
+									<div className="flex items-center justify-between mb-3">
+										<div>
+											<p className="font-display text-[10px] uppercase tracking-[0.18em] text-pt-text-3 mb-0.5">
+												Application
 											</p>
-											<p className="text-white/30 text-xs">
-												Click the avatar to upload. Max 5 MB.
-											</p>
-											{avatarError && (
-												<p className="text-red-400 text-xs mt-1">
-													{avatarError}
+											{application.event?.name && (
+												<p className="text-white text-sm font-semibold">
+													{application.event.name}
 												</p>
 											)}
 										</div>
-									</div>
-
-									{/* Name */}
-									<div className="grid grid-cols-2 gap-3">
-										{(["first_name", "last_name"] as const).map((field) => (
-											<div key={field}>
-												<label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-1.5">
-													{field === "first_name" ? "First name" : "Last name"}
-												</label>
-												<input
-													type="text"
-													value={draft[field]}
-													onChange={(e) =>
-														setDraft((d) => ({ ...d, [field]: e.target.value }))
-													}
-													className={inputClass}
-													style={inputStyle}
-												/>
-											</div>
-										))}
-									</div>
-
-									{/* Bio */}
-									<div>
-										<label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-1.5">
-											Bio
-										</label>
-										<textarea
-											value={draft.bio}
-											onChange={(e) =>
-												setDraft((d) => ({ ...d, bio: e.target.value }))
-											}
-											rows={3}
-											placeholder="Tell people about yourself..."
-											className="w-full rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none resize-none"
-											style={inputStyle}
-										/>
-									</div>
-
-									{/* Role */}
-									<div>
-										<label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-1.5">
-											Role
-										</label>
-										<div className="grid grid-cols-2 gap-2">
-											{(["member", "pitcher", "sponsor", "judge"] as const).map(
-												(r) => (
-													<button
-														key={r}
-														type="button"
-														onClick={() => setDraft((d) => ({ ...d, role: r }))}
-														className="py-2.5 rounded-xl text-sm font-bold transition-all border"
-														style={
-															draft.role === r
-																? {
-																		background: "rgba(124,58,237,0.25)",
-																		border: "1px solid rgba(124,58,237,0.6)",
-																		color: "#c4b5fd",
-																	}
-																: {
-																		background: "rgba(255,255,255,0.04)",
-																		border: "1px solid rgba(255,255,255,0.08)",
-																		color: "rgba(255,255,255,0.4)",
-																	}
-														}
-													>
-														{ROLE_LABELS[r]}
-													</button>
-												),
-											)}
-										</div>
-									</div>
-
-									{/* LinkedIn */}
-									<div>
-										<label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-1.5">
-											LinkedIn URL
-										</label>
-										<input
-											type="url"
-											value={draft.linkedin_url}
-											onChange={(e) =>
-												setDraft((d) => ({
-													...d,
-													linkedin_url: e.target.value,
-												}))
-											}
-											placeholder="https://linkedin.com/in/..."
-											className={inputClass}
-											style={inputStyle}
-										/>
-									</div>
-
-									{/* Twitter */}
-									<div>
-										<label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-1.5">
-											X (Twitter) URL
-										</label>
-										<input
-											type="url"
-											value={draft.twitter_url}
-											onChange={(e) =>
-												setDraft((d) => ({ ...d, twitter_url: e.target.value }))
-											}
-											placeholder="https://x.com/..."
-											className={inputClass}
-											style={inputStyle}
-										/>
-									</div>
-
-									{/* Looking to connect — private, used for AI recommendations */}
-									<div>
-										<label className="block text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-1.5">
-											Who are you looking to connect with?
-										</label>
-										<p className="text-white/25 text-[10px] mb-2">
-											Private — only used to recommend relevant people for you
-											to meet.
-										</p>
-										<textarea
-											value={draft.looking_to_connect}
-											onChange={(e) =>
-												setDraft((d) => ({
-													...d,
-													looking_to_connect: e.target.value,
-												}))
-											}
-											rows={3}
-											placeholder="e.g. investors interested in B2B SaaS, other founders working on climate tech..."
-											className="w-full rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none resize-none"
-											style={inputStyle}
-										/>
-									</div>
-
-									{saveMsg && (
-										<p
-											className={`text-sm font-medium ${saveMsg.ok ? "text-green-400" : "text-red-400"}`}
+										<span
+											className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${statusToneClass[application.status] ?? "text-white/40 border-white/10 bg-white/5"}`}
 										>
-											{saveMsg.text}
-										</p>
-									)}
-
-									<div className="flex gap-3 pt-1 pb-4">
-										<button
-											type="submit"
-											disabled={isSaving}
-											className="flex-1 py-4 rounded-2xl font-bold text-white text-sm transition-all disabled:opacity-50"
-											style={{
-												background: "linear-gradient(135deg, #22d3ee, #6366f1)",
-												boxShadow: "0 0 16px rgba(34,211,238,0.25)",
-											}}
-										>
-											{isSaving ? "Saving..." : "Save Profile"}
-										</button>
-										<button
-											type="button"
-											onClick={() => {
-												setDraft(profile);
-												setTab("view");
-											}}
-											className="px-5 py-4 rounded-2xl font-bold text-white/50 text-sm transition-all hover:text-white/80"
-											style={{
-												background: "rgba(255,255,255,0.05)",
-												border: "1px solid rgba(255,255,255,0.08)",
-											}}
-										>
-											Cancel
-										</button>
+											{application.status.charAt(0).toUpperCase() +
+												application.status.slice(1)}
+										</span>
 									</div>
-								</form>
+									<div className="space-y-3">
+										{(application.questions ?? []).map((q) => {
+											const answer = application.answers[q.id];
+											if (!answer) return null;
+											return (
+												<div key={q.id}>
+													<p className="text-pt-text-3 text-[10px] font-display uppercase tracking-[0.16em] mb-1">
+														{q.question_text}
+													</p>
+													{q.question_type === "image" ? (
+														<img
+															src={answer}
+															alt={q.question_text}
+															className="max-h-40 rounded-xl border border-white/10 object-contain"
+														/>
+													) : q.question_type === "url" ||
+													  q.question_type === "website_url" ? (
+														<a
+															href={answer}
+															target="_blank"
+															rel="noopener noreferrer"
+															className="text-pt-cyan hover:underline text-sm break-all"
+														>
+															{answer}
+														</a>
+													) : (
+														<p className="text-pt-text-2 text-sm leading-relaxed">
+															{answer}
+														</p>
+													)}
+												</div>
+											);
+										})}
+										{(application.questions ?? []).length === 0 && (
+											<p className="text-pt-text-3 text-sm">
+												Application answers not available.
+											</p>
+										)}
+									</div>
+								</GlassCard>
+							</div>
+						)}
+
+						{/* Empty-state hint when no profile data set */}
+						{!isEditing &&
+							!profile.first_name &&
+							!profile.last_name &&
+							!profile.bio && (
+								<div className="mt-4 text-center py-6">
+									<Sparkles
+										size={20}
+										className="mx-auto mb-2 text-pt-purple"
+									/>
+									<p className="text-pt-text-3 text-sm">
+										Your profile is empty. Tap{" "}
+										<span className="text-white font-semibold">
+											Edit profile
+										</span>{" "}
+										to set it up.
+									</p>
+								</div>
 							)}
-						</>
-					)}
-				</div>
-			</div>
+					</>
+				)}
+			</ProfileFrame>
 			<ScannerModal
 				isOpen={showScanner}
 				onClose={() => setShowScanner(false)}

@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { MessageCircle, X, Users, Hash, ChevronRight } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { gradientForUser } from "./design-system";
 
 interface DMThread {
 	peerId: string;
 	peerName: string;
 	peerAvatar: string | null;
+	peerColor: string | null;
 	lastMessage: string;
 	lastAt: string;
 	unread: number;
@@ -35,8 +37,16 @@ function avatarGradient(name: string): [string, string] {
 	return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length] as [string, string];
 }
 
-function Avatar({ name, size = 32 }: { name: string; size?: number }) {
-	const [from, to] = avatarGradient(name);
+function Avatar({
+	name,
+	size = 32,
+	gradient,
+}: {
+	name: string;
+	size?: number;
+	gradient?: [string, string];
+}) {
+	const [from, to] = gradient ?? avatarGradient(name);
 	return (
 		<div
 			className="rounded-full flex items-center justify-center font-black text-white flex-shrink-0"
@@ -76,6 +86,7 @@ function buildThreads(
 				peerId,
 				peerName,
 				peerAvatar: null,
+				peerColor: null,
 				lastMessage: row.text,
 				lastAt: row.created_at,
 				unread: (existing?.unread ?? 0) + unreadDelta,
@@ -131,14 +142,32 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 			if (peerIds.length > 0) {
 				const { data: investors } = await supabase
 					.from("investors")
-					.select("id, name, users!investors_profile_user_id_fkey(profile_picture_url)")
+					.select(
+						"id, name, users!investors_profile_user_id_fkey(profile_picture_url, profile_color)",
+					)
 					.in("id", peerIds);
 				if (investors) {
-					const infoMap = new Map(investors.map((inv: any) => [inv.id, { name: inv.name, avatar: inv.users?.profile_picture_url ?? null }]));
-					setThreads(builtThreads.map((t) => {
-						const info = infoMap.get(t.peerId);
-						return { ...t, peerName: info?.name ?? t.peerName, peerAvatar: info?.avatar ?? null };
-					}));
+					const infoMap = new Map(
+						investors.map((inv: any) => [
+							inv.id,
+							{
+								name: inv.name,
+								avatar: inv.users?.profile_picture_url ?? null,
+								color: inv.users?.profile_color ?? null,
+							},
+						]),
+					);
+					setThreads(
+						builtThreads.map((t) => {
+							const info = infoMap.get(t.peerId);
+							return {
+								...t,
+								peerName: info?.name ?? t.peerName,
+								peerAvatar: info?.avatar ?? null,
+								peerColor: info?.color ?? null,
+							};
+						}),
+					);
 				} else {
 					setThreads(builtThreads);
 				}
@@ -193,6 +222,7 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 							peerId,
 							peerName,
 							peerAvatar: existing?.peerAvatar ?? null,
+							peerColor: existing?.peerColor ?? null,
 							lastMessage: row.text,
 							lastAt: row.created_at,
 							unread: (existing?.unread ?? 0) + unreadDelta,
@@ -431,11 +461,36 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 										className="w-full flex items-center gap-3 px-5 py-3.5 text-left transition-all active:scale-[0.98]"
 										style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
 									>
-										{thread.peerAvatar ? (
-											<img src={thread.peerAvatar} alt={thread.peerName} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
-										) : (
-											<Avatar name={thread.peerName} size={40} />
-										)}
+										{(() => {
+											const grad = thread.peerColor
+												? gradientForUser(thread.peerColor, thread.peerId)
+												: undefined;
+											if (thread.peerAvatar) {
+												return (
+													<div
+														className="rounded-full p-[2px] flex-shrink-0"
+														style={{
+															background: grad
+																? `linear-gradient(135deg, ${grad[0]}, ${grad[1]})`
+																: "transparent",
+														}}
+													>
+														<img
+															src={thread.peerAvatar}
+															alt={thread.peerName}
+															className="w-10 h-10 rounded-full object-cover"
+														/>
+													</div>
+												);
+											}
+											return (
+												<Avatar
+													name={thread.peerName}
+													size={40}
+													gradient={grad}
+												/>
+											);
+										})()}
 										<div className="flex-1 min-w-0">
 											<div className="flex items-center gap-1.5 mb-0.5">
 												<p className="text-white font-bold text-sm leading-none truncate">

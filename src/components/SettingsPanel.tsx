@@ -6,6 +6,9 @@ interface SettingsPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onSignOut: () => void;
+  onSignIn: () => void;
+  onEditProfile: () => void;
+  isSignedIn: boolean;
   isAdmin: boolean;
   onOpenAdminAnalytics: () => void;
 }
@@ -60,6 +63,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   isOpen,
   onClose,
   onSignOut,
+  onSignIn,
+  onEditProfile,
+  isSignedIn,
   isAdmin,
   onOpenAdminAnalytics,
 }) => {
@@ -124,6 +130,36 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
         {/* Scrollable content */}
         <div className="overflow-y-auto flex-1 px-6 pb-10 space-y-5">
+
+          {/* Account */}
+          {isSignedIn && (
+            <section>
+              <p className="text-white/35 text-[10px] font-semibold uppercase tracking-wider mb-2">
+                Account
+              </p>
+              <button
+                onClick={() => { onEditProfile(); onClose(); }}
+                className="w-full rounded-2xl px-4 py-3.5 flex items-center justify-between transition-all hover:opacity-80"
+                style={{ background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.2)" }}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center"
+                    style={{ background: "rgba(124,58,237,0.15)" }}
+                  >
+                    <svg className="w-4 h-4 text-violet-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <span className="text-violet-200 font-bold text-sm">Edit Profile</span>
+                </div>
+                <svg className="w-4 h-4 text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </section>
+          )}
 
           {/* Font size */}
           <section>
@@ -256,9 +292,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </div>
           </section>
 
-          {/* Sign out */}
+          {/* Sign in / Sign out */}
           <section>
-            {!confirmSignOut ? (
+            {!isSignedIn ? (
+              <button
+                onClick={onSignIn}
+                className="w-full py-4 rounded-2xl font-bold text-white text-sm transition-all hover:opacity-90 active:scale-[0.98]"
+                style={{
+                  background: "linear-gradient(135deg, #22d3ee 0%, #6366f1 100%)",
+                  boxShadow: "0 0 18px rgba(34,211,238,0.25)",
+                }}
+              >
+                Sign In
+              </button>
+            ) : !confirmSignOut ? (
               <button
                 onClick={() => setConfirmSignOut(true)}
                 className="w-full py-4 rounded-2xl font-bold text-red-400 text-sm border border-red-500/20 transition-all hover:bg-red-500/10"

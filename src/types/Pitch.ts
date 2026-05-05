@@ -23,9 +23,11 @@ export interface PitchWithPrice extends Pitch {
 
 export interface UserEmbed {
   id: string;
+  auth_user_id?: string | null;
   first_name: string;
   last_name: string;
   profile_picture_url: string | null;
+  profile_color: string | null;
   bio: string | null;
 }
 

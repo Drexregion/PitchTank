@@ -13,6 +13,7 @@ interface AttendeeProfile {
   bio: string | null;
   role: string | null;
   profile_picture_url: string | null;
+  profile_color: string | null;
   profile_auth_id: string | null;
 }
 
@@ -22,6 +23,7 @@ interface Recommendation {
   reason: string;
   bio: string | null;
   profile_picture_url: string | null;
+  profile_color: string | null;
   profile_auth_id: string | null;
 }
 
@@ -91,7 +93,7 @@ serve(async (req: Request) => {
     const { data: attendees } = await serviceClient
       .from("investors")
       .select(
-        "id, name, profile_user_id, users!investors_profile_user_id_fkey(bio, role, profile_picture_url, auth_user_id)",
+        "id, name, profile_user_id, users!investors_profile_user_id_fkey(bio, role, profile_picture_url, profile_color, auth_user_id)",
       )
       .eq("event_id", eventId)
       .neq("profile_user_id", currentUser.id)
@@ -133,6 +135,7 @@ serve(async (req: Request) => {
         bio: a.users?.bio ?? null,
         role: a.users?.role ?? null,
         profile_picture_url: a.users?.profile_picture_url ?? null,
+        profile_color: a.users?.profile_color ?? null,
         profile_auth_id: a.users?.auth_user_id ?? null,
       }));
 
@@ -183,6 +186,7 @@ Use the exact investor_id values: ${attendeeProfiles.map((a) => `"${a.investor_i
             reason: r.reason,
             bio: profile?.bio ?? null,
             profile_picture_url: profile?.profile_picture_url ?? null,
+            profile_color: profile?.profile_color ?? null,
             profile_auth_id: profile?.profile_auth_id ?? null,
           };
         });
