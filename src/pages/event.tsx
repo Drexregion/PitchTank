@@ -35,6 +35,7 @@ import {
 	gradientForId,
 	gradientForUser,
 } from "../components/design-system";
+import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import { usePortfolioHistory } from "../hooks/usePortfolioHistory";
 import { useGlobalUnreadDMs } from "../hooks/useGlobalUnreadDMs";
@@ -815,6 +816,8 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const [showFounderModal, setShowFounderModal] = useState(false);
 	const [selectedFounderForModal, setSelectedFounderForModal] =
 		useState<PitchWithPriceAndUser | null>(null);
+	const [founderApplicationAnswers, setFounderApplicationAnswers] =
+		useState<Record<string, string> | null>(null);
 	const [selectedPitch, setSelectedPitch] =
 		useState<PitchWithPriceAndUser | null>(null);
 	const [tradeModalInitialType, setTradeModalInitialType] = useState<
@@ -967,6 +970,22 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 		}
 		return () => document.removeEventListener("mousedown", handleClickOutside);
 	}, [showPortfolioDropdown]);
+
+	// Fetch application answers when founder modal opens
+	useEffect(() => {
+		if (!selectedFounderForModal?.application_id) {
+			setFounderApplicationAnswers(null);
+			return;
+		}
+		supabase
+			.from("applications")
+			.select("answers")
+			.eq("id", selectedFounderForModal.application_id)
+			.maybeSingle()
+			.then(({ data }) => {
+				setFounderApplicationAnswers(data?.answers ?? null);
+			});
+	}, [selectedFounderForModal?.application_id]);
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 	const formatEventDate = (dateString: string) => {
@@ -2638,8 +2657,9 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 							</div>
 						</div>
 						<div className="p-6 space-y-6">
-							<div className="flex items-start gap-6">
-								<div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center border-2 border-white/10 flex-shrink-0">
+							{/* Header: avatar + name */}
+							<div className="flex items-start gap-4">
+								<div className="w-16 h-16 rounded-full overflow-hidden flex items-center justify-center border-2 border-white/10 flex-shrink-0">
 									{selectedFounderForModal.user?.profile_picture_url ? (
 										<img
 											src={selectedFounderForModal.user.profile_picture_url}
@@ -2647,51 +2667,75 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 											className="w-full h-full object-cover"
 										/>
 									) : (
-										<div className="w-full h-full bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-white font-bold text-3xl">
+										<div className="w-full h-full bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-white font-bold text-2xl">
 											{selectedFounderForModal.name.charAt(0)}
 										</div>
 									)}
 								</div>
-								<div className="flex-1">
-									<h3 className="text-2xl font-bold text-white mb-1">
+								<div className="flex-1 min-w-0">
+									<h3 className="text-xl font-bold text-white truncate">
 										{selectedFounderForModal.name}
 									</h3>
 									{selectedFounderForModal.user && (
-										<p className="text-white/50">
+										<p className="text-white/50 text-sm">
 											{selectedFounderForModal.user.first_name}{" "}
 											{selectedFounderForModal.user.last_name}
 										</p>
 									)}
 								</div>
 							</div>
-							{selectedFounderForModal.logo_url && (
-								<div>
-									<p className="text-sm text-white/40 mb-2">Project Logo</p>
-									<div className="w-32 h-32 rounded-xl overflow-hidden border border-white/10">
-										<img
-											src={selectedFounderForModal.logo_url}
-											alt={`${selectedFounderForModal.name} logo`}
-											className="w-full h-full object-cover"
-										/>
-									</div>
+
+							{/* Application Q&A */}
+							{founderApplicationAnswers && event?.registration_questions?.length > 0 && (
+								<div className="space-y-4">
+									{event.registration_questions
+										.slice()
+										.sort((a, b) => a.sort_order - b.sort_order)
+										.map((q) => {
+											const answer = founderApplicationAnswers[q.id];
+											if (!answer) return null;
+											return (
+												<div key={q.id}>
+													<p className="text-[10px] font-semibold uppercase tracking-wider text-white/40 mb-1">
+														{q.question_text}
+													</p>
+													{q.question_type === "image" ? (
+														<img
+															src={answer}
+															alt={q.question_text}
+															className="max-w-full max-h-48 rounded-xl border border-white/10 object-contain"
+														/>
+													) : q.question_type === "website_url" || q.question_type === "url" ? (
+														<a
+															href={answer}
+															target="_blank"
+															rel="noopener noreferrer"
+															className="text-cyan-400 hover:underline text-sm break-all"
+														>
+															{answer}
+														</a>
+													) : (
+														<p className="text-white/80 text-sm leading-relaxed">
+															{answer}
+														</p>
+													)}
+												</div>
+											);
+										})}
 								</div>
 							)}
-							{selectedFounderForModal.user?.bio && (
+
+							{/* Fallback: pitch summary if no application data */}
+							{!founderApplicationAnswers && selectedFounderForModal.pitch_summary && (
 								<div>
-									<p className="text-sm text-white/40 mb-2">Bio</p>
-									<p className="text-white/80 leading-relaxed">
-										{selectedFounderForModal.user.bio}
-									</p>
-								</div>
-							)}
-							{selectedFounderForModal.pitch_summary && (
-								<div>
-									<p className="text-sm text-white/40 mb-2">Pitch Summary</p>
-									<p className="text-white/80 leading-relaxed">
+									<p className="text-[10px] font-semibold uppercase tracking-wider text-white/40 mb-1">Pitch Summary</p>
+									<p className="text-white/80 text-sm leading-relaxed">
 										{selectedFounderForModal.pitch_summary}
 									</p>
 								</div>
 							)}
+
+							{/* Price / market cap */}
 							{!simpleMode && (
 								<div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
 									<div className="bg-white/5 p-4 rounded-xl">
@@ -2708,6 +2752,8 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 									</div>
 								</div>
 							)}
+
+							{/* Trade buttons */}
 							<div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-white/5">
 								<button
 									onClick={() => {
@@ -2717,18 +2763,8 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 									disabled={!canTrade}
 									className={`flex-1 px-4 py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${!canTrade ? "bg-white/5 text-white/30 cursor-not-allowed" : "bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:opacity-90 shadow-lg"}`}
 								>
-									<svg
-										className="w-4 h-4"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											strokeLinecap="round"
-											strokeLinejoin="round"
-											strokeWidth={2}
-											d="M12 4v16m8-8H4"
-										/>
+									<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
 									</svg>
 									Buy Shares
 								</button>
@@ -2741,18 +2777,8 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 										disabled={!canTrade}
 										className={`flex-1 px-4 py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${!canTrade ? "bg-white/5 text-white/30 cursor-not-allowed" : "bg-gradient-to-r from-orange-500 to-red-500 text-white hover:opacity-90 shadow-lg"}`}
 									>
-										<svg
-											className="w-4 h-4"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												strokeLinecap="round"
-												strokeLinejoin="round"
-												strokeWidth={2}
-												d="M20 12H4"
-											/>
+										<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
 										</svg>
 										Sell Shares
 									</button>

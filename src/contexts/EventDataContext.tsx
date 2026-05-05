@@ -52,6 +52,7 @@ function enrichPitch(raw: any): PitchWithPriceAndUser {
     id: raw.id,
     event_id: raw.event_id,
     profile_user_id: raw.profile_user_id,
+    application_id: raw.application_id ?? null,
     name: raw.name,
     bio: raw.bio ?? null,
     logo_url: raw.logo_url ?? null,
@@ -215,7 +216,7 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
         const { data: pitchesData, error: pitchesError } = await supabase
           .from("pitches")
           .select(
-            "id, event_id, profile_user_id, name, bio, logo_url, pitch_summary, pitch_url, shares_in_pool, cash_in_pool, k_constant, min_reserve_shares, created_at, updated_at, users!pitches_profile_user_id_fkey(id, auth_user_id, first_name, last_name, profile_picture_url, profile_color, bio)"
+            "id, event_id, profile_user_id, application_id, name, bio, logo_url, pitch_summary, pitch_url, shares_in_pool, cash_in_pool, k_constant, min_reserve_shares, created_at, updated_at, users!pitches_profile_user_id_fkey(id, auth_user_id, first_name, last_name, profile_picture_url, profile_color, bio)"
           )
           .eq("event_id", eventId);
 
@@ -363,7 +364,7 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
           const { data } = await supabase
             .from("pitches")
             .select(
-              "id, event_id, profile_user_id, name, bio, logo_url, pitch_summary, pitch_url, shares_in_pool, cash_in_pool, k_constant, min_reserve_shares, created_at, updated_at, users!pitches_profile_user_id_fkey(id, auth_user_id, first_name, last_name, profile_picture_url, profile_color, bio)"
+              "id, event_id, profile_user_id, application_id, name, bio, logo_url, pitch_summary, pitch_url, shares_in_pool, cash_in_pool, k_constant, min_reserve_shares, created_at, updated_at, users!pitches_profile_user_id_fkey(id, auth_user_id, first_name, last_name, profile_picture_url, profile_color, bio)"
             )
             .eq("id", updatedId)
             .maybeSingle();

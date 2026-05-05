@@ -1,153 +1,160 @@
 #!/usr/bin/env bash
 # Duplicate the PitchTank Supabase project (us-east-1) to a backup project (ca-central-1).
 #
+# No postgres connection strings needed — uses the Supabase CLI and Management API only.
+#
 # Prerequisites:
-#   - pg_dump / psql (PostgreSQL client tools) installed
-#   - supabase CLI installed and logged in
-#   - Node.js 18+ installed
+#   - Node.js 18+ (for npx and the auth user migration script)
 #   - @supabase/supabase-js in node_modules (already in package.json)
 #
-# Required env vars (set in .env or pass inline):
-#   PRIMARY_DB_URL               — direct postgres connection to primary
-#                                  (from Supabase dashboard → Settings → Database → Connection string → URI, port 5432)
-#   BACKUP_DB_URL                — direct postgres connection to backup project
-#   SUPABASE_BACKUP_REF          — backup project ref (e.g. abcdefghijklmn)
+# Required env vars (already in your .env except where noted):
+#
+#   MGMT_ACCESS_TOKEN            — your Supabase personal access token (sbp_...)
+#   SUPABASE_PRIMARY_REF         — primary project ref (ccwwdkpafpxfxyuzgmjs)
 #   SUPABASE_SERVICE_ROLE_KEY    — primary service role key
-#   SUPABASE_BACKUP_SERVICE_ROLE_KEY — backup service role key
-#   SUPABASE_BACKUP_URL          — backup project URL (https://<ref>.supabase.co)
-#   OPENAI_API_KEY               — forwarded to backup edge functions
-#   RESEND_API_KEY               — forwarded to backup edge functions
-#   FIRECRAWL_API_KEY            — forwarded to backup edge functions
-#   MGMT_ACCESS_TOKEN            — forwarded to backup get-project-health function
-#   PRIMARY_JWT_SECRET           — primary project's Legacy HS256 JWT secret
-#                                  (from Supabase dashboard → Settings → Auth → JWT Keys → Legacy HS256 → reveal secret)
+#   SUPABASE_BACKUP_REF          — backup project ref
+#   SUPABASE_BACKUP_URL          — backup project URL
+#   SUPABASE_BACKUP_SERVICE_ROLE_KEY
+#   SUPABASE_BACKUP_ANON_KEY
+#   OPENAI_API_KEY
+#   RESEND_API_KEY
+#   FIRECRAWL_API_KEY
 #
 # Usage:
-#   chmod +x scripts/duplicate-to-backup.sh
-#   source .env && ./scripts/duplicate-to-backup.sh
-#   -- or --
-#   PRIMARY_DB_URL="..." BACKUP_DB_URL="..." ... ./scripts/duplicate-to-backup.sh
+#   source .env && bash scripts/duplicate-to-backup.sh
 
 set -euo pipefail
 
 # ── Validate required vars ────────────────────────────────────────────────────
-: "${PRIMARY_DB_URL:?PRIMARY_DB_URL is required}"
-: "${BACKUP_DB_URL:?BACKUP_DB_URL is required}"
+: "${MGMT_ACCESS_TOKEN:?MGMT_ACCESS_TOKEN is required}"
+: "${SUPABASE_PRIMARY_REF:?SUPABASE_PRIMARY_REF is required (e.g. ccwwdkpafpxfxyuzgmjs)}"
+: "${SUPABASE_SERVICE_ROLE_KEY:?SUPABASE_SERVICE_ROLE_KEY is required}"
 : "${SUPABASE_BACKUP_REF:?SUPABASE_BACKUP_REF is required}"
 : "${SUPABASE_BACKUP_URL:?SUPABASE_BACKUP_URL is required}"
 : "${SUPABASE_BACKUP_SERVICE_ROLE_KEY:?SUPABASE_BACKUP_SERVICE_ROLE_KEY is required}"
+: "${SUPABASE_BACKUP_ANON_KEY:?SUPABASE_BACKUP_ANON_KEY is required}"
 : "${OPENAI_API_KEY:?OPENAI_API_KEY is required}"
 : "${RESEND_API_KEY:?RESEND_API_KEY is required}"
 : "${FIRECRAWL_API_KEY:?FIRECRAWL_API_KEY is required}"
-: "${MGMT_ACCESS_TOKEN:?MGMT_ACCESS_TOKEN is required}"
-: "${PRIMARY_JWT_SECRET:?PRIMARY_JWT_SECRET is required (primary project Legacy HS256 secret)}"
 
 SCHEMA_DUMP=/tmp/pt_schema.sql
 DATA_DUMP=/tmp/pt_data.sql
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+MGMT_BASE="https://api.supabase.com/v1/projects"
+
+# Helper: run SQL on backup via Management API (no DB URL needed)
+run_sql_on_backup() {
+  local sql="$1"
+  local http_code
+  http_code=$(curl -s -o /tmp/sql_result.json -w "%{http_code}" \
+    -X POST "${MGMT_BASE}/${SUPABASE_BACKUP_REF}/database/query" \
+    -H "Authorization: Bearer ${MGMT_ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{\"query\": $(echo "$sql" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}")
+  if [ "$http_code" != "200" ]; then
+    echo "    SQL error (HTTP $http_code):"
+    cat /tmp/sql_result.json
+    echo ""
+    return 1
+  fi
+}
 
 echo "========================================================"
-echo "  PitchTank → Backup Duplication Script"
-echo "  Backup project: $SUPABASE_BACKUP_REF"
+echo "  PitchTank → Backup Duplication"
+echo "  Primary:  $SUPABASE_PRIMARY_REF (us-east-1)"
+echo "  Backup:   $SUPABASE_BACKUP_REF (ca-central-1)"
 echo "========================================================"
 echo ""
 
-# ── Step 1: Dump schema from primary (public schema only) ─────────────────────
-echo "==> [1/8] Dumping schema from primary..."
-pg_dump "$PRIMARY_DB_URL" \
-  --schema-only \
-  --no-owner \
-  --no-acl \
-  --schema=public \
+# ── Step 1: Dump schema from primary ─────────────────────────────────────────
+echo "==> [1/7] Dumping schema from primary..."
+SUPABASE_ACCESS_TOKEN="$MGMT_ACCESS_TOKEN" \
+npx supabase@latest db dump \
+  --project-ref "$SUPABASE_PRIMARY_REF" \
+  --schema public \
   -f "$SCHEMA_DUMP"
-echo "    Schema saved to $SCHEMA_DUMP"
+echo "    Saved to $SCHEMA_DUMP"
 
-# ── Step 2: Dump data from primary (public schema only) ───────────────────────
+# ── Step 2: Dump data from primary ───────────────────────────────────────────
 echo ""
-echo "==> [2/8] Dumping data from primary..."
-pg_dump "$PRIMARY_DB_URL" \
+echo "==> [2/7] Dumping data from primary..."
+SUPABASE_ACCESS_TOKEN="$MGMT_ACCESS_TOKEN" \
+npx supabase@latest db dump \
+  --project-ref "$SUPABASE_PRIMARY_REF" \
+  --schema public \
   --data-only \
-  --no-owner \
-  --no-acl \
-  --schema=public \
   -f "$DATA_DUMP"
-echo "    Data saved to $DATA_DUMP"
+echo "    Saved to $DATA_DUMP"
 
-# ── Step 3: Apply schema to backup ────────────────────────────────────────────
+# ── Step 3: Apply schema + data + app_config to backup via Management API ─────
 echo ""
-echo "==> [3/8] Applying schema to backup..."
-psql "$BACKUP_DB_URL" -f "$SCHEMA_DUMP"
+echo "==> [3/7] Applying schema to backup..."
+run_sql_on_backup "$(cat "$SCHEMA_DUMP")"
 echo "    Schema applied."
 
-# ── Step 4: Apply data to backup ──────────────────────────────────────────────
-# session_replication_role=replica bypasses FK checks during bulk insert to avoid
-# ordering issues. Equivalent to pg_restore --disable-triggers on managed Supabase.
 echo ""
-echo "==> [4/8] Applying data to backup..."
-psql "$BACKUP_DB_URL" \
-  -c "SET session_replication_role = 'replica';" \
-  -f "$DATA_DUMP" \
-  -c "SET session_replication_role = 'origin';"
+echo "==> [3b/7] Applying data to backup..."
+# Disable FK checks for bulk insert ordering safety, then re-enable
+FULL_DATA="SET session_replication_role = 'replica'; $(cat "$DATA_DUMP") SET session_replication_role = 'origin';"
+run_sql_on_backup "$FULL_DATA"
 echo "    Data applied."
 
-# ── Step 5: Migrate auth users ────────────────────────────────────────────────
 echo ""
-echo "==> [5/8] Migrating auth users (preserving UUIDs)..."
+echo "==> [3c/7] Creating app_config table on backup..."
+run_sql_on_backup "$(cat "$PROJECT_ROOT/supabase/migrations/20260504999999_add_app_config.sql")"
+echo "    app_config ready (failover_enabled = false)."
+
+# ── Step 4: Migrate auth users ────────────────────────────────────────────────
+echo ""
+echo "==> [4/7] Migrating auth users (preserving UUIDs)..."
 echo "    ⚠  Passwords cannot be transferred. Users must use 'Forgot Password' on first backup login."
 echo ""
 cd "$PROJECT_ROOT"
-SUPABASE_URL="https://ccwwdkpafpxfxyuzgmjs.supabase.co" \
+SUPABASE_URL="https://${SUPABASE_PRIMARY_REF}.supabase.co" \
 node scripts/migrate-auth-users.mjs
 echo ""
 echo "    Auth user migration complete."
 
-# ── Step 6: Apply app_config migration to backup ──────────────────────────────
+# ── Step 5: Deploy edge functions to backup ───────────────────────────────────
 echo ""
-echo "==> [6/8] Applying app_config migration to backup..."
-psql "$BACKUP_DB_URL" -f "$PROJECT_ROOT/supabase/migrations/20260504999999_add_app_config.sql"
-echo "    app_config table created on backup (failover_enabled = false)."
-
-# ── Step 7: Deploy edge functions to backup ───────────────────────────────────
-echo ""
-echo "==> [7/8] Deploying edge functions to backup project ($SUPABASE_BACKUP_REF)..."
+echo "==> [5/7] Deploying edge functions to backup..."
 cd "$PROJECT_ROOT"
 for fn in get-project-health executeTrade recommend-connections scrape-website \
           send-application-accepted send-application-received toggle-failover; do
   echo "    deploying $fn..."
-  supabase functions deploy "$fn" --project-ref "$SUPABASE_BACKUP_REF" --no-verify-jwt 2>/dev/null || \
-  supabase functions deploy "$fn" --project-ref "$SUPABASE_BACKUP_REF"
+  SUPABASE_ACCESS_TOKEN="$MGMT_ACCESS_TOKEN" \
+  npx supabase@latest functions deploy "$fn" --project-ref "$SUPABASE_BACKUP_REF"
 done
-echo "    All functions deployed."
+echo "    All 7 functions deployed."
 
-# ── Step 8: Set secrets on backup ─────────────────────────────────────────────
+# ── Step 6: Set secrets on backup ─────────────────────────────────────────────
 echo ""
-echo "==> [8/8] Setting secrets on backup project..."
-supabase secrets set \
+echo "==> [6/7] Setting secrets on backup..."
+SUPABASE_ACCESS_TOKEN="$MGMT_ACCESS_TOKEN" \
+npx supabase@latest secrets set \
   OPENAI_API_KEY="$OPENAI_API_KEY" \
   RESEND_API_KEY="$RESEND_API_KEY" \
   FIRECRAWL_API_KEY="$FIRECRAWL_API_KEY" \
-  MGMT_ACCESS_TOKEN="$MGMT_ACCESS_TOKEN" \
+  SUPABASE_ACCESS_TOKEN="$MGMT_ACCESS_TOKEN" \
   --project-ref "$SUPABASE_BACKUP_REF"
 echo "    Secrets set."
 
-# ── Step 9: Sync JWT secret so primary tokens are accepted by backup ──────────
-# The backup uses ECC P-256 keys by default. Setting the primary's HS256 secret
-# here makes auth.getUser() on the backup accept primary-issued JWTs, which is
-# required for the toggle-failover edge function to verify admin tokens.
+# ── Step 7: Apply app_config migration to PRIMARY too ─────────────────────────
+# Primary needs this so the Admin Service Monitor can read failover status
+# and so the table exists if primary is ever promoted as a new backup.
 echo ""
-echo "==> [9/9] Syncing JWT secret to backup..."
-JWT_SYNC_RESULT=$(curl -s -o /tmp/jwt_sync_result.txt -w "%{http_code}" \
-  -X PATCH "https://api.supabase.com/v1/projects/$SUPABASE_BACKUP_REF/config/auth" \
-  -H "Authorization: Bearer $MGMT_ACCESS_TOKEN" \
+echo "==> [7/7] Applying app_config to primary..."
+PRIMARY_SQL="$(cat "$PROJECT_ROOT/supabase/migrations/20260504999999_add_app_config.sql")"
+PRIMARY_CODE=$(curl -s -o /tmp/primary_sql.json -w "%{http_code}" \
+  -X POST "${MGMT_BASE}/${SUPABASE_PRIMARY_REF}/database/query" \
+  -H "Authorization: Bearer ${MGMT_ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
-  -d "{\"jwt_secret\": \"$PRIMARY_JWT_SECRET\"}")
-if [ "$JWT_SYNC_RESULT" = "200" ]; then
-  echo "    JWT secret synced. Primary tokens will be accepted by backup."
+  -d "{\"query\": $(echo "$PRIMARY_SQL" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}")
+if [ "$PRIMARY_CODE" = "200" ]; then
+  echo "    app_config ready on primary."
 else
-  echo "    ⚠  JWT secret sync failed (HTTP $JWT_SYNC_RESULT). Check MGMT_ACCESS_TOKEN."
-  cat /tmp/jwt_sync_result.txt
-  echo ""
+  echo "    ⚠  Could not apply to primary (HTTP $PRIMARY_CODE) — apply manually via SQL editor if needed."
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
@@ -156,16 +163,12 @@ echo "========================================================"
 echo "  Duplication complete!"
 echo "========================================================"
 echo ""
-echo "Next steps:"
-echo "  1. Add to your .env and deployment environment:"
-echo "     VITE_SUPABASE_BACKUP_URL=$SUPABASE_BACKUP_URL"
-echo "     VITE_SUPABASE_BACKUP_ANON_KEY=<backup-anon-key from Supabase dashboard>"
+echo "Add to your .env and deployment environment:"
+echo "  VITE_SUPABASE_BACKUP_URL=$SUPABASE_BACKUP_URL"
+echo "  VITE_SUPABASE_BACKUP_ANON_KEY=$SUPABASE_BACKUP_ANON_KEY"
 echo ""
-echo "  2. Run the test harness to verify the backup:"
-echo "     BACKUP_TEST_EMAIL=<email> BACKUP_TEST_PASSWORD=<password> node scripts/test-backup.mjs"
+echo "Then verify with:"
+echo "  BACKUP_TEST_EMAIL=<email> BACKUP_TEST_PASSWORD=<reset-password> node scripts/test-backup.mjs"
 echo ""
-echo "  ⚠  Auth passwords were NOT transferred."
-echo "     Affected users must use 'Forgot Password' on their first backup login."
-echo ""
-echo "  ⚠  failover_enabled is set to false on backup."
-echo "     Use the Admin Service Monitor to flip the switch when needed."
+echo "  ⚠  Passwords NOT transferred — users must use 'Forgot Password' on first backup login."
+echo "  ⚠  failover_enabled = false — use Admin Service Monitor to flip when needed."

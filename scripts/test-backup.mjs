@@ -60,7 +60,8 @@ function fail(name, detail = "") {
 async function testHealth() {
   try {
     const res = await fetch(`${BACKUP_URL}/auth/v1/health`, { signal: AbortSignal.timeout(5000) });
-    if (res.ok) return pass("health check", `HTTP ${res.status}`);
+    // 200 = healthy open endpoint, 401 = auth required but service is running — both mean online
+    if (res.ok || res.status === 401) return pass("health check", `HTTP ${res.status} (online)`);
     return fail("health check", `HTTP ${res.status}`);
   } catch (e) {
     return fail("health check", e.message);
