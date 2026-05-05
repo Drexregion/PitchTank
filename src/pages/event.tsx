@@ -2714,6 +2714,15 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 														>
 															{answer}
 														</a>
+													) : /^https?:\/\//i.test(answer.trim()) ? (
+														<a
+															href={answer.trim()}
+															target="_blank"
+															rel="noopener noreferrer"
+															className="text-cyan-400 hover:underline text-sm break-all"
+														>
+															{answer.trim()}
+														</a>
 													) : (
 														<p className="text-white/80 text-sm leading-relaxed">
 															{answer}
