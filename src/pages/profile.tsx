@@ -87,12 +87,7 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({
 	const [showScanner, setShowScanner] = useState(false);
 
 	// DM state: find a shared event to open a chat in
-	const [dmContext, setDmContext] = useState<{
-		eventId: string;
-		myInvestorId: string;
-		theirInvestorId: string;
-		myName: string;
-	} | null>(null);
+	const [dmEventId, setDmEventId] = useState<string | null>(null);
 	const [showDM, setShowDM] = useState(false);
 
 	const profileUrl = `${window.location.origin}/profile/${founderUserId}`;
@@ -130,27 +125,22 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({
 		if (!user || isOwnProfile) return;
 		(async () => {
 			const [{ data: myUser }, { data: theirUser }] = await Promise.all([
-				supabase.from("users").select("id, first_name, last_name").eq("auth_user_id", user.id).maybeSingle(),
+				supabase.from("users").select("id").eq("auth_user_id", user.id).maybeSingle(),
 				supabase.from("users").select("id").eq("auth_user_id", founderUserId).maybeSingle(),
 			]);
 			if (!myUser || !theirUser) return;
 
 			const [{ data: myInvestors }, { data: theirInvestors }] = await Promise.all([
-				supabase.from("investors").select("id, event_id").eq("profile_user_id", myUser.id),
-				supabase.from("investors").select("id, event_id").eq("profile_user_id", theirUser.id),
+				supabase.from("investors").select("event_id").eq("profile_user_id", myUser.id),
+				supabase.from("investors").select("event_id").eq("profile_user_id", theirUser.id),
 			]);
 			if (!myInvestors || !theirInvestors) return;
 
-			const theirEventMap = new Map(theirInvestors.map((i: any) => [i.event_id, i.id]));
-			const shared = myInvestors.find((i: any) => theirEventMap.has(i.event_id));
+			const theirEventIds = new Set(theirInvestors.map((i: any) => i.event_id));
+			const shared = myInvestors.find((i: any) => theirEventIds.has(i.event_id));
 			if (!shared) return;
 
-			setDmContext({
-				eventId: shared.event_id,
-				myInvestorId: shared.id,
-				theirInvestorId: theirEventMap.get(shared.event_id)!,
-				myName: [myUser.first_name, myUser.last_name].filter(Boolean).join(" ") || user.email?.split("@")[0] || "Me",
-			});
+			setDmEventId(shared.event_id);
 		})();
 	}, [user, founderUserId, isOwnProfile]);
 
@@ -280,7 +270,7 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({
 									{ROLE_LABELS[profile.role] ?? profile.role}
 								</span>
 							)}
-							{dmContext && (
+							{dmEventId && (
 								<button
 									onClick={() => setShowDM(true)}
 									className="flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95"
@@ -380,15 +370,15 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({
 				}
 				profileAvatarUrl={profile?.profile_picture_url || undefined}
 			/>
-			{dmContext && (
+			{dmEventId && user && (
 				<DMPanel
 					isOpen={showDM}
 					onClose={() => setShowDM(false)}
 					onBack={() => setShowDM(false)}
-					eventId={dmContext.eventId}
-					userId={dmContext.myInvestorId}
-					displayName={dmContext.myName}
-					peerId={dmContext.theirInvestorId}
+					eventId={dmEventId}
+					userId={user.id}
+					displayName={user.email?.split("@")[0] ?? "Me"}
+					peerId={founderUserId}
 					peerName={`${profile.first_name} ${profile.last_name}`.trim() || "User"}
 				/>
 			)}

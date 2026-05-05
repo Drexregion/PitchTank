@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import { Info, CircleHelp } from "lucide-react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { TradeModal } from "../components/TradeModal";
 import { LeaderboardPanel } from "../components/LeaderboardPanel";
 import { QRShareModal } from "../components/QRShareModal";
@@ -687,6 +687,7 @@ const EventPage: React.FC = () => {
 // ── Inner page: consumes context ──────────────────────────────────────────────
 const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const navigate = useNavigate();
+	const { peerId: urlPeerId } = useParams<{ peerId?: string }>();
 	const { user, isAdmin } = useAuth();
 
 	const {
@@ -730,12 +731,18 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const [_showSortOptions, setShowSortOptions] = useState(false);
 	const [expandedPitchId, setExpandedPitchId] = useState<string | null>(null);
 	const [showPortfolioDropdown, setShowPortfolioDropdown] = useState(false);
-	const [showConversations, setShowConversations] = useState(false);
-	const [showChat, setShowChat] = useState(false);
-	const [activeDMPeer, setActiveDMPeer] = useState<{ id: string; name: string } | null>(null);
+	const location = useLocation();
+	const showConversations = location.pathname.endsWith("/conversations");
+	const showChat = location.pathname.endsWith("/chat");
+	const activeDMPeer = urlPeerId
+		? { id: urlPeerId, name: (location.state as any)?.peerName ?? "" }
+		: null;
 	const [totalUnreadDMs, setTotalUnreadDMs] = useState(0);
 	const [showSchedule, setShowSchedule] = useState(false);
 	const [showSettings, setShowSettings] = useState(false);
+	const [hasOpenedScanner, setHasOpenedScanner] = useState(
+		() => localStorage.getItem("scanner_opened") === "1"
+	);
 	const portfolioDropdownRef = useRef<HTMLDivElement>(null);
 	const profileUserId = user?.id ?? null;
 
@@ -857,9 +864,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 		};
 	}, [
 		showLeaderboard,
-		showConversations,
-		showChat,
-		activeDMPeer,
+		location.pathname,
 		showSchedule,
 		showSettings,
 		showQRModal,
@@ -1967,7 +1972,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 					<span className="text-[9px] font-medium">Leaderboard</span>
 				</button>
 				<button
-					onClick={() => setShowConversations(true)}
+					onClick={() => navigate(`/events/${eventId}/conversations`)}
 					className={`relative flex flex-col items-center gap-0.5 px-4 py-2 rounded-full transition-all ${showConversations || showChat || activeDMPeer ? "text-cyan-400" : "text-white/35 hover:text-white/60"}`}
 				>
 					{totalUnreadDMs > 0 && (
@@ -1999,7 +2004,13 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 					<span className="text-[9px] font-medium">Chat</span>
 				</button>
 				<button
-					onClick={() => setShowScanner(true)}
+					onClick={() => {
+						setShowScanner(true);
+						if (!hasOpenedScanner) {
+							setHasOpenedScanner(true);
+							localStorage.setItem("scanner_opened", "1");
+						}
+					}}
 					className="relative -mt-6 w-14 h-14 rounded-full flex items-center justify-center transition-transform hover:scale-105 active:scale-95 mx-1"
 					style={{
 						background: "linear-gradient(140deg, #22d3ee 0%, #6366f1 100%)",
@@ -2021,10 +2032,12 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 							d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
 						/>
 					</svg>
-					<span
-						className="absolute inset-0 rounded-full animate-ping opacity-20"
-						style={{ background: "linear-gradient(140deg, #22d3ee, #6366f1)" }}
-					/>
+					{!hasOpenedScanner && (
+						<span
+							className="absolute inset-0 rounded-full animate-ping opacity-20"
+							style={{ background: "linear-gradient(140deg, #22d3ee, #6366f1)" }}
+						/>
+					)}
 				</button>
 				<button
 					onClick={() => setShowSchedule(true)}
@@ -2545,7 +2558,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				onStartDM={user?.id ? (peerId, peerName) => {
 					if (peerId === user.id) return;
 					setShowSchedule(false);
-					setActiveDMPeer({ id: peerId, name: peerName });
+					navigate(`/events/${eventId}/dm/${peerId}`, { state: { peerName } });
 				} : undefined}
 				/>
 			<SettingsPanel
@@ -2578,40 +2591,32 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 			/>
 			<ConversationsPanel
 				isOpen={showConversations}
-				onClose={() => setShowConversations(false)}
+				onClose={() => navigate(`/events/${eventId}`)}
 				eventId={eventId}
 				userId={user?.id ?? ""}
 				displayName={displayName ?? "Guest"}
 				publicOnlineCount={0}
-				onOpenPublicChat={() => {
-					setShowConversations(false);
-					setShowChat(true);
-				}}
+				onOpenPublicChat={() => navigate(`/events/${eventId}/chat`)}
 				onOpenDM={(peerId, peerName) => {
 					if (peerId === user?.id) return;
-					setActiveDMPeer({ id: peerId, name: peerName });
-					setShowConversations(false);
+					navigate(`/events/${eventId}/dm/${peerId}`, { state: { peerName } });
 				}}
 			/>
 			<ChatPanel
 				isOpen={showChat}
-				onClose={() => setShowChat(false)}
+				onClose={() => navigate(`/events/${eventId}`)}
 				eventId={eventId}
 				userId={user?.id ?? null}
 				displayName={displayName ?? "Guest"}
 				onStartDM={user?.id ? (peerId, peerName) => {
 					if (peerId === user.id) return;
-					setShowChat(false);
-					setActiveDMPeer({ id: peerId, name: peerName });
+					navigate(`/events/${eventId}/dm/${peerId}`, { state: { peerName } });
 				} : undefined}
 			/>
 			<DMPanel
 				isOpen={!!activeDMPeer}
-				onClose={() => setActiveDMPeer(null)}
-				onBack={() => {
-					setActiveDMPeer(null);
-					setShowConversations(true);
-				}}
+				onClose={() => navigate(`/events/${eventId}`)}
+				onBack={() => navigate(`/events/${eventId}/conversations`)}
 				eventId={eventId}
 				userId={user?.id ?? ""}
 				displayName={displayName ?? "Guest"}

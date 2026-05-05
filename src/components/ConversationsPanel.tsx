@@ -63,6 +63,46 @@ function Avatar({ name, size = 32 }: { name: string; size?: number }) {
 	);
 }
 
+function buildThreads(
+	userId: string,
+	rows: {
+		sender_id: string;
+		recipient_id: string;
+		sender_name: string;
+		recipient_name: string;
+		text: string;
+		is_read: boolean;
+		created_at: string;
+	}[],
+): DMThread[] {
+	const map = new Map<string, DMThread>();
+	for (const row of rows) {
+		const isSender = row.sender_id === userId;
+		const peerId = isSender ? row.recipient_id : row.sender_id;
+		const peerName = isSender ? row.recipient_name : row.sender_name;
+		const existing = map.get(peerId);
+		const unreadDelta = !isSender && !row.is_read ? 1 : 0;
+		if (!existing || row.created_at > existing.lastAt) {
+			map.set(peerId, {
+				peerId,
+				peerName,
+				peerAvatar: null,
+				lastMessage: row.text,
+				lastAt: row.created_at,
+				unread: (existing?.unread ?? 0) + unreadDelta,
+			});
+		} else {
+			map.set(peerId, {
+				...existing,
+				unread: existing.unread + unreadDelta,
+			});
+		}
+	}
+	return Array.from(map.values()).sort(
+		(a, b) => new Date(b.lastAt).getTime() - new Date(a.lastAt).getTime(),
+	);
+}
+
 function formatPreviewTime(ts: string): string {
 	const d = new Date(ts);
 	const now = new Date();
@@ -126,48 +166,45 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 		}
 	}, [eventId, userId]);
 
-	const buildThreads = (rows: {
-		sender_id: string;
-		recipient_id: string;
-		sender_name: string;
-		recipient_name: string;
-		text: string;
-		is_read: boolean;
-		created_at: string;
-	}[]) => {
-		const map = new Map<string, DMThread>();
-		for (const row of rows) {
-			const isSender = row.sender_id === userId;
-			const peerId = isSender ? row.recipient_id : row.sender_id;
-			const peerName = isSender ? row.recipient_name : row.sender_name;
-			const existing = map.get(peerId);
-			const unreadDelta = !isSender && !row.is_read ? 1 : 0;
-			if (!existing || row.created_at > existing.lastAt) {
-				map.set(peerId, {
-					peerId,
-					peerName,
-					peerAvatar: null,
-					lastMessage: row.text,
-					lastAt: row.created_at,
-					unread: (existing?.unread ?? 0) + unreadDelta,
-				});
+	const loadThreads = useCallback(async () => {
+		if (!eventId || !userId) return;
+		setLoading(true);
+		const { data } = await supabase
+			.from("direct_messages")
+			.select("sender_id, recipient_id, sender_name, recipient_name, text, is_read, created_at")
+			.eq("event_id", eventId)
+			.or(`sender_id.eq.${userId},recipient_id.eq.${userId}`)
+			.order("created_at", { ascending: true });
+		if (data) {
+			const builtThreads = buildThreads(userId, data as Parameters<typeof buildThreads>[1]);
+			const peerIds = builtThreads.map((t) => t.peerId);
+			if (peerIds.length > 0) {
+				const { data: investors } = await supabase
+					.from("investors")
+					.select("id, name, users!investors_profile_user_id_fkey(profile_picture_url)")
+					.in("id", peerIds);
+				if (investors) {
+					const infoMap = new Map(investors.map((inv: any) => [inv.id, { name: inv.name, avatar: inv.users?.profile_picture_url ?? null }]));
+					setThreads(builtThreads.map((t) => {
+						const info = infoMap.get(t.peerId);
+						return { ...t, peerName: info?.name ?? t.peerName, peerAvatar: info?.avatar ?? null };
+					}));
+				} else {
+					setThreads(builtThreads);
+				}
 			} else {
-				map.set(peerId, {
-					...existing,
-					unread: existing.unread + unreadDelta,
-				});
+				setThreads(builtThreads);
 			}
 		}
-		return Array.from(map.values()).sort(
-			(a, b) => new Date(b.lastAt).getTime() - new Date(a.lastAt).getTime(),
-		);
-	};
+		setLoading(false);
+	}, [eventId, userId]);
 
+	// Re-fetch threads and recommendations whenever the panel opens
 	useEffect(() => {
-		if (isOpen && eventId && userId) {
-			fetchRecommendations();
-		}
-	}, [isOpen, eventId, userId, fetchRecommendations]);
+		if (!isOpen || !eventId || !userId) return;
+		loadThreads();
+		fetchRecommendations();
+	}, [isOpen, eventId, userId, loadThreads, fetchRecommendations]);
 
 	// Mark all unread DMs as read when the panel opens
 	useEffect(() => {
@@ -186,39 +223,6 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 	useEffect(() => {
 		if (!eventId || !userId) return;
 
-		const load = async () => {
-			setLoading(true);
-			const { data } = await supabase
-				.from("direct_messages")
-				.select("sender_id, recipient_id, sender_name, recipient_name, text, is_read, created_at")
-				.eq("event_id", eventId)
-				.or(`sender_id.eq.${userId},recipient_id.eq.${userId}`)
-				.order("created_at", { ascending: true });
-			if (data) {
-				const threads = buildThreads(data as Parameters<typeof buildThreads>[0]);
-				const peerIds = threads.map((t) => t.peerId);
-				if (peerIds.length > 0) {
-					const { data: investors } = await supabase
-						.from("investors")
-						.select("id, name, users!investors_profile_user_id_fkey(profile_picture_url)")
-						.in("id", peerIds);
-					if (investors) {
-						const infoMap = new Map(investors.map((inv: any) => [inv.id, { name: inv.name, avatar: inv.users?.profile_picture_url ?? null }]));
-						setThreads(threads.map((t) => {
-							const info = infoMap.get(t.peerId);
-							return { ...t, peerName: info?.name ?? t.peerName, peerAvatar: info?.avatar ?? null };
-						}));
-					} else {
-						setThreads(threads);
-					}
-				} else {
-					setThreads(threads);
-				}
-			}
-			setLoading(false);
-		};
-		load();
-
 		const channel = supabase
 			.channel(`conversations_${eventId}_${userId}`)
 			.on(
@@ -230,7 +234,7 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 					filter: `event_id=eq.${eventId}`,
 				},
 				(payload) => {
-					const row = payload.new as Parameters<typeof buildThreads>[0][number];
+					const row = payload.new as Parameters<typeof buildThreads>[1][number];
 					if (row.sender_id !== userId && row.recipient_id !== userId) return;
 					setThreads((prev) => {
 						const isSender = row.sender_id === userId;
@@ -259,7 +263,7 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 					filter: `event_id=eq.${eventId}`,
 				},
 				(payload) => {
-					const row = payload.new as Parameters<typeof buildThreads>[0][number];
+					const row = payload.new as Parameters<typeof buildThreads>[1][number];
 					if (row.recipient_id !== userId) return;
 					// Recalculate unread when a message is marked read
 					if (row.is_read) {
@@ -280,7 +284,7 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 		return () => {
 			supabase.removeChannel(channel);
 		};
-	}, [eventId, userId]);
+	}, [eventId, userId, loadThreads]);
 
 	const totalUnread = threads.reduce((s, t) => s + t.unread, 0);
 	const dmPeerIds = new Set(threads.map((t) => t.peerId));

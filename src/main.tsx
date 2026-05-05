@@ -18,6 +18,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 			<Routes>
 				<Route path="/" element={<HomePage />} />
 				<Route path="/events/:eventId" element={<EventPage />} />
+				<Route path="/events/:eventId/conversations" element={<EventPage />} />
+				<Route path="/events/:eventId/chat" element={<EventPage />} />
+				<Route path="/events/:eventId/dm/:peerId" element={<EventPage />} />
 				<Route path="/admin" element={<AdminPage />} />
 				<Route path="/admin/events/new" element={<AdminPage />} />
 				<Route path="/admin/events/:eventId" element={<AdminPage />} />
