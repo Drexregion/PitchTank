@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { Event } from "../types/Event";
 import { useAuth } from "../contexts/AuthContext";
+import { useGlobalUnreadDMs } from "../hooks/useGlobalUnreadDMs";
 
 const HomePage: React.FC = () => {
 	console.log("[HomePage] render");
@@ -13,6 +14,7 @@ const HomePage: React.FC = () => {
 	const avatarRef = useRef<HTMLDivElement>(null);
 	const { isAdmin, user, signOut } = useAuth();
 	const navigate = useNavigate();
+	const unreadDMs = useGlobalUnreadDMs(user?.id ?? null);
 
 	useEffect(() => {
 		const handleClickOutside = (e: MouseEvent) => {
@@ -207,6 +209,24 @@ const HomePage: React.FC = () => {
 												{label}
 											</Link>
 										))}
+										<Link
+											to="/messages"
+											onClick={() => setAvatarMenuOpen(false)}
+											className="flex items-center justify-between px-4 py-2.5 text-sm font-medium text-white/80 hover:text-white hover:bg-white/5 transition-colors"
+										>
+											<span>Messages</span>
+											{unreadDMs > 0 && (
+												<span
+													className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full text-white font-black text-[10px] tabular-nums px-1"
+													style={{
+														background: "linear-gradient(135deg, #6366f1, #22d3ee)",
+														boxShadow: "0 0 8px rgba(99,102,241,0.5)",
+													}}
+												>
+													{unreadDMs > 99 ? "99+" : unreadDMs}
+												</span>
+											)}
+										</Link>
 										<div style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }} className="mt-1 pt-1">
 											<button
 												onClick={handleLogout}

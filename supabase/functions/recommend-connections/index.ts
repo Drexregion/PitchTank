@@ -95,22 +95,6 @@ serve(async (req: Request) => {
       .eq("profile_user_id", currentUser.id)
       .maybeSingle();
 
-    // Collect investor ids the user already has DM threads with
-    const existingPeerIds = new Set<string>();
-    if (currentInvestor) {
-      const { data: dms } = await serviceClient
-        .from("direct_messages")
-        .select("sender_id, recipient_id")
-        .eq("event_id", eventId)
-        .or(`sender_id.eq.${currentInvestor.id},recipient_id.eq.${currentInvestor.id}`);
-      if (dms) {
-        for (const dm of dms) {
-          if (dm.sender_id !== currentInvestor.id) existingPeerIds.add(dm.sender_id);
-          if (dm.recipient_id !== currentInvestor.id) existingPeerIds.add(dm.recipient_id);
-        }
-      }
-    }
-
     // Fetch all event attendees (excluding current user)
     const { data: attendees } = await serviceClient
       .from("investors")
@@ -127,6 +111,24 @@ serve(async (req: Request) => {
         JSON.stringify({ recommendations: [] }),
         { headers: { ...CORS_HEADERS, "Content-Type": "application/json" } },
       );
+    }
+
+    // Collect investor ids the user already has DM threads with (scoped to this event's attendees)
+    const attendeeIds = attendees.map((a: any) => a.id);
+    const existingPeerIds = new Set<string>();
+    if (currentInvestor) {
+      const { data: dms } = await serviceClient
+        .from("direct_messages")
+        .select("sender_id, recipient_id")
+        .or(`sender_id.eq.${currentInvestor.id},recipient_id.eq.${currentInvestor.id}`)
+        .in("sender_id", [...attendeeIds, currentInvestor.id])
+        .in("recipient_id", [...attendeeIds, currentInvestor.id]);
+      if (dms) {
+        for (const dm of dms) {
+          if (dm.sender_id !== currentInvestor.id) existingPeerIds.add(dm.sender_id);
+          if (dm.recipient_id !== currentInvestor.id) existingPeerIds.add(dm.recipient_id);
+        }
+      }
     }
 
     const attendeeProfiles: AttendeeProfile[] = attendees

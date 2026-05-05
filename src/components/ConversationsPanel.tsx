@@ -24,12 +24,12 @@ interface Recommendation {
 interface ConversationsPanelProps {
 	isOpen: boolean;
 	onClose: () => void;
-	eventId: string;
 	userId: string;
 	displayName: string;
-	publicOnlineCount: number;
-	onOpenPublicChat: () => void;
+	publicOnlineCount?: number;
+	onOpenPublicChat?: () => void;
 	onOpenDM: (peerId: string, peerName: string) => void;
+	suggestionsEventId?: string | null;
 }
 
 const AVATAR_COLORS = [
@@ -118,12 +118,12 @@ function formatPreviewTime(ts: string): string {
 export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 	isOpen,
 	onClose,
-	eventId,
 	userId,
 	displayName: _displayName,
 	publicOnlineCount,
 	onOpenPublicChat,
 	onOpenDM,
+	suggestionsEventId,
 }) => {
 	const navigate = useNavigate();
 	const [threads, setThreads] = useState<DMThread[]>([]);
@@ -138,7 +138,7 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 	const fetchRecommendations = useCallback(async (force = false) => {
 		const now = Date.now();
 		const stale = !recFetchedAtRef.current || now - recFetchedAtRef.current > 5 * 60 * 1000;
-		if ((!stale && !force) || !eventId || !userId) return;
+		if ((!stale && !force) || !suggestionsEventId || !userId) return;
 		recFetchedAtRef.current = now;
 		setRecLoading(true);
 		try {
@@ -151,7 +151,7 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 					Authorization: `Bearer ${session.access_token}`,
 					apikey: supabaseAnonKey,
 				},
-				body: JSON.stringify({ eventId }),
+				body: JSON.stringify({ eventId: suggestionsEventId }),
 			});
 			if (res.ok) {
 				const json = await res.json();
@@ -164,15 +164,14 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 		} finally {
 			setRecLoading(false);
 		}
-	}, [eventId, userId]);
+	}, [suggestionsEventId, userId]);
 
 	const loadThreads = useCallback(async () => {
-		if (!eventId || !userId) return;
+		if (!userId) return;
 		setLoading(true);
 		const { data } = await supabase
 			.from("direct_messages")
 			.select("sender_id, recipient_id, sender_name, recipient_name, text, is_read, created_at")
-			.eq("event_id", eventId)
 			.or(`sender_id.eq.${userId},recipient_id.eq.${userId}`)
 			.order("created_at", { ascending: true });
 		if (data) {
@@ -197,41 +196,39 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 			}
 		}
 		setLoading(false);
-	}, [eventId, userId]);
+	}, [userId]);
 
 	// Re-fetch threads and recommendations whenever the panel opens
 	useEffect(() => {
-		if (!isOpen || !eventId || !userId) return;
+		if (!isOpen || !userId) return;
 		loadThreads();
 		fetchRecommendations();
-	}, [isOpen, eventId, userId, loadThreads, fetchRecommendations]);
+	}, [isOpen, userId, loadThreads, fetchRecommendations]);
 
 	// Mark all unread DMs as read when the panel opens
 	useEffect(() => {
-		if (!isOpen || !userId || !eventId) return;
+		if (!isOpen || !userId) return;
 		supabase
 			.from("direct_messages")
 			.update({ is_read: true })
-			.eq("event_id", eventId)
 			.eq("recipient_id", userId)
 			.eq("is_read", false)
 			.then(() => {
 				setThreads((prev) => prev.map((t) => ({ ...t, unread: 0 })));
 			});
-	}, [isOpen, userId, eventId]);
+	}, [isOpen, userId]);
 
 	useEffect(() => {
-		if (!eventId || !userId) return;
+		if (!userId) return;
 
 		const channel = supabase
-			.channel(`conversations_${eventId}_${userId}`)
+			.channel(`conversations_global_${userId}`)
 			.on(
 				"postgres_changes",
 				{
 					event: "INSERT",
 					schema: "public",
 					table: "direct_messages",
-					filter: `event_id=eq.${eventId}`,
 				},
 				(payload) => {
 					const row = payload.new as Parameters<typeof buildThreads>[1][number];
@@ -260,12 +257,10 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 					event: "UPDATE",
 					schema: "public",
 					table: "direct_messages",
-					filter: `event_id=eq.${eventId}`,
 				},
 				(payload) => {
 					const row = payload.new as Parameters<typeof buildThreads>[1][number];
 					if (row.recipient_id !== userId) return;
-					// Recalculate unread when a message is marked read
 					if (row.is_read) {
 						setThreads((prev) =>
 							prev.map((t) => {
@@ -284,7 +279,7 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 		return () => {
 			supabase.removeChannel(channel);
 		};
-	}, [eventId, userId, loadThreads]);
+	}, [userId, loadThreads]);
 
 	const totalUnread = threads.reduce((s, t) => s + t.unread, 0);
 	const dmPeerIds = new Set(threads.map((t) => t.peerId));
@@ -368,130 +363,134 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 
 						{/* List */}
 						<div className="flex-1 min-h-0 overflow-y-auto">
-							{/* Public channel row */}
-							<button
-								onClick={onOpenPublicChat}
-								className="w-full flex items-center gap-3 px-5 py-4 text-left transition-all active:scale-[0.98]"
-								style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
-							>
-								<div
-									className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0"
-									style={{
-										background: "linear-gradient(135deg, #6366f1, #22d3ee)",
-										boxShadow: "0 0 16px rgba(99,102,241,0.35)",
-									}}
+							{/* Public channel row — only when a public chat handler is provided */}
+							{onOpenPublicChat && (
+								<button
+									onClick={onOpenPublicChat}
+									className="w-full flex items-center gap-3 px-5 py-4 text-left transition-all active:scale-[0.98]"
+									style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
 								>
-									<Hash size={18} className="text-white" />
-								</div>
-								<div className="flex-1 min-w-0">
-									<p className="text-white font-bold text-sm leading-none mb-1">
-										Public Channel
-									</p>
-									<p className="text-white/30 text-xs truncate">
-										Everyone in this event
-									</p>
-								</div>
-								{publicOnlineCount > 0 && (
 									<div
-										className="flex items-center gap-1 px-2 py-1 rounded-full flex-shrink-0"
+										className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0"
 										style={{
-											background: "rgba(34,197,94,0.1)",
-											border: "1px solid rgba(34,197,94,0.2)",
+											background: "linear-gradient(135deg, #6366f1, #22d3ee)",
+											boxShadow: "0 0 16px rgba(99,102,241,0.35)",
 										}}
 									>
-										<Users size={10} className="text-green-400" />
-										<span className="text-green-400 text-[10px] font-bold tabular-nums">
-											{publicOnlineCount >= 1000
-												? `${(publicOnlineCount / 1000).toFixed(1)}k`
-												: publicOnlineCount}
-										</span>
+										<Hash size={18} className="text-white" />
 									</div>
-								)}
-							</button>
-
-							{/* Suggested connections */}
-							<div>
-								<div className="px-5 pt-4 pb-2 flex items-center gap-1.5">
-									<Sparkles size={11} className="text-violet-400/60" />
-									<p className="text-white/25 text-[10px] font-bold uppercase tracking-[0.18em] flex-1">
-										Suggested for You
-									</p>
-									<button
-										onClick={() => fetchRecommendations(true)}
-										disabled={recLoading}
-										className="text-white/20 hover:text-white/50 transition-colors disabled:opacity-30"
-									>
-										<RefreshCw size={11} className={recLoading ? "animate-spin" : ""} />
-									</button>
-								</div>
-								{recLoading ? (
-									<div className="flex items-center gap-2 px-5 py-3">
-										<div className="w-4 h-4 rounded-full border-2 border-white/10 border-t-white/40 animate-spin flex-shrink-0" />
-										<p className="text-white/25 text-xs">Finding connections...</p>
+									<div className="flex-1 min-w-0">
+										<p className="text-white font-bold text-sm leading-none mb-1">
+											Public Channel
+										</p>
+										<p className="text-white/30 text-xs truncate">
+											Everyone in this event
+										</p>
 									</div>
-								) : recEmpty || filteredRecommendations.length === 0 ? (
-									<div
-										className="mx-5 mb-3 rounded-2xl px-4 py-3.5 flex items-start gap-3"
-										style={{
-											background: "rgba(99,102,241,0.07)",
-											border: "1px solid rgba(99,102,241,0.15)",
-										}}
-									>
-										<Sparkles size={14} className="text-violet-400/50 flex-shrink-0 mt-0.5" />
-										<div className="flex-1 min-w-0">
-											<p className="text-white/50 text-xs leading-snug mb-2">
-												Add a bio and what you're looking to connect on to your profile — Claude will suggest the best people to meet here.
-											</p>
-											<button
-												onClick={() => { onClose(); navigate("/profile"); }}
-												className="flex items-center gap-1 text-indigo-300/80 text-xs font-semibold hover:text-indigo-300 transition-colors"
-											>
-												Complete your profile <ArrowRight size={11} />
-											</button>
-										</div>
-									</div>
-								) : (
-									filteredRecommendations.map((rec) => (
+									{(publicOnlineCount ?? 0) > 0 && (
 										<div
-											key={rec.investor_id}
-											className="flex items-start gap-3 px-5 py-3.5"
-											style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+											className="flex items-center gap-1 px-2 py-1 rounded-full flex-shrink-0"
+											style={{
+												background: "rgba(34,197,94,0.1)",
+												border: "1px solid rgba(34,197,94,0.2)",
+											}}
 										>
-											<button
-												onClick={() => { onClose(); navigate(`/profile/${rec.profile_auth_id}`); }}
-												className="flex items-start gap-3 flex-1 min-w-0 text-left transition-all active:scale-[0.98]"
-											>
-												{rec.profile_picture_url ? (
-													<img
-														src={rec.profile_picture_url}
-														alt={rec.name}
-														className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-													/>
-												) : (
-													<Avatar name={rec.name} size={40} />
-												)}
-												<div className="flex-1 min-w-0">
-													<p className="text-white font-bold text-sm leading-none mb-0.5">{rec.name}</p>
-													{rec.bio && (
-														<p className="text-white/40 text-xs leading-snug line-clamp-1 mb-1">{rec.bio}</p>
-													)}
-													<div className="flex items-start gap-1 mt-1">
-														<Sparkles size={10} className="text-violet-400/60 mt-0.5 flex-shrink-0" />
-														<p className="text-violet-300/70 text-xs leading-snug line-clamp-2">{rec.reason}</p>
-													</div>
-												</div>
-											</button>
-											<button
-												onClick={() => onOpenDM(rec.investor_id, rec.name)}
-												className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 mt-1 transition-all active:scale-90"
-												style={{ background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.2)" }}
-											>
-												<MessageCircle size={13} className="text-indigo-300/70" />
-											</button>
+											<Users size={10} className="text-green-400" />
+											<span className="text-green-400 text-[10px] font-bold tabular-nums">
+												{(publicOnlineCount ?? 0) >= 1000
+													? `${((publicOnlineCount ?? 0) / 1000).toFixed(1)}k`
+													: publicOnlineCount}
+											</span>
 										</div>
-									))
-								)}
-							</div>
+									)}
+								</button>
+							)}
+
+							{/* Suggested connections — only when inside an event context */}
+							{suggestionsEventId && (
+								<div>
+									<div className="px-5 pt-4 pb-2 flex items-center gap-1.5">
+										<Sparkles size={11} className="text-violet-400/60" />
+										<p className="text-white/25 text-[10px] font-bold uppercase tracking-[0.18em] flex-1">
+											Suggested for You
+										</p>
+										<button
+											onClick={() => fetchRecommendations(true)}
+											disabled={recLoading}
+											className="text-white/20 hover:text-white/50 transition-colors disabled:opacity-30"
+										>
+											<RefreshCw size={11} className={recLoading ? "animate-spin" : ""} />
+										</button>
+									</div>
+									{recLoading ? (
+										<div className="flex items-center gap-2 px-5 py-3">
+											<div className="w-4 h-4 rounded-full border-2 border-white/10 border-t-white/40 animate-spin flex-shrink-0" />
+											<p className="text-white/25 text-xs">Finding connections...</p>
+										</div>
+									) : recEmpty || filteredRecommendations.length === 0 ? (
+										<div
+											className="mx-5 mb-3 rounded-2xl px-4 py-3.5 flex items-start gap-3"
+											style={{
+												background: "rgba(99,102,241,0.07)",
+												border: "1px solid rgba(99,102,241,0.15)",
+											}}
+										>
+											<Sparkles size={14} className="text-violet-400/50 flex-shrink-0 mt-0.5" />
+											<div className="flex-1 min-w-0">
+												<p className="text-white/50 text-xs leading-snug mb-2">
+													Add a bio and what you're looking to connect on to your profile — Claude will suggest the best people to meet here.
+												</p>
+												<button
+													onClick={() => { onClose(); navigate("/profile"); }}
+													className="flex items-center gap-1 text-indigo-300/80 text-xs font-semibold hover:text-indigo-300 transition-colors"
+												>
+													Complete your profile <ArrowRight size={11} />
+												</button>
+											</div>
+										</div>
+									) : (
+										filteredRecommendations.map((rec) => (
+											<div
+												key={rec.investor_id}
+												className="flex items-start gap-3 px-5 py-3.5"
+												style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+											>
+												<button
+													onClick={() => { onClose(); navigate(`/profile/${rec.profile_auth_id}`); }}
+													className="flex items-start gap-3 flex-1 min-w-0 text-left transition-all active:scale-[0.98]"
+												>
+													{rec.profile_picture_url ? (
+														<img
+															src={rec.profile_picture_url}
+															alt={rec.name}
+															className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+														/>
+													) : (
+														<Avatar name={rec.name} size={40} />
+													)}
+													<div className="flex-1 min-w-0">
+														<p className="text-white font-bold text-sm leading-none mb-0.5">{rec.name}</p>
+														{rec.bio && (
+															<p className="text-white/40 text-xs leading-snug line-clamp-1 mb-1">{rec.bio}</p>
+														)}
+														<div className="flex items-start gap-1 mt-1">
+															<Sparkles size={10} className="text-violet-400/60 mt-0.5 flex-shrink-0" />
+															<p className="text-violet-300/70 text-xs leading-snug line-clamp-2">{rec.reason}</p>
+														</div>
+													</div>
+												</button>
+												<button
+													onClick={() => onOpenDM(rec.investor_id, rec.name)}
+													className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 mt-1 transition-all active:scale-90"
+													style={{ background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.2)" }}
+												>
+													<MessageCircle size={13} className="text-indigo-300/70" />
+												</button>
+											</div>
+										))
+									)}
+								</div>
+							)}
 
 							{/* DM section header */}
 							{!loading && threads.length > 0 && (

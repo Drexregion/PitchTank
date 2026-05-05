@@ -17,6 +17,7 @@ import { SchedulePanel } from "../components/SchedulePanel";
 import { SettingsPanel } from "../components/SettingsPanel";
 import { useAuth } from "../contexts/AuthContext";
 import { usePortfolioHistory } from "../hooks/usePortfolioHistory";
+import { useGlobalUnreadDMs } from "../hooks/useGlobalUnreadDMs";
 import { Event, Judge, Sponsor } from "../types/Event";
 import { PitchWithPriceAndUser } from "../types/Pitch";
 import { EventDataProvider, useEventData } from "../contexts/EventDataContext";
@@ -737,7 +738,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const activeDMPeer = urlPeerId
 		? { id: urlPeerId, name: (location.state as any)?.peerName ?? "" }
 		: null;
-	const [totalUnreadDMs, setTotalUnreadDMs] = useState(0);
+	const totalUnreadDMs = useGlobalUnreadDMs(user?.id ?? null);
 	const [showSchedule, setShowSchedule] = useState(false);
 	const [showSettings, setShowSettings] = useState(false);
 	const [hasOpenedScanner, setHasOpenedScanner] = useState(
@@ -746,34 +747,6 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const portfolioDropdownRef = useRef<HTMLDivElement>(null);
 	const profileUserId = user?.id ?? null;
 
-	// Track unread DM count for badge on chat button
-	useEffect(() => {
-		if (!user?.id || !eventId) return;
-		import("../lib/supabaseClient").then(({ supabase }) => {
-			const fetchUnread = () =>
-				supabase
-					.from("direct_messages")
-					.select("id", { count: "exact", head: true })
-					.eq("event_id", eventId)
-					.eq("recipient_id", user.id)
-					.eq("is_read", false)
-					.then(({ count }) => setTotalUnreadDMs(count ?? 0));
-
-			fetchUnread();
-
-			const channel = supabase
-				.channel(`dm_unread_${eventId}_${user.id}`)
-				.on("postgres_changes", {
-					event: "*",
-					schema: "public",
-					table: "direct_messages",
-					filter: `event_id=eq.${eventId}`,
-				}, () => fetchUnread())
-				.subscribe();
-
-			return () => { supabase.removeChannel(channel); };
-		});
-	}, [user?.id, eventId]);
 
 	// Closing countdown UI state (driven by context's closingAt signal)
 	const [showTradingClosedNotification, setShowTradingClosedNotification] =
@@ -2592,7 +2565,6 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 			<ConversationsPanel
 				isOpen={showConversations}
 				onClose={() => navigate(`/events/${eventId}`)}
-				eventId={eventId}
 				userId={user?.id ?? ""}
 				displayName={displayName ?? "Guest"}
 				publicOnlineCount={0}
@@ -2601,6 +2573,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 					if (peerId === user?.id) return;
 					navigate(`/events/${eventId}/dm/${peerId}`, { state: { peerName } });
 				}}
+				suggestionsEventId={eventId}
 			/>
 			<ChatPanel
 				isOpen={showChat}
@@ -2617,7 +2590,6 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				isOpen={!!activeDMPeer}
 				onClose={() => navigate(`/events/${eventId}`)}
 				onBack={() => navigate(`/events/${eventId}/conversations`)}
-				eventId={eventId}
 				userId={user?.id ?? ""}
 				displayName={displayName ?? "Guest"}
 				peerId={activeDMPeer?.id ?? ""}

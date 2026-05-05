@@ -10,6 +10,7 @@ import AdminEventApplicationsPage from "./pages/admin-event-applications";
 import ProfilePage from "./pages/profile";
 import SettingsPage from "./pages/settings";
 import ForgotPasswordPage from "./pages/forgot-password";
+import MessagesPage from "./pages/messages";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -35,6 +36,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 				<Route path="/profile/:profileId" element={<ProfilePage />} />
 				<Route path="/settings" element={<SettingsPage />} />
 				<Route path="/forgot-password" element={<ForgotPasswordPage />} />
+				<Route path="/messages" element={<MessagesPage />} />
+				<Route path="/messages/dm/:peerId" element={<MessagesPage />} />
 			</Routes>
 		</AuthProvider>
 	</BrowserRouter>,
