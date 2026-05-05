@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { ScheduleItem } from "../types/Event";
 
 interface SchedulePanelProps {
@@ -19,10 +19,19 @@ export const SchedulePanel: React.FC<SchedulePanelProps> = ({
 	eventEnd,
 }) => {
 	const [visible, setVisible] = useState(false);
+	const nowLineRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
 		if (isOpen) requestAnimationFrame(() => setVisible(true));
 		else setVisible(false);
+	}, [isOpen]);
+
+	useEffect(() => {
+		if (!isOpen || !nowLineRef.current) return;
+		const timer = setTimeout(() => {
+			nowLineRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+		}, 420);
+		return () => clearTimeout(timer);
 	}, [isOpen]);
 
 	if (!isOpen) return null;
@@ -32,6 +41,27 @@ export const SchedulePanel: React.FC<SchedulePanelProps> = ({
 
 	const formatDate = (iso: string) =>
 		new Date(iso).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+
+	const parseItemTime = (timeStr: string): Date | null => {
+		// Handles "9:00 AM", "10:32-10:45 AM", etc.
+		const match = timeStr.match(/^(\d{1,2}:\d{2})(?:-\d{1,2}:\d{2})?\s*(AM|PM)/i);
+		if (!match) return null;
+		const [, time, period] = match;
+		const [hours, minutes] = time.split(":").map(Number);
+		let h = hours;
+		if (period.toUpperCase() === "PM" && h !== 12) h += 12;
+		if (period.toUpperCase() === "AM" && h === 12) h = 0;
+		const now = new Date();
+		return new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, minutes);
+	};
+
+	const now = new Date();
+	const currentIndex = schedule.reduce<number>((best, item, i) => {
+		if (!item.time) return best;
+		const t = parseItemTime(item.time);
+		if (t && t <= now) return i;
+		return best;
+	}, -1);
 
 	return (
 		<div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
@@ -117,41 +147,63 @@ export const SchedulePanel: React.FC<SchedulePanelProps> = ({
 							/>
 							<div className="space-y-3">
 								{schedule.map((item, i) => (
-									<div key={i} className="flex gap-4">
-										<div className="flex flex-col items-center flex-shrink-0 pt-3.5">
+									<React.Fragment key={i}>
+										<div className="flex gap-4">
+											<div className="flex flex-col items-center flex-shrink-0 pt-3.5">
+												<div
+													className="w-[10px] h-[10px] rounded-full z-10"
+													style={{ background: "linear-gradient(135deg, #a78bfa, #6366f1)", boxShadow: "0 0 8px rgba(139,92,246,0.5)" }}
+												/>
+											</div>
 											<div
-												className="w-[10px] h-[10px] rounded-full z-10"
-												style={{ background: "linear-gradient(135deg, #a78bfa, #6366f1)", boxShadow: "0 0 8px rgba(139,92,246,0.5)" }}
-											/>
-										</div>
-										<div
-											className="flex-1 rounded-2xl px-4 py-3.5 mb-0.5"
-											style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
-										>
-											<div className="flex items-start justify-between gap-2">
-												<p className="text-white font-bold text-sm leading-snug">{item.title}</p>
-												{item.time && (
-													<span
-														className="text-[10px] font-semibold flex-shrink-0 px-2 py-0.5 rounded-full"
-														style={{ background: "rgba(124,58,237,0.2)", color: "#c4b5fd", border: "1px solid rgba(124,58,237,0.3)" }}
-													>
-														{item.time}
-													</span>
+												className="flex-1 rounded-2xl px-4 py-3.5 mb-0.5"
+												style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
+											>
+												<div className="flex items-start justify-between gap-2">
+													<p className="text-white font-bold text-sm leading-snug">{item.title}</p>
+													{item.time && (
+														<span
+															className="text-[10px] font-semibold flex-shrink-0 px-2 py-0.5 rounded-full"
+															style={{ background: "rgba(124,58,237,0.2)", color: "#c4b5fd", border: "1px solid rgba(124,58,237,0.3)" }}
+														>
+															{item.time}
+														</span>
+													)}
+												</div>
+												{item.description && (
+													<p className="text-white/45 text-xs mt-1.5 leading-relaxed">{item.description}</p>
+												)}
+												{item.duration && (
+													<p className="text-white/25 text-[10px] mt-1.5 font-medium flex items-center gap-1">
+														<svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+														</svg>
+														{item.duration}
+													</p>
 												)}
 											</div>
-											{item.description && (
-												<p className="text-white/45 text-xs mt-1.5 leading-relaxed">{item.description}</p>
-											)}
-											{item.duration && (
-												<p className="text-white/25 text-[10px] mt-1.5 font-medium flex items-center gap-1">
-													<svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-														<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-													</svg>
-													{item.duration}
-												</p>
-											)}
 										</div>
-									</div>
+
+										{i === currentIndex && (
+											<div ref={nowLineRef} className="flex gap-4 items-center">
+												<div className="w-[10px] flex-shrink-0 flex justify-center">
+													<div
+														className="w-[7px] h-[7px] rounded-full z-10"
+														style={{ background: "#f87171", boxShadow: "0 0 8px rgba(248,113,113,0.8)" }}
+													/>
+												</div>
+												<div className="flex-1 flex items-center gap-2">
+													<div className="flex-1 h-px" style={{ background: "rgba(248,113,113,0.55)" }} />
+													<span
+														className="text-[10px] font-bold uppercase tracking-widest flex-shrink-0"
+														style={{ color: "#f87171" }}
+													>
+														Now
+													</span>
+												</div>
+											</div>
+										)}
+									</React.Fragment>
 								))}
 							</div>
 						</div>

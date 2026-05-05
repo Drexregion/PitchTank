@@ -21,17 +21,15 @@ const FILTER_OPTIONS: ReadonlyArray<TabOption<EventFilter>> = [
 	{ value: "completed", label: "Completed" },
 ];
 
-type EventTone = "live" | "upcoming" | "draft" | "ended" | "completed";
+type EventTone = "live" | "upcoming" | "draft" | "completed";
 
 function deriveTone(event: Event): EventTone {
-	const now = Date.now();
-	const start = new Date(event.start_time).getTime();
-	const end = new Date(event.end_time).getTime();
 	if (event.status === "completed") return "completed";
 	if (event.status === "draft") return "draft";
-	if (now >= start && now <= end) return "live";
-	if (start > now) return "upcoming";
-	return "ended";
+	if (event.status === "active") return "live";
+	const now = Date.now();
+	const start = new Date(event.start_time).getTime();
+	return start > now ? "upcoming" : "live";
 }
 
 const TONE_CARD: Record<EventTone, "featured" | "purple" | "neutral" | "frame"> =
@@ -39,7 +37,6 @@ const TONE_CARD: Record<EventTone, "featured" | "purple" | "neutral" | "frame"> 
 		live: "featured",
 		upcoming: "purple",
 		draft: "neutral",
-		ended: "frame",
 		completed: "frame",
 	};
 
@@ -65,12 +62,6 @@ const STATUS_PILL: Record<
 		bg: "rgba(234,179,8,0.10)",
 		border: "rgba(234,179,8,0.30)",
 		color: "#fde047",
-	},
-	ended: {
-		label: "Ended",
-		bg: "rgba(255,255,255,0.06)",
-		border: "rgba(255,255,255,0.10)",
-		color: "rgba(255,255,255,0.55)",
 	},
 	completed: {
 		label: "Completed",

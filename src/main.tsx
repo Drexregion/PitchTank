@@ -14,7 +14,11 @@ import OnboardingPage from "./pages/onboarding";
 import WelcomePage from "./pages/welcome";
 import MessagesPage from "./pages/messages";
 import { OnboardingGate } from "./components/OnboardingGate";
+import { resolveSupabaseClient } from "./lib/supabaseClient";
 import "./index.css";
+
+// Fire the failover health check early so the result is cached before any component needs it
+resolveSupabaseClient();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
 	<BrowserRouter>
