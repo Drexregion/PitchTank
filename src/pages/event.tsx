@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
-import { Info, CircleHelp } from "lucide-react";
+import { Info, CircleHelp, ArrowLeft } from "lucide-react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { TradeModal } from "../components/TradeModal";
 import { LeaderboardPanel } from "../components/LeaderboardPanel";
@@ -1242,8 +1242,27 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 						</div>
 					) : (
 						<>
+							{/* Top bar with back button */}
+							<div className="px-5 pt-5 pb-0">
+								<button
+									type="button"
+									onClick={() => navigate("/")}
+									aria-label="Back to events"
+									className="inline-flex items-center gap-1.5 pl-2 pr-3 py-1.5 rounded-full text-white/70 hover:text-white transition-all active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
+									style={{
+										background: "rgba(255,255,255,0.05)",
+										border: "1px solid rgba(255,255,255,0.08)",
+									}}
+								>
+									<ArrowLeft className="w-4 h-4" aria-hidden="true" />
+									<span className="text-xs font-semibold tracking-wide">
+										Events
+									</span>
+								</button>
+							</div>
+
 							{/* Hero greeting */}
-							<div className="px-5 pt-6 pb-2 flex items-center justify-between">
+							<div className="px-5 pt-3 pb-2 flex items-center justify-between">
 								<div className="flex items-center gap-3">
 									<button
 										onClick={() =>
