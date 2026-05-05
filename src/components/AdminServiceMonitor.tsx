@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { supabase, supabaseUrl } from "../lib/supabaseClient";
+import { supabase, supabaseUrl, supabaseAnonKey } from "../lib/supabaseClient";
 
 interface ServiceHealth {
 	name: string;
@@ -28,11 +28,13 @@ interface HealthPayload {
 	fetchedAt: string;
 }
 
-// Free tier limits (Pro plan has no hard row limits, but these are the free tier caps)
 const FREE_LIMITS = {
-	db_size_bytes: 500 * 1024 * 1024,   // 500 MB
-	mau: 50_000,                          // 50k MAU
+	db_size_bytes: 500 * 1024 * 1024,
+	mau: 50_000,
 };
+
+const BACKUP_URL = import.meta.env.VITE_SUPABASE_BACKUP_URL;
+const BACKUP_KEY = import.meta.env.VITE_SUPABASE_BACKUP_ANON_KEY;
 
 function fmt(bytes: number) {
 	if (bytes < 1024) return `${bytes} B`;
@@ -70,7 +72,6 @@ function ServiceRow({ svc }: { svc: ServiceHealth }) {
 	const healthy = svc.healthy;
 	const dotColor = healthy ? "bg-green-500" : "bg-red-500";
 	const textColor = healthy ? "text-green-700" : "text-red-700";
-	// Extra detail for realtime: show connected clients
 	const extra = svc.info?.connected_cluster != null
 		? ` · ${svc.info.connected_cluster} connected`
 		: svc.info?.version
@@ -114,13 +115,22 @@ export const AdminServiceMonitor: React.FC = () => {
 	const [nextRefreshIn, setNextRefreshIn] = useState(30);
 	const lastFetchedRef = useRef<Date | null>(null);
 
+	const [selectedProject, setSelectedProject] = useState<"primary" | "backup">("primary");
+	const [failoverEnabled, setFailoverEnabled] = useState<boolean | null>(null);
+	const [failoverLoading, setFailoverLoading] = useState(false);
+	const [failoverError, setFailoverError] = useState<string | null>(null);
+
+	const activeUrl = selectedProject === "primary" ? supabaseUrl : BACKUP_URL;
+	const activeKey = selectedProject === "primary" ? supabaseAnonKey : BACKUP_KEY;
+	const projectRef = activeUrl?.split("//")[1]?.split(".")[0] ?? "";
+
 	const runChecks = useCallback(async () => {
 		setIsRefreshing(true);
 		setError(null);
 		try {
 			const { data: { session } } = await supabase.auth.getSession();
-			const token = session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY;
-			const res = await fetch(`${supabaseUrl}/functions/v1/get-project-health`, {
+			const token = session?.access_token ?? activeKey;
+			const res = await fetch(`${activeUrl}/functions/v1/get-project-health`, {
 				method: "GET",
 				headers: { Authorization: `Bearer ${token}` },
 				signal: AbortSignal.timeout(15_000),
@@ -137,14 +147,59 @@ export const AdminServiceMonitor: React.FC = () => {
 		} finally {
 			setIsRefreshing(false);
 		}
+	}, [activeUrl, activeKey]);
+
+	const fetchFailoverStatus = useCallback(async () => {
+		if (!BACKUP_URL || !BACKUP_KEY) return;
+		try {
+			const res = await fetch(
+				`${BACKUP_URL}/rest/v1/app_config?key=eq.failover_enabled&select=value`,
+				{ headers: { apikey: BACKUP_KEY, Authorization: `Bearer ${BACKUP_KEY}` } }
+			);
+			if (!res.ok) { setFailoverEnabled(null); return; }
+			const rows: Array<{ value: boolean }> = await res.json();
+			setFailoverEnabled(rows[0]?.value === true);
+		} catch {
+			setFailoverEnabled(null);
+		}
 	}, []);
 
-	// Auto-run on mount, then every 30s
+	const handleToggleFailover = async (enabled: boolean) => {
+		if (!BACKUP_URL) return;
+		setFailoverLoading(true);
+		setFailoverError(null);
+		try {
+			const { data: { session } } = await supabase.auth.getSession();
+			const token = session?.access_token;
+			if (!token) throw new Error("Not authenticated");
+			const res = await fetch(`${BACKUP_URL}/functions/v1/toggle-failover`, {
+				method: "POST",
+				headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+				body: JSON.stringify({ enabled }),
+			});
+			const body = await res.json();
+			if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+			setFailoverEnabled(enabled);
+		} catch (e: any) {
+			setFailoverError(e.message);
+		} finally {
+			setFailoverLoading(false);
+		}
+	};
+
+	// Re-fetch health data when selected project changes
 	useEffect(() => {
+		setData(null);
+		setError(null);
 		runChecks();
 		const interval = setInterval(runChecks, 30_000);
 		return () => clearInterval(interval);
 	}, [runChecks]);
+
+	// Fetch failover status once on mount
+	useEffect(() => {
+		fetchFailoverStatus();
+	}, [fetchFailoverStatus]);
 
 	// Countdown to next refresh
 	useEffect(() => {
@@ -175,6 +230,21 @@ export const AdminServiceMonitor: React.FC = () => {
 
 	return (
 		<div className="space-y-6">
+			{/* Project selector */}
+			<div className="flex items-center gap-3">
+				<span className="text-sm font-medium text-gray-600">Monitoring:</span>
+				<select
+					value={selectedProject}
+					onChange={(e) => setSelectedProject(e.target.value as "primary" | "backup")}
+					className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-300"
+				>
+					<option value="primary">Primary (us-east-1)</option>
+					<option value="backup" disabled={!BACKUP_URL}>
+						Backup (ca-central-1){!BACKUP_URL ? " — not configured" : ""}
+					</option>
+				</select>
+			</div>
+
 			{/* Overall banner */}
 			<div className={`flex items-center justify-between p-4 rounded-xl border ${overallBg}`}>
 				<div className="flex items-center gap-3">
@@ -247,7 +317,7 @@ export const AdminServiceMonitor: React.FC = () => {
 				<div className="flex items-center justify-between mb-4">
 					<h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Free Tier Quota</h3>
 					<a
-						href="https://supabase.com/dashboard/project/ccwwdkpafpxfxyuzgmjs/settings/billing"
+						href={`https://supabase.com/dashboard/project/${projectRef}/settings/billing`}
 						target="_blank"
 						rel="noreferrer"
 						className="text-xs text-blue-600 hover:underline"
@@ -294,6 +364,48 @@ export const AdminServiceMonitor: React.FC = () => {
 				</div>
 			)}
 
+			{/* Failover control — only shown when backup is configured */}
+			{BACKUP_URL && (
+				<div className="bg-white rounded-xl border border-gray-200 p-5">
+					<h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">Failover Control</h3>
+					<div className="flex items-center gap-2 mb-4">
+						<span className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+							failoverEnabled === null ? "bg-gray-300 animate-pulse" :
+							failoverEnabled ? "bg-yellow-400" : "bg-green-500"
+						}`} />
+						<span className="text-sm font-medium text-gray-800">
+							{failoverEnabled === null ? "Checking…" : failoverEnabled ? "Backup active" : "Primary active"}
+						</span>
+					</div>
+					{failoverError && (
+						<p className="text-sm text-red-600 mb-3">{failoverError}</p>
+					)}
+					<div className="flex items-center gap-3">
+						{failoverEnabled === false && (
+							<button
+								onClick={() => handleToggleFailover(true)}
+								disabled={failoverLoading}
+								className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+							>
+								{failoverLoading ? "Switching…" : "Switch to backup"}
+							</button>
+						)}
+						{failoverEnabled === true && (
+							<button
+								onClick={() => handleToggleFailover(false)}
+								disabled={failoverLoading}
+								className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+							>
+								{failoverLoading ? "Reverting…" : "Revert to primary"}
+							</button>
+						)}
+					</div>
+					<p className="mt-3 text-xs text-gray-400">
+						Switching routes all clients to the backup DB on their next page load. Clients already on backup stay there until you revert and they reload.
+					</p>
+				</div>
+			)}
+
 			{/* Quick links */}
 			<div className="bg-white rounded-xl border border-gray-200 p-5">
 				<h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Dashboard Links</h3>
@@ -308,7 +420,7 @@ export const AdminServiceMonitor: React.FC = () => {
 					].map(({ label, path }) => (
 						<a
 							key={label}
-							href={`https://supabase.com/dashboard/project/ccwwdkpafpxfxyuzgmjs/${path}`}
+							href={`https://supabase.com/dashboard/project/${projectRef}/${path}`}
 							target="_blank"
 							rel="noreferrer"
 							className="px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 text-gray-600 hover:border-gray-400 hover:text-gray-800 transition-all"
