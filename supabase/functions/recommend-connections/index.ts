@@ -87,30 +87,6 @@ serve(async (req: Request) => {
       );
     }
 
-    // Find the current user's investor record for this event (to query DMs by investor id)
-    const { data: currentInvestor } = await serviceClient
-      .from("investors")
-      .select("id")
-      .eq("event_id", eventId)
-      .eq("profile_user_id", currentUser.id)
-      .maybeSingle();
-
-    // Collect investor ids the user already has DM threads with
-    const existingPeerIds = new Set<string>();
-    if (currentInvestor) {
-      const { data: dms } = await serviceClient
-        .from("direct_messages")
-        .select("sender_id, recipient_id")
-        .eq("event_id", eventId)
-        .or(`sender_id.eq.${currentInvestor.id},recipient_id.eq.${currentInvestor.id}`);
-      if (dms) {
-        for (const dm of dms) {
-          if (dm.sender_id !== currentInvestor.id) existingPeerIds.add(dm.sender_id);
-          if (dm.recipient_id !== currentInvestor.id) existingPeerIds.add(dm.recipient_id);
-        }
-      }
-    }
-
     // Fetch all event attendees (excluding current user)
     const { data: attendees } = await serviceClient
       .from("investors")
@@ -129,16 +105,36 @@ serve(async (req: Request) => {
       );
     }
 
+    // Collect auth user ids the current user already has DM threads with.
+    // direct_messages.sender_id / recipient_id are auth.uid()::text, so we
+    // query by the current user's auth id (NOT investor id).
+    const existingPeerAuthIds = new Set<string>();
+    const { data: dms } = await serviceClient
+      .from("direct_messages")
+      .select("sender_id, recipient_id")
+      .or(`sender_id.eq.${user.id},recipient_id.eq.${user.id}`);
+    if (dms) {
+      for (const dm of dms) {
+        if (dm.sender_id !== user.id) existingPeerAuthIds.add(dm.sender_id);
+        if (dm.recipient_id !== user.id) existingPeerAuthIds.add(dm.recipient_id);
+      }
+    }
+
     const attendeeProfiles: AttendeeProfile[] = attendees
-      .filter((a: any) => !existingPeerIds.has(a.id))
+      .filter((a: any) => {
+        const authId = a.users?.auth_user_id;
+        // Keep attendees that have no linked auth user (we can't dedup them)
+        // and drop the ones whose auth user is already a DM peer.
+        return !authId || !existingPeerAuthIds.has(authId);
+      })
       .map((a: any) => ({
-      investor_id: a.id,
-      name: a.name,
-      bio: a.users?.bio ?? null,
-      role: a.users?.role ?? null,
-      profile_picture_url: a.users?.profile_picture_url ?? null,
-      profile_auth_id: a.users?.auth_user_id ?? null,
-    }));
+        investor_id: a.id,
+        name: a.name,
+        bio: a.users?.bio ?? null,
+        role: a.users?.role ?? null,
+        profile_picture_url: a.users?.profile_picture_url ?? null,
+        profile_auth_id: a.users?.auth_user_id ?? null,
+      }));
 
     const currentUserName = [currentUser.first_name, currentUser.last_name].filter(Boolean).join(" ") || "the user";
 

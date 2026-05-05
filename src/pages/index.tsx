@@ -3,6 +3,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { Event } from "../types/Event";
 import { useAuth } from "../contexts/AuthContext";
+import { useGlobalUnreadDMs } from "../hooks/useGlobalUnreadDMs";
+
+type EventFilter = "active" | "completed";
 
 const HomePage: React.FC = () => {
 	console.log("[HomePage] render");
@@ -10,9 +13,11 @@ const HomePage: React.FC = () => {
 	const [isLoading, setIsLoading] = useState<boolean>(true);
 	const [error, setError] = useState<string | null>(null);
 	const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+	const [filter, setFilter] = useState<EventFilter>("active");
 	const avatarRef = useRef<HTMLDivElement>(null);
 	const { isAdmin, user, signOut } = useAuth();
 	const navigate = useNavigate();
+	const unreadDMs = useGlobalUnreadDMs(user?.id ?? null);
 
 	useEffect(() => {
 		const handleClickOutside = (e: MouseEvent) => {
@@ -40,13 +45,7 @@ const HomePage: React.FC = () => {
 					.select("*")
 					.order("start_time", { ascending: false });
 				if (fetchError) throw fetchError;
-				const statusOrder: Record<string, number> = { active: 0, completed: 1, draft: 2 };
-				const sorted = (data || []).sort((a, b) => {
-					const aOrder = statusOrder[a.status] ?? 3;
-					const bOrder = statusOrder[b.status] ?? 3;
-					return aOrder !== bOrder ? aOrder - bOrder : 0;
-				});
-				setEvents(sorted);
+				setEvents(data || []);
 			} catch (err: any) {
 				setError(err.message || "Failed to fetch events");
 			} finally {
@@ -55,6 +54,34 @@ const HomePage: React.FC = () => {
 		};
 		fetchEvents();
 	}, [user?.id]);
+
+	// Filtered + sorted events: Active prioritizes soonest (live > upcoming > recently ended);
+	// Completed shows most recent completions first.
+	const filteredEvents = React.useMemo(() => {
+		const now = Date.now();
+		if (filter === "completed") {
+			return events
+				.filter((e) => e.status === "completed")
+				.sort(
+					(a, b) =>
+						new Date(b.end_time).getTime() - new Date(a.end_time).getTime(),
+				);
+		}
+		const score = (e: Event): [number, number] => {
+			const start = new Date(e.start_time).getTime();
+			const end = new Date(e.end_time).getTime();
+			if (now >= start && now <= end) return [0, start];
+			if (start > now) return [1, start - now];
+			return [2, now - end];
+		};
+		return events
+			.filter((e) => e.status === "active" || e.status === "draft")
+			.sort((a, b) => {
+				const [ag, av] = score(a);
+				const [bg, bv] = score(b);
+				return ag !== bg ? ag - bg : av - bv;
+			});
+	}, [events, filter]);
 
 	const getStatusBadge = (status: string) => {
 		const styles: Record<string, React.CSSProperties> = {
@@ -207,6 +234,24 @@ const HomePage: React.FC = () => {
 												{label}
 											</Link>
 										))}
+										<Link
+											to="/messages"
+											onClick={() => setAvatarMenuOpen(false)}
+											className="flex items-center justify-between px-4 py-2.5 text-sm font-medium text-white/80 hover:text-white hover:bg-white/5 transition-colors"
+										>
+											<span>Messages</span>
+											{unreadDMs > 0 && (
+												<span
+													className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full text-white font-black text-[10px] tabular-nums px-1"
+													style={{
+														background: "linear-gradient(135deg, #6366f1, #22d3ee)",
+														boxShadow: "0 0 8px rgba(99,102,241,0.5)",
+													}}
+												>
+													{unreadDMs > 99 ? "99+" : unreadDMs}
+												</span>
+											)}
+										</Link>
 										<div style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }} className="mt-1 pt-1">
 											<button
 												onClick={handleLogout}
@@ -234,7 +279,7 @@ const HomePage: React.FC = () => {
 				</header>
 
 				<div
-					className="flex items-center gap-3 mb-7"
+					className="flex items-center gap-3 mb-5"
 					style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "0.75rem" }}
 				>
 					<span
@@ -253,6 +298,51 @@ const HomePage: React.FC = () => {
 					/>
 				</div>
 
+				{/* Filter pills */}
+				<div
+					role="tablist"
+					aria-label="Filter events"
+					className="flex p-1 mb-6 rounded-full"
+					style={{
+						background: "rgba(255,255,255,0.04)",
+						border: "1px solid rgba(255,255,255,0.08)",
+					}}
+				>
+					{(
+						[
+							{ id: "active", label: "Active" },
+							{ id: "completed", label: "Completed" },
+						] as { id: EventFilter; label: string }[]
+					).map(({ id, label }) => {
+						const isSelected = filter === id;
+						return (
+							<button
+								key={id}
+								type="button"
+								role="tab"
+								aria-selected={isSelected}
+								onClick={() => setFilter(id)}
+								className={`flex-1 px-4 py-2 rounded-full text-xs font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 ${
+									isSelected
+										? "text-white"
+										: "text-white/55 hover:text-white/85"
+								}`}
+								style={
+									isSelected
+										? {
+												background:
+													"linear-gradient(135deg, #22d3ee 0%, #6366f1 100%)",
+												boxShadow: "0 0 14px rgba(34,211,238,0.3)",
+											}
+										: undefined
+								}
+							>
+								{label}
+							</button>
+						);
+					})}
+				</div>
+
 				{isLoading ? (
 					<div className="flex justify-center items-center py-20">
 						<div className="w-6 h-6 rounded-full border-2 border-white/10 border-t-white/50 animate-spin" />
@@ -264,21 +354,25 @@ const HomePage: React.FC = () => {
 					>
 						{error}
 					</div>
-				) : events.length === 0 ? (
+				) : filteredEvents.length === 0 ? (
 					<div
 						className="rounded-2xl p-10 text-center"
 						style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
 					>
-						<p className="text-white font-semibold mb-1">No Events Yet</p>
+						<p className="text-white font-semibold mb-1">
+							{filter === "active" ? "No Active Events" : "No Completed Events"}
+						</p>
 						<p className="text-white/35 text-sm">
-							{isAdmin
-								? 'Click "Create Event" to get started.'
-								: "Check back later for upcoming events."}
+							{filter === "active"
+								? isAdmin
+									? 'Click "Create Event" to get started.'
+									: "Check back later for upcoming events."
+								: "Completed events will show up here once they wrap up."}
 						</p>
 					</div>
 				) : (
 					<div className="grid grid-cols-1 gap-4">
-						{events.map((event) => (
+						{filteredEvents.map((event) => (
 							<div
 								key={event.id}
 								className="rounded-2xl overflow-hidden transition-all duration-200 hover:scale-[1.01]"

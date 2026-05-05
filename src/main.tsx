@@ -11,6 +11,7 @@ import ProfilePage from "./pages/profile";
 import SettingsPage from "./pages/settings";
 import ForgotPasswordPage from "./pages/forgot-password";
 import OnboardingPage from "./pages/onboarding";
+import MessagesPage from "./pages/messages";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -37,6 +38,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 				<Route path="/settings" element={<SettingsPage />} />
 				<Route path="/forgot-password" element={<ForgotPasswordPage />} />
 				<Route path="/onboarding" element={<OnboardingPage />} />
+				<Route path="/messages" element={<MessagesPage />} />
+				<Route path="/messages/dm/:peerId" element={<MessagesPage />} />
 			</Routes>
 		</AuthProvider>
 	</BrowserRouter>,

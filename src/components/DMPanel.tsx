@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { X, Send, ArrowLeft } from "lucide-react";
+import { X, Send, ArrowLeft, ChevronRight } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 
 interface DMMessage {
@@ -17,11 +17,11 @@ interface DMPanelProps {
 	isOpen: boolean;
 	onClose: () => void;
 	onBack: () => void;
-	eventId: string;
 	userId: string;
 	displayName: string;
 	peerId: string;
 	peerName: string;
+	onOpenProfile?: () => void;
 }
 
 const AVATAR_COLORS = [
@@ -76,11 +76,11 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 	isOpen,
 	onClose,
 	onBack,
-	eventId,
 	userId,
 	displayName,
 	peerId,
 	peerName,
+	onOpenProfile,
 }) => {
 	const [messages, setMessages] = useState<DMMessage[]>([]);
 	const [inputText, setInputText] = useState("");
@@ -90,14 +90,13 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
-		if (!isOpen || !eventId || !userId || !peerId) return;
+		if (!isOpen || !userId || !peerId) return;
 
 		const load = async () => {
 			setLoading(true);
 			const { data } = await supabase
 				.from("direct_messages")
 				.select("id, sender_id, sender_name, recipient_id, recipient_name, text, is_read, created_at")
-				.eq("event_id", eventId)
 				.or(
 					`and(sender_id.eq.${userId},recipient_id.eq.${peerId}),and(sender_id.eq.${peerId},recipient_id.eq.${userId})`,
 				)
@@ -107,16 +106,14 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 		};
 		load();
 
-		// Subscribe to new messages in this conversation
 		const channel = supabase
-			.channel(`dm_${eventId}_${[userId, peerId].sort().join("_")}`)
+			.channel(`dm_global_${[userId, peerId].sort().join("_")}`)
 			.on(
 				"postgres_changes",
 				{
 					event: "INSERT",
 					schema: "public",
 					table: "direct_messages",
-					filter: `event_id=eq.${eventId}`,
 				},
 				(payload) => {
 					const msg = payload.new as DMMessage;
@@ -134,7 +131,7 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 		return () => {
 			supabase.removeChannel(channel);
 		};
-	}, [isOpen, eventId, userId, peerId]);
+	}, [isOpen, userId, peerId]);
 
 	// Fetch peer's profile picture via investors → users join
 	useEffect(() => {
@@ -196,7 +193,6 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 		const { data, error } = await supabase
 			.from("direct_messages")
 			.insert({
-				event_id: eventId,
 				sender_id: userId,
 				recipient_id: peerId,
 				sender_name: displayName,
@@ -281,20 +277,44 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 									background: "rgba(255,255,255,0.05)",
 									border: "1px solid rgba(255,255,255,0.08)",
 								}}
+								aria-label="Back"
 							>
 								<ArrowLeft size={15} />
 							</button>
 
-							<Avatar name={peerName} url={peerProfilePic} size={30} />
-
-							<div className="flex-1 min-w-0">
-								<p className="text-white/30 text-[9px] font-semibold uppercase tracking-[0.2em] leading-none mb-1">
-									Direct Message
-								</p>
-								<h2 className="text-white font-black text-base leading-none truncate">
-									{peerName}
-								</h2>
-							</div>
+							{onOpenProfile ? (
+								<button
+									onClick={onOpenProfile}
+									className="group flex-1 min-w-0 flex items-center gap-3 -ml-1 pl-2 pr-2 py-1 rounded-xl text-left transition-all hover:bg-white/[0.04] active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
+									aria-label={`Open ${peerName}'s profile`}
+								>
+									<Avatar name={peerName} url={peerProfilePic} size={30} />
+									<div className="flex-1 min-w-0">
+										<p className="text-white/30 text-[9px] font-semibold uppercase tracking-[0.2em] leading-none mb-1">
+											View profile
+										</p>
+										<h2 className="text-white font-black text-base leading-none truncate">
+											{peerName}
+										</h2>
+									</div>
+									<ChevronRight
+										size={14}
+										className="text-white/25 group-hover:text-white/55 transition-colors flex-shrink-0"
+									/>
+								</button>
+							) : (
+								<>
+									<Avatar name={peerName} url={peerProfilePic} size={30} />
+									<div className="flex-1 min-w-0">
+										<p className="text-white/30 text-[9px] font-semibold uppercase tracking-[0.2em] leading-none mb-1">
+											Direct Message
+										</p>
+										<h2 className="text-white font-black text-base leading-none truncate">
+											{peerName}
+										</h2>
+									</div>
+								</>
+							)}
 
 							<button
 								onClick={onClose}
@@ -303,6 +323,7 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 									background: "rgba(255,255,255,0.05)",
 									border: "1px solid rgba(255,255,255,0.08)",
 								}}
+								aria-label="Close"
 							>
 								<X size={15} />
 							</button>
