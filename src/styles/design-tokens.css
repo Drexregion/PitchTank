@@ -1,0 +1,460 @@
+/* ============================================================
+   PITCHTANK · TOKENS · v2.1.5
+   Ported from design repo (pitchtank-wenting-ui/pitch-tank-event)
+   Scope: visual tokens for the new event-page Trade view
+   ============================================================ */
+
+:root {
+  /* === COLORS · visual layer === */
+  --c-blue:        #4F7CFF;
+  --c-blue-deep:   #2B4FE0;
+  --c-purple:      #A259FF;
+  --c-cyan:        #00E5FF;
+  --c-orange:      #FF8A00;
+  --c-red:         #FF4757;
+  --c-metal-blue:  #B8D4FF;
+  --c-metal-white: #E8F2FF;
+  --c-bg-deep:     #03040D;
+
+  /* === TEXT === */
+  --c-text-1: #FFFFFF;
+  --c-text-2: rgba(255, 255, 255, 0.6);
+  --c-text-3: rgba(255, 255, 255, 0.35);
+
+  /* === RADIUS === */
+  --pt-radius-card:  18px;
+  --pt-radius-mini:  12px;
+  --pt-radius-pill:  999px;
+
+  /* === BUTTON HEIGHT === */
+  --pt-btn-h-lg: 52px;
+  --pt-btn-h-md: 40px;
+  --pt-btn-h-sm: 32px;
+
+  /* === MOTION === */
+  --pt-motion-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --pt-motion-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --pt-motion-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================================
+   GLASS CARD · base + tones × active modifier
+   ============================================================ */
+.glass-card {
+  position: relative;
+  border-radius: var(--pt-radius-card);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  overflow: hidden;
+  transition: all var(--pt-motion-base);
+  background: linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    0 4px 20px rgba(0,0,0,0.3);
+}
+.glass-card > * { position: relative; z-index: 1; }
+
+.glass-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.10));
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* === TONE-FRAME · container (no fill) === */
+.glass-card.tone-frame {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow:
+    inset 0 1px 0 rgba(184,212,255,0.10),
+    0 0 24px rgba(79,124,255,0.06);
+}
+.glass-card.tone-frame::after {
+  background: linear-gradient(90deg,
+    rgba(43,79,224,0.7) 0%,
+    rgba(79,124,255,1) 25%,
+    rgba(162,89,255,1) 60%,
+    rgba(140,110,240,0.8) 80%,
+    rgba(79,124,255,0.7) 100%
+  );
+}
+
+.event-performance-glow {
+  position: relative;
+  overflow: visible;
+}
+.event-performance-glow::before {
+  content: "";
+  position: absolute;
+  inset: -12px;
+  border-radius: var(--pt-radius-card);
+  background:
+    radial-gradient(80% 90% at 100% 55%, rgba(35,214,255,0.20), transparent 62%),
+    radial-gradient(80% 90% at 50% 100%, rgba(79,124,255,0.18), transparent 66%),
+    radial-gradient(80% 90% at 0% 0%, rgba(162,89,255,0.10), transparent 62%);
+  filter: blur(14px);
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: 0;
+}
+.event-performance-glow > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* === TONE-PURPLE · active / selected === */
+.glass-card.tone-purple {
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 0%, rgba(162,89,255,0.20) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 50% 100%, rgba(79,124,255,0.10) 0%, transparent 70%),
+    linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+  box-shadow: inset 0 1px 0 rgba(220,200,255,0.25), 0 0 40px rgba(162,89,255,0.20), 0 4px 20px rgba(0,0,0,0.3);
+}
+.glass-card.tone-purple::after {
+  background: conic-gradient(from 180deg at 50% 50%,
+    rgba(162,89,255,0.4), rgba(220,200,255,1) 17%, rgba(162,89,255,0.6) 33%,
+    rgba(79,124,255,0.4) 50%, rgba(162,89,255,0.6) 67%, rgba(220,200,255,1) 83%, rgba(162,89,255,0.4));
+}
+
+/* === TONE-FEATURED · purple → orange accent === */
+.glass-card.tone-featured {
+  background:
+    radial-gradient(ellipse 70% 60% at 0% 0%, rgba(162,89,255,0.25) 0%, transparent 70%),
+    radial-gradient(ellipse 70% 60% at 100% 100%, rgba(255,138,0,0.22) 0%, transparent 70%),
+    linear-gradient(135deg, rgba(162,89,255,0.10) 0%, rgba(255,138,0,0.08) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,210,180,0.25),
+    0 0 50px rgba(162,89,255,0.20),
+    0 0 80px rgba(255,138,0,0.12),
+    0 4px 20px rgba(0,0,0,0.3);
+}
+.glass-card.tone-featured::after {
+  background: conic-gradient(from 225deg at 50% 50%,
+    rgba(162,89,255,0.5), rgba(220,200,255,1) 8%, rgba(162,89,255,0.8) 25%,
+    rgba(255,79,0,0.5) 50%, rgba(255,138,0,0.9) 67%, rgba(255,210,150,1) 83%,
+    rgba(255,138,0,0.6) 94%, rgba(162,89,255,0.5));
+}
+
+/* === TONE-NEUTRAL · default list item === */
+.glass-card.tone-neutral {
+  background:
+    radial-gradient(ellipse 60% 50% at 0% 0%, rgba(79,124,255,0.18) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 40% at 100% 100%, rgba(79,124,255,0.10) 0%, transparent 70%),
+    linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(184,212,255,0.18),
+    0 0 24px rgba(79,124,255,0.15),
+    0 4px 20px rgba(0,0,0,0.3);
+}
+.glass-card.tone-neutral::after {
+  background: conic-gradient(from 225deg at 50% 50%,
+    rgba(79,124,255,0.55) 0deg,
+    rgba(184,212,255,0.95) 30deg,
+    rgba(79,124,255,0.85) 90deg,
+    rgba(140,170,255,0.5) 180deg,
+    rgba(184,212,255,0.85) 270deg,
+    rgba(79,124,255,0.55) 360deg
+  );
+}
+
+/* === SIZES === */
+.glass-card.size-sm { padding: 12px 14px; }
+.glass-card.size-md { padding: 18px 20px; }
+.glass-card.size-lg { padding: 24px 26px; }
+
+/* === HOLDINGS BAR === */
+.holding-bar {
+  border: 0;
+  padding: 0;
+  transition:
+    transform var(--pt-motion-base),
+    box-shadow var(--pt-motion-base),
+    filter var(--pt-motion-base);
+}
+.holding-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.25px;
+  background: linear-gradient(135deg,
+    var(--seg-c1, rgba(79,124,255,0.9)),
+    var(--seg-c2, rgba(162,89,255,0.9)));
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.85;
+}
+.holding-bar:hover,
+.holding-bar:focus-visible {
+  transform: translateY(-2px) scale(1.02);
+  filter: brightness(1.15);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.45),
+    0 0 22px var(--seg-c1, rgba(79,124,255,0.6)),
+    0 0 42px var(--seg-c2, rgba(162,89,255,0.45));
+  outline: none;
+  z-index: 2;
+}
+.holding-bar:hover::after,
+.holding-bar:focus-visible::after {
+  opacity: 1;
+  padding: 1.75px;
+}
+.holding-bar:active { transform: translateY(0) scale(0.99); }
+
+.holding-avatar {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  border-radius: 9999px;
+}
+.holding-avatar:hover,
+.holding-avatar:focus-visible {
+  filter: drop-shadow(0 0 10px var(--seg-c1, rgba(79,124,255,0.7)))
+          drop-shadow(0 0 20px var(--seg-c2, rgba(162,89,255,0.55)));
+}
+
+/* ============================================================
+   BUTTONS (PT design system)
+   Class names prefixed with `pt-` to avoid colliding with the
+   app's existing legacy `.btn-primary` utility in index.css.
+   ============================================================ */
+.pt-btn {
+  font-family: 'Tomorrow', system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 0;
+  cursor: pointer;
+  border-radius: var(--pt-radius-mini);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all var(--pt-motion-fast);
+  white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+  background: rgba(255,255,255,0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--c-text-1);
+}
+.pt-btn:active { transform: translateY(1px); filter: brightness(0.92); }
+.pt-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.pt-btn-lg { height: var(--pt-btn-h-lg); padding: 0 24px; font-size: 14px; }
+.pt-btn-md { height: var(--pt-btn-h-md); padding: 0 18px; font-size: 12px; }
+.pt-btn-sm { height: var(--pt-btn-h-sm); padding: 0 14px; font-size: 11px; }
+
+.pt-btn::after {
+  content: ""; position: absolute; inset: 0;
+  border-radius: inherit; padding: 1px;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* === PRIMARY · blue→purple gradient === */
+.pt-btn-primary {
+  color: var(--c-metal-white);
+  text-shadow: 0 0 12px rgba(184,212,255,0.6);
+  background:
+    linear-gradient(90deg,
+      rgba(43,79,224,0.20) 0%,
+      rgba(79,124,255,0.25) 30%,
+      rgba(162,89,255,0.20) 70%,
+      rgba(79,124,255,0.20) 100%
+    ),
+    rgba(255,255,255,0.03);
+  box-shadow:
+    inset 0 1px 0 rgba(184,212,255,0.25),
+    0 0 24px rgba(79,124,255,0.20),
+    0 0 32px rgba(162,89,255,0.15);
+}
+.pt-btn-primary::after {
+  background: linear-gradient(90deg,
+    rgba(43,79,224,0.7) 0%,
+    rgba(79,124,255,1) 25%,
+    rgba(162,89,255,1) 60%,
+    rgba(140,110,240,0.8) 80%,
+    rgba(79,124,255,0.7) 100%
+  );
+}
+
+/* === BUY · cyan === */
+.pt-btn-buy {
+  color: var(--c-cyan); text-shadow: 0 0 12px rgba(0,229,255,0.7);
+  background: radial-gradient(ellipse 100% 100% at 50% 50%, rgba(0,229,255,0.10) 0%, transparent 60%), rgba(255,255,255,0.02);
+  box-shadow: inset 0 1px 0 rgba(184,240,255,0.2), 0 0 24px rgba(0,229,255,0.3);
+}
+.pt-btn-buy::after {
+  background: conic-gradient(from 180deg at 50% 50%,
+    rgba(0,229,255,0.4), rgba(184,240,255,1) 25%, rgba(0,229,255,0.6) 50%,
+    rgba(0,200,200,0.4) 75%, rgba(0,229,255,0.4));
+}
+
+/* === SELL · orange === */
+.pt-btn-sell {
+  color: var(--c-orange); text-shadow: 0 0 12px rgba(255,138,0,0.6);
+  background: radial-gradient(ellipse 100% 100% at 50% 50%, rgba(255,138,0,0.10) 0%, transparent 60%), rgba(255,255,255,0.02);
+  box-shadow: inset 0 1px 0 rgba(255,200,150,0.2), 0 0 24px rgba(255,138,0,0.3);
+}
+.pt-btn-sell::after {
+  background: conic-gradient(from 0deg at 50% 50%,
+    rgba(255,138,0,0.4), rgba(255,200,150,1) 25%, rgba(255,71,87,0.6) 50%,
+    rgba(180,60,30,0.4) 75%, rgba(255,138,0,0.4));
+}
+
+.featured-timer-text,
+.featured-timer-text * {
+  background: linear-gradient(90deg, #DCC8FF 0%, #FFC896 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 14px rgba(220,150,200,0.55);
+}
+
+/* ============================================================
+   ICON BUTTON
+   ============================================================ */
+.pt-icon-btn {
+  border-radius: var(--pt-radius-mini);
+  background: rgba(255,255,255,0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--pt-motion-fast);
+  color: var(--c-text-2);
+  position: relative;
+  border: 0;
+}
+.pt-icon-btn::after {
+  content: ""; position: absolute; inset: 0;
+  border-radius: inherit; padding: 1px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05));
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  pointer-events: none;
+}
+.pt-icon-btn:hover { color: var(--c-text-1); }
+.pt-btn:focus-visible,
+.pt-icon-btn:focus-visible,
+.pt-tab:focus-visible {
+  outline: 2px solid rgba(232,242,255,0.9);
+  outline-offset: 3px;
+}
+.pt-icon-btn-sm { width: 32px; height: 32px; }
+.pt-icon-btn-md { width: 40px; height: 40px; }
+.pt-icon-btn-lg { width: 48px; height: 48px; }
+.pt-icon-btn svg { width: 50%; height: 50%; }
+
+/* ============================================================
+   TABS
+   ============================================================ */
+.pt-tabs {
+  display: inline-flex; background: rgba(255,255,255,0.02);
+  border-radius: var(--pt-radius-pill); padding: 4px; gap: 2px; position: relative;
+}
+.pt-tabs::after {
+  content: ""; position: absolute; inset: 0;
+  border-radius: inherit; padding: 1px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05));
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  pointer-events: none;
+}
+.pt-tab {
+  font-family: 'Tomorrow', system-ui, sans-serif;
+  font-weight: 500; font-size: 11px;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 8px 18px; border-radius: var(--pt-radius-pill);
+  background: transparent; border: 0; color: var(--c-text-2);
+  cursor: pointer; transition: all var(--pt-motion-fast);
+}
+.pt-tab:hover { color: var(--c-text-1); }
+.pt-tab.active {
+  color: var(--c-purple);
+  text-shadow: 0 0 10px rgba(162,89,255,0.7);
+  background: rgba(162,89,255,0.06);
+  box-shadow:
+    inset 0 0 0 1px rgba(220,200,255,0.4),
+    inset 0 0 12px rgba(162,89,255,0.25),
+    0 0 16px rgba(162,89,255,0.3);
+}
+
+/* ============================================================
+   UTILITY · tabular numerics
+   All numeric values across the design system use the display
+   font so digits share a consistent look with headings.
+   ============================================================ */
+.num {
+  font-family: "Tomorrow", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Founder card expand/collapse pop-in.
+   Triggered on mount of either branch (collapsed/expanded), so the
+   card visually settles into place when the user toggles it. Only
+   the toggled card remounts — neighbors stay stable. */
+@keyframes pt-card-pop-in {
+  from {
+    opacity: 0.45;
+    transform: translateY(-3px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.pt-card-pop-in {
+  animation: pt-card-pop-in 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  animation-fill-mode: both;
+  transform-origin: top center;
+}
+
+/* Live-pulse animation for sparkline dots */
+.spark-live circle:last-of-type {
+  animation: pt-live-pulse 1.8s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes pt-live-pulse {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50%      { opacity: 0.85; transform: scale(1.08); }
+}
+
+/* Breathing animation for the latest-point dot in the EventChart */
+.dot-pulse > circle:nth-of-type(1) {
+  animation: pt-dot-breathe 2.4s ease-in-out infinite;
+  transform-origin: center;
+}
+@keyframes pt-dot-breathe {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.85; }
+}

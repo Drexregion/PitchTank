@@ -4,6 +4,20 @@ export default {
 	theme: {
 		extend: {
 			colors: {
+				// PitchTank design-system token bridge → CSS vars in design-tokens.css
+				"pt-blue": "var(--c-blue)",
+				"pt-blue-deep": "var(--c-blue-deep)",
+				"pt-cyan": "var(--c-cyan)",
+				"pt-purple": "var(--c-purple)",
+				"pt-orange": "var(--c-orange)",
+				"pt-red": "var(--c-red)",
+				"pt-metal-blue": "var(--c-metal-blue)",
+				"pt-metal-white": "var(--c-metal-white)",
+				"pt-bg": "var(--c-bg-deep)",
+				"pt-text-1": "var(--c-text-1)",
+				"pt-text-2": "var(--c-text-2)",
+				"pt-text-3": "var(--c-text-3)",
+
 				// Fancy dark blue theme
 				primary: {
 					50: "#e6f0ff",
@@ -48,6 +62,9 @@ export default {
 			boxShadow: {
 				glow: "0 0 15px rgba(0, 212, 255, 0.5)",
 				"glow-lg": "0 0 30px rgba(0, 212, 255, 0.6)",
+			},
+			fontFamily: {
+				display: ["Tomorrow", "system-ui", "sans-serif"],
 			},
 		},
 	},
