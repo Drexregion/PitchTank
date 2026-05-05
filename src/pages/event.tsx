@@ -1,12 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
-import {
-	Clock,
-	ArrowUp,
-	ChevronDown,
-	ArrowLeft,
-	Users,
-} from "lucide-react";
+import { Clock, ArrowUp, ChevronDown, ArrowLeft, Users } from "lucide-react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { TradeModal } from "../components/TradeModal";
 import { LeaderboardPanel } from "../components/LeaderboardPanel";
@@ -198,8 +192,8 @@ const EventInfoSheet: React.FC<{
 								Companies
 							</p>
 							<p className="font-display text-pt-text-1 font-semibold text-sm">
-								<span className="num">{pitches.length}</span>{" "}
-								pitch{pitches.length !== 1 ? "es" : ""} competing
+								<span className="num">{pitches.length}</span> pitch
+								{pitches.length !== 1 ? "es" : ""} competing
 							</p>
 						</div>
 						<svg
@@ -845,7 +839,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const [showPeople, setShowPeople] = useState(false);
 	const [showSettings, setShowSettings] = useState(false);
 	const [hasOpenedScanner, setHasOpenedScanner] = useState(
-		() => localStorage.getItem("scanner_opened") === "1"
+		() => localStorage.getItem("scanner_opened") === "1",
 	);
 	const portfolioDropdownRef = useRef<HTMLDivElement>(null);
 	const profileUserId = user?.id ?? null;
@@ -1125,7 +1119,6 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				? "Good Afternoon,"
 				: "Good Evening,";
 
-
 	const demoPitches: PitchWithPriceAndUser[] = [
 		{
 			id: "demo-1",
@@ -1236,6 +1229,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 		.sort((a, b) => b.current_value - a.current_value)
 		.slice(0, 5);
 
+	// Comment for redeploy
 	const statusBadge = (ev: Event) => {
 		if (ev.status === "active" && isEventActive(ev)) {
 			return (
@@ -1352,9 +1346,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 									type="button"
 									onClick={() =>
 										navigate(
-											user
-												? "/profile"
-												: `/login?redirect=/events/${eventId}`,
+											user ? "/profile" : `/login?redirect=/events/${eventId}`,
 										)
 									}
 									className="flex items-center gap-2 transition-all active:scale-95 shrink-0 min-w-0"
@@ -1485,7 +1477,10 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 														>
 															Cash
 														</button>
-														<span className="text-pt-text-3 text-[11px]" aria-hidden>
+														<span
+															className="text-pt-text-3 text-[11px]"
+															aria-hidden
+														>
 															/
 														</span>
 														<button
@@ -1532,7 +1527,11 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 															size="sm"
 															className="!rounded-full inline-flex items-center gap-1.5 !h-9 !px-3.5 !py-0 text-[12px]"
 														>
-															<Clock size={14} color="#FFC896" strokeWidth={1.5} />
+															<Clock
+																size={14}
+																color="#FFC896"
+																strokeWidth={1.5}
+															/>
 															<span className="featured-timer-text num">
 																Trading closes in{" "}
 																<PtTimer seconds={closingSecondsLeft} />
@@ -1577,12 +1576,15 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 												</div>
 												{(() => {
 													const MIN_DISPLAY_PCT = 11;
-													const activeHoldings = top5Holdings.filter((h) => h.shares > 0);
+													const activeHoldings = top5Holdings.filter(
+														(h) => h.shares > 0,
+													);
 													const totalValue = activeHoldings.reduce(
 														(s, h) => s + h.current_value,
 														0,
 													);
-													const reserved = MIN_DISPLAY_PCT * activeHoldings.length;
+													const reserved =
+														MIN_DISPLAY_PCT * activeHoldings.length;
 													const remaining = Math.max(0, 100 - reserved);
 													const alpha = (hex: string, a: number) =>
 														hex +
@@ -1590,7 +1592,9 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 															.toString(16)
 															.padStart(2, "0");
 													const enriched = activeHoldings.map((h) => {
-														const pitch = pitches.find((f) => f.id === h.pitch_id);
+														const pitch = pitches.find(
+															(f) => f.id === h.pitch_id,
+														);
 														const pct =
 															totalValue > 0
 																? (h.current_value / totalValue) * 100
@@ -1603,71 +1607,83 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 													return (
 														<>
 															<div className="flex gap-[3px] h-[52px]">
-																{enriched.map(({ h, pitch, pct, displayPct, c1, c2 }) => (
-																	<button
-																		type="button"
-																		key={h.pitch_id}
-																		onClick={() => {
-																			if (pitch) handleBuyClick(pitch);
-																		}}
-																		className="holding-bar group relative rounded-[12px] flex items-center justify-end overflow-hidden min-w-0 cursor-pointer"
-																		style={
-																			{
-																				width: `${displayPct}%`,
-																				background: `linear-gradient(135deg, ${alpha(c1, 0.22)}, ${alpha(c2, 0.32)})`,
-																				boxShadow: `inset 0 1px 0 ${alpha(c1, 0.45)}, 0 0 14px ${alpha(c1, 0.18)}`,
-																				["--seg-c1" as any]: c1,
-																				["--seg-c2" as any]: c2,
-																			} as React.CSSProperties
-																		}
-																		aria-label={`Trade ${pitch?.name ?? "holding"} (${Math.round(pct)}%)`}
-																	>
-																		<span className="font-display font-normal text-white text-[14px] num leading-none whitespace-nowrap pr-2.5 drop-shadow-[0_1px_1px_rgba(0,0,0,0.4)]">
-																			{Math.round(pct)}%
-																		</span>
-																	</button>
-																))}
-															</div>
-															<div className="flex gap-[3px] mt-1.5">
-																{enriched.map(({ h, pitch, displayPct, c1, c2 }) => (
-																	<div
-																		key={h.pitch_id}
-																		className="flex flex-col items-start min-w-0"
-																		style={{ width: `${displayPct}%` }}
-																	>
-																		<div
-																			className="w-px border-l border-dashed ml-1 h-3"
-																			style={{ borderColor: "rgba(255,255,255,0.28)" }}
-																		/>
+																{enriched.map(
+																	({ h, pitch, pct, displayPct, c1, c2 }) => (
 																		<button
 																			type="button"
-																			onClick={(e) =>
-																				pitch && handleFounderProfileClick(pitch, e)
-																			}
-																			className="holding-avatar -ml-1 mt-0.5 cursor-pointer transition-transform duration-200 hover:scale-110 focus:scale-110 focus:outline-none"
+																			key={h.pitch_id}
+																			onClick={() => {
+																				if (pitch) handleBuyClick(pitch);
+																			}}
+																			className="holding-bar group relative rounded-[12px] flex items-center justify-end overflow-hidden min-w-0 cursor-pointer"
 																			style={
 																				{
+																					width: `${displayPct}%`,
+																					background: `linear-gradient(135deg, ${alpha(c1, 0.22)}, ${alpha(c2, 0.32)})`,
+																					boxShadow: `inset 0 1px 0 ${alpha(c1, 0.45)}, 0 0 14px ${alpha(c1, 0.18)}`,
 																					["--seg-c1" as any]: c1,
 																					["--seg-c2" as any]: c2,
 																				} as React.CSSProperties
 																			}
-																			aria-label={`Trade ${pitch?.name ?? ""}`}
+																			aria-label={`Trade ${pitch?.name ?? "holding"} (${Math.round(pct)}%)`}
 																		>
-																			<Avatar
-																				size="sm"
-																				name={pitch?.name ?? "?"}
-																				photo={pitch?.user?.profile_picture_url ?? undefined}
-																				gradient={
-																					pitch?.user?.profile_color
-																						? gradientForUser(
-																								pitch.user.profile_color,
-																						  )
-																						: gradientForId(pitch?.id ?? "anon")
-																				}
-																			/>
+																			<span className="font-display font-normal text-white text-[14px] num leading-none whitespace-nowrap pr-2.5 drop-shadow-[0_1px_1px_rgba(0,0,0,0.4)]">
+																				{Math.round(pct)}%
+																			</span>
 																		</button>
-																	</div>
-																))}
+																	),
+																)}
+															</div>
+															<div className="flex gap-[3px] mt-1.5">
+																{enriched.map(
+																	({ h, pitch, displayPct, c1, c2 }) => (
+																		<div
+																			key={h.pitch_id}
+																			className="flex flex-col items-start min-w-0"
+																			style={{ width: `${displayPct}%` }}
+																		>
+																			<div
+																				className="w-px border-l border-dashed ml-1 h-3"
+																				style={{
+																					borderColor: "rgba(255,255,255,0.28)",
+																				}}
+																			/>
+																			<button
+																				type="button"
+																				onClick={(e) =>
+																					pitch &&
+																					handleFounderProfileClick(pitch, e)
+																				}
+																				className="holding-avatar -ml-1 mt-0.5 cursor-pointer transition-transform duration-200 hover:scale-110 focus:scale-110 focus:outline-none"
+																				style={
+																					{
+																						["--seg-c1" as any]: c1,
+																						["--seg-c2" as any]: c2,
+																					} as React.CSSProperties
+																				}
+																				aria-label={`Trade ${pitch?.name ?? ""}`}
+																			>
+																				<Avatar
+																					size="sm"
+																					name={pitch?.name ?? "?"}
+																					photo={
+																						pitch?.user?.profile_picture_url ??
+																						undefined
+																					}
+																					gradient={
+																						pitch?.user?.profile_color
+																							? gradientForUser(
+																									pitch.user.profile_color,
+																								)
+																							: gradientForId(
+																									pitch?.id ?? "anon",
+																								)
+																					}
+																				/>
+																			</button>
+																		</div>
+																	),
+																)}
 															</div>
 														</>
 													);
@@ -1841,7 +1857,8 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 														: true;
 													// % change since IPO ($10 baseline) — matches the leaderboard,
 													// so the same founder shows the same number in both views.
-													const change = ((pitch.current_price - 10) / 10) * 100;
+													const change =
+														((pitch.current_price - 10) / 10) * 100;
 													const sparkColor = isUp ? "#40F3C5" : "#FF4757";
 
 													const expandedActive = isExpanded && !simpleMode;
@@ -1868,13 +1885,14 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 																		size="sm"
 																		name={pitch.name}
 																		photo={
-																			pitch.user?.profile_picture_url ?? undefined
+																			pitch.user?.profile_picture_url ??
+																			undefined
 																		}
 																		gradient={
 																			pitch.user?.profile_color
 																				? gradientForUser(
 																						pitch.user.profile_color,
-																				  )
+																					)
 																				: gradientForId(pitch.id)
 																		}
 																	/>
@@ -2046,7 +2064,9 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 																				Your Shares
 																			</div>
 																			<div className="font-display num text-white text-[15px] mt-0.5">
-																				{user ? ownedShares.toLocaleString() : "—"}
+																				{user
+																					? ownedShares.toLocaleString()
+																					: "—"}
 																			</div>
 																		</div>
 																		<div className="px-3 py-2.5 text-center">
@@ -2296,7 +2316,9 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 					{!hasOpenedScanner && (
 						<span
 							className="absolute inset-0 rounded-full animate-ping opacity-20"
-							style={{ background: "linear-gradient(140deg, #22d3ee, #6366f1)" }}
+							style={{
+								background: "linear-gradient(140deg, #22d3ee, #6366f1)",
+							}}
 						/>
 					)}
 				</button>
@@ -2597,8 +2619,18 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 								className="text-white/25 hover:text-white/60 transition-colors flex-shrink-0"
 								aria-label="Dismiss"
 							>
-								<svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+								<svg
+									className="w-3 h-3"
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
+								>
+									<path
+										strokeLinecap="round"
+										strokeLinejoin="round"
+										strokeWidth={2.5}
+										d="M6 18L18 6M6 6l12 12"
+									/>
 								</svg>
 							</button>
 						</div>
@@ -2708,63 +2740,68 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 							</div>
 
 							{/* Application Q&A */}
-							{founderApplicationAnswers && (event?.registration_questions?.length ?? 0) > 0 && (
-								<div className="space-y-4">
-									{event?.registration_questions
-										.slice()
-										.sort((a, b) => a.sort_order - b.sort_order)
-										.map((q) => {
-											const answer = founderApplicationAnswers[q.id];
-											if (!answer) return null;
-											return (
-												<div key={q.id}>
-													<p className="text-[10px] font-semibold uppercase tracking-wider text-white/40 mb-1">
-														{q.question_text}
-													</p>
-													{q.question_type === "image" ? (
-														<img
-															src={answer}
-															alt={q.question_text}
-															className="max-w-full max-h-48 rounded-xl border border-white/10 object-contain"
-														/>
-													) : q.question_type === "website_url" || q.question_type === "url" ? (
-														<a
-															href={answer}
-															target="_blank"
-															rel="noopener noreferrer"
-															className="text-cyan-400 hover:underline text-sm break-all"
-														>
-															{answer}
-														</a>
-													) : /^https?:\/\//i.test(answer.trim()) ? (
-														<a
-															href={answer.trim()}
-															target="_blank"
-															rel="noopener noreferrer"
-															className="text-cyan-400 hover:underline text-sm break-all"
-														>
-															{answer.trim()}
-														</a>
-													) : (
-														<p className="text-white/80 text-sm leading-relaxed">
-															{answer}
+							{founderApplicationAnswers &&
+								(event?.registration_questions?.length ?? 0) > 0 && (
+									<div className="space-y-4">
+										{event?.registration_questions
+											.slice()
+											.sort((a, b) => a.sort_order - b.sort_order)
+											.map((q) => {
+												const answer = founderApplicationAnswers[q.id];
+												if (!answer) return null;
+												return (
+													<div key={q.id}>
+														<p className="text-[10px] font-semibold uppercase tracking-wider text-white/40 mb-1">
+															{q.question_text}
 														</p>
-													)}
-												</div>
-											);
-										})}
-								</div>
-							)}
+														{q.question_type === "image" ? (
+															<img
+																src={answer}
+																alt={q.question_text}
+																className="max-w-full max-h-48 rounded-xl border border-white/10 object-contain"
+															/>
+														) : q.question_type === "website_url" ||
+														  q.question_type === "url" ? (
+															<a
+																href={answer}
+																target="_blank"
+																rel="noopener noreferrer"
+																className="text-cyan-400 hover:underline text-sm break-all"
+															>
+																{answer}
+															</a>
+														) : /^https?:\/\//i.test(answer.trim()) ? (
+															<a
+																href={answer.trim()}
+																target="_blank"
+																rel="noopener noreferrer"
+																className="text-cyan-400 hover:underline text-sm break-all"
+															>
+																{answer.trim()}
+															</a>
+														) : (
+															<p className="text-white/80 text-sm leading-relaxed">
+																{answer}
+															</p>
+														)}
+													</div>
+												);
+											})}
+									</div>
+								)}
 
 							{/* Fallback: pitch summary if no application data */}
-							{!founderApplicationAnswers && selectedFounderForModal.pitch_summary && (
-								<div>
-									<p className="text-[10px] font-semibold uppercase tracking-wider text-white/40 mb-1">Pitch Summary</p>
-									<p className="text-white/80 text-sm leading-relaxed">
-										{selectedFounderForModal.pitch_summary}
-									</p>
-								</div>
-							)}
+							{!founderApplicationAnswers &&
+								selectedFounderForModal.pitch_summary && (
+									<div>
+										<p className="text-[10px] font-semibold uppercase tracking-wider text-white/40 mb-1">
+											Pitch Summary
+										</p>
+										<p className="text-white/80 text-sm leading-relaxed">
+											{selectedFounderForModal.pitch_summary}
+										</p>
+									</div>
+								)}
 
 							{/* Price / market cap */}
 							{!simpleMode && (
@@ -2794,8 +2831,18 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 									disabled={!canTrade}
 									className={`flex-1 px-4 py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${!canTrade ? "bg-white/5 text-white/30 cursor-not-allowed" : "bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:opacity-90 shadow-lg"}`}
 								>
-									<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+									<svg
+										className="w-4 h-4"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
+										<path
+											strokeLinecap="round"
+											strokeLinejoin="round"
+											strokeWidth={2}
+											d="M12 4v16m8-8H4"
+										/>
 									</svg>
 									Buy Shares
 								</button>
@@ -2808,8 +2855,18 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 										disabled={!canTrade}
 										className={`flex-1 px-4 py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${!canTrade ? "bg-white/5 text-white/30 cursor-not-allowed" : "bg-gradient-to-r from-orange-500 to-red-500 text-white hover:opacity-90 shadow-lg"}`}
 									>
-										<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+										<svg
+											className="w-4 h-4"
+											fill="none"
+											stroke="currentColor"
+											viewBox="0 0 24 24"
+										>
+											<path
+												strokeLinecap="round"
+												strokeLinejoin="round"
+												strokeWidth={2}
+												d="M20 12H4"
+											/>
 										</svg>
 										Sell Shares
 									</button>
@@ -2838,7 +2895,9 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 						? (peerId, peerName) => {
 								if (peerId === user.id) return;
 								setShowPeople(false);
-								navigate(`/events/${eventId}/dm/${peerId}`, { state: { peerName } });
+								navigate(`/events/${eventId}/dm/${peerId}`, {
+									state: { peerName },
+								});
 							}
 						: undefined
 				}
