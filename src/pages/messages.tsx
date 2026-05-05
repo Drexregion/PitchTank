@@ -52,6 +52,7 @@ const MessagesPage: React.FC = () => {
 				displayName={displayName}
 				peerId={peerId ?? ""}
 				peerName={peerName}
+				onOpenProfile={peerId ? () => navigate(`/profile/${peerId}`) : undefined}
 			/>
 		</div>
 	);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { X, Send, ArrowLeft } from "lucide-react";
+import { X, Send, ArrowLeft, ChevronRight } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 
 interface DMMessage {
@@ -21,6 +21,7 @@ interface DMPanelProps {
 	displayName: string;
 	peerId: string;
 	peerName: string;
+	onOpenProfile?: () => void;
 }
 
 const AVATAR_COLORS = [
@@ -79,6 +80,7 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 	displayName,
 	peerId,
 	peerName,
+	onOpenProfile,
 }) => {
 	const [messages, setMessages] = useState<DMMessage[]>([]);
 	const [inputText, setInputText] = useState("");
@@ -275,20 +277,44 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 									background: "rgba(255,255,255,0.05)",
 									border: "1px solid rgba(255,255,255,0.08)",
 								}}
+								aria-label="Back"
 							>
 								<ArrowLeft size={15} />
 							</button>
 
-							<Avatar name={peerName} url={peerProfilePic} size={30} />
-
-							<div className="flex-1 min-w-0">
-								<p className="text-white/30 text-[9px] font-semibold uppercase tracking-[0.2em] leading-none mb-1">
-									Direct Message
-								</p>
-								<h2 className="text-white font-black text-base leading-none truncate">
-									{peerName}
-								</h2>
-							</div>
+							{onOpenProfile ? (
+								<button
+									onClick={onOpenProfile}
+									className="group flex-1 min-w-0 flex items-center gap-3 -ml-1 pl-2 pr-2 py-1 rounded-xl text-left transition-all hover:bg-white/[0.04] active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
+									aria-label={`Open ${peerName}'s profile`}
+								>
+									<Avatar name={peerName} url={peerProfilePic} size={30} />
+									<div className="flex-1 min-w-0">
+										<p className="text-white/30 text-[9px] font-semibold uppercase tracking-[0.2em] leading-none mb-1">
+											View profile
+										</p>
+										<h2 className="text-white font-black text-base leading-none truncate">
+											{peerName}
+										</h2>
+									</div>
+									<ChevronRight
+										size={14}
+										className="text-white/25 group-hover:text-white/55 transition-colors flex-shrink-0"
+									/>
+								</button>
+							) : (
+								<>
+									<Avatar name={peerName} url={peerProfilePic} size={30} />
+									<div className="flex-1 min-w-0">
+										<p className="text-white/30 text-[9px] font-semibold uppercase tracking-[0.2em] leading-none mb-1">
+											Direct Message
+										</p>
+										<h2 className="text-white font-black text-base leading-none truncate">
+											{peerName}
+										</h2>
+									</div>
+								</>
+							)}
 
 							<button
 								onClick={onClose}
@@ -297,6 +323,7 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 									background: "rgba(255,255,255,0.05)",
 									border: "1px solid rgba(255,255,255,0.08)",
 								}}
+								aria-label="Close"
 							>
 								<X size={15} />
 							</button>
