@@ -13,9 +13,12 @@ interface ApprovedApplication {
 	id: string;
 	applicant_email: string;
 	answers: Record<string, string>;
+	status: string;
 }
 
 const inputCls = "w-full p-2 bg-white border border-gray-200 text-gray-900 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+
+const selectCls = "w-full p-2 bg-white border border-gray-200 text-gray-900 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
 
 export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 	eventId,
@@ -36,11 +39,11 @@ export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 		logo_url: "",
 		pitch_summary: "",
 		pitch_url: "",
+		application_id: "",
 	});
 
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [editForm, setEditForm] = useState<UpdatePitchRequest>({});
-	const [assigningId, setAssigningId] = useState<string | null>(null);
 	const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 	const logoInputRef = useRef<HTMLInputElement>(null);
 
@@ -61,9 +64,9 @@ export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 	const fetchApprovedApps = async () => {
 		const { data } = await supabase
 			.from("applications")
-			.select("id, applicant_email, answers")
+			.select("id, applicant_email, answers, status")
 			.eq("event_id", eventId)
-			.eq("status", "approved");
+			.order("submitted_at", { ascending: false });
 		if (data) setApprovedApps(data);
 	};
 
@@ -77,7 +80,7 @@ export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 		const { error: err } = await supabase.from("pitches").insert({
 			event_id: eventId,
 			profile_user_id: null,
-			application_id: null,
+			application_id: createForm.application_id || null,
 			name: createForm.name,
 			bio: createForm.bio || null,
 			logo_url: createForm.logo_url || null,
@@ -92,7 +95,7 @@ export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 		if (err) { setError(err.message); }
 		else {
 			setSuccessMsg("Pitcher slot created.");
-			setCreateForm({ name: "", bio: "", logo_url: "", pitch_summary: "", pitch_url: "" });
+			setCreateForm({ name: "", bio: "", logo_url: "", pitch_summary: "", pitch_url: "", application_id: "" });
 			await fetchPitchs();
 			setTab("manage");
 			onProjectCreated?.();
@@ -121,18 +124,6 @@ export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 		setIsLoading(false);
 	};
 
-	const handleAssignApplication = async (founderId: string, applicationId: string | null) => {
-		setIsLoading(true);
-		const { error: err } = await supabase
-			.from("pitches")
-			.update({ application_id: applicationId })
-			.eq("id", founderId);
-		if (err) setError(err.message);
-		else await fetchPitchs();
-		setAssigningId(null);
-		setIsLoading(false);
-	};
-
 	const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
 		if (!file || !editingId) return;
@@ -150,6 +141,18 @@ export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 		setEditForm(p => ({ ...p, logo_url: `${data.publicUrl}?t=${Date.now()}` }));
 		setIsUploadingLogo(false);
 	};
+
+	const appDropdown = (value: string, onChange: (val: string) => void) => (
+		<div className="col-span-2">
+			<label className="block text-xs font-medium text-gray-500 mb-1">Linked Application</label>
+			<select value={value} onChange={e => onChange(e.target.value)} className={selectCls}>
+				<option value="">— none —</option>
+				{approvedApps.map(a => (
+					<option key={a.id} value={a.id}>{a.applicant_email} ({a.status})</option>
+				))}
+			</select>
+		</div>
+	);
 
 	return (
 		<div className="border-t border-gray-100 pt-4 mt-4">
@@ -197,6 +200,7 @@ export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 							<label className="block text-xs font-medium text-gray-500 mb-1">Pitch Summary</label>
 							<textarea value={createForm.pitch_summary} onChange={e => setCreateForm(p => ({ ...p, pitch_summary: e.target.value }))} className={inputCls} rows={2} placeholder="2-3 sentence pitch..." />
 						</div>
+						{appDropdown(createForm.application_id, val => setCreateForm(p => ({ ...p, application_id: val })))}
 					</div>
 					<p className="text-xs text-gray-400">AMM defaults: 100k shares · $1M cash · k=100B · 1k min reserve</p>
 					<div className="flex gap-2">
@@ -219,12 +223,11 @@ export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 						founders.map((f) => {
 							const linkedApp = approvedApps.find(a => a.id === f.application_id);
 							const isEditing = editingId === f.id;
-							const isAssigning = assigningId === f.id;
 
 							return (
-								<div key={f.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+								<div key={f.id} className="rounded-lg border border-gray-200 bg-gray-50 p3">
 									{isEditing ? (
-										<form onSubmit={handleUpdate} className="space-y-2">
+										<form onSubmit={handleUpdate} className="space-y-2 p-3">
 											<div className="grid grid-cols-2 gap-2">
 												<div className="col-span-2">
 													<label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
@@ -265,6 +268,10 @@ export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 													<label className="block text-xs font-medium text-gray-500 mb-1">Pitch Summary</label>
 													<textarea value={editForm.pitch_summary ?? ""} onChange={e => setEditForm(p => ({ ...p, pitch_summary: e.target.value }))} className={inputCls} rows={2} />
 												</div>
+												{appDropdown(
+													editForm.application_id ?? "",
+													val => setEditForm(p => ({ ...p, application_id: val || null }))
+												)}
 											</div>
 											<div className="flex gap-2">
 												<button type="submit" disabled={isLoading} className="px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded-lg disabled:opacity-50">
@@ -276,7 +283,7 @@ export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 											</div>
 										</form>
 									) : (
-										<div>
+										<div className="p-3">
 											<div className="flex items-start justify-between gap-2">
 												<div className="flex-1 min-w-0">
 													<div className="flex items-center gap-2">
@@ -287,6 +294,11 @@ export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 													<p className="text-xs text-gray-400 mt-1">
 														{(f.cash_in_pool / f.shares_in_pool).toFixed(4)} $/share · {f.shares_in_pool.toLocaleString()} shares
 													</p>
+													{linkedApp && (
+														<p className="text-xs text-gray-400 mt-0.5">
+															Linked to <span className="text-gray-600 font-medium">{linkedApp.applicant_email}</span>
+														</p>
+													)}
 												</div>
 												<div className="flex gap-1.5 flex-shrink-0">
 													{onViewAnalytics && (
@@ -294,40 +306,23 @@ export const AdminPitchManager: React.FC<AdminPitchManagerProps> = ({
 															Analytics
 														</button>
 													)}
-													<button onClick={() => { setEditingId(f.id); setEditForm({ name: f.name, bio: f.bio, logo_url: f.logo_url, pitch_summary: f.pitch_summary, pitch_url: f.pitch_url }); }} className="px-2 py-1 text-xs text-gray-500 border border-gray-200 rounded hover:bg-white">
+													<button
+														onClick={() => {
+															setEditingId(f.id);
+															setEditForm({
+																name: f.name,
+																bio: f.bio,
+																logo_url: f.logo_url,
+																pitch_summary: f.pitch_summary,
+																pitch_url: f.pitch_url,
+																application_id: f.application_id ?? null,
+															});
+														}}
+														className="px-2 py-1 text-xs text-gray-500 border border-gray-200 rounded hover:bg-white"
+													>
 														Edit
 													</button>
 												</div>
-											</div>
-
-											{/* Application link */}
-											<div className="mt-2 pt-2 border-t border-gray-200">
-												{isAssigning ? (
-													<div className="flex items-center gap-2">
-														<select
-															className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 bg-white"
-															defaultValue={f.application_id ?? ""}
-															onChange={e => handleAssignApplication(f.id, e.target.value || null)}
-														>
-															<option value="">— unlinked —</option>
-															{approvedApps.map(a => (
-																<option key={a.id} value={a.id}>{a.applicant_email}</option>
-															))}
-														</select>
-														<button onClick={() => setAssigningId(null)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
-													</div>
-												) : (
-													<div className="flex items-center gap-2">
-														<span className="text-xs text-gray-400">
-															{linkedApp
-																? <>Linked to <span className="text-gray-600 font-medium">{linkedApp.applicant_email}</span></>
-																: "Not linked to an application"}
-														</span>
-														<button onClick={() => setAssigningId(f.id)} className="text-xs text-blue-500 hover:underline">
-															{linkedApp ? "Change" : "Link"}
-														</button>
-													</div>
-												)}
 											</div>
 										</div>
 									)}

@@ -3,5 +3,6 @@ CREATE TABLE IF NOT EXISTS app_config (
   value JSONB NOT NULL DEFAULT 'false'
 );
 ALTER TABLE app_config ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "anon_read_app_config" ON app_config;
 CREATE POLICY "anon_read_app_config" ON app_config FOR SELECT USING (true);
 INSERT INTO app_config (key, value) VALUES ('failover_enabled', 'false') ON CONFLICT DO NOTHING;
