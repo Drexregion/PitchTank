@@ -17,7 +17,6 @@ interface DMPanelProps {
 	isOpen: boolean;
 	onClose: () => void;
 	onBack: () => void;
-	eventId: string;
 	userId: string;
 	displayName: string;
 	peerId: string;
@@ -76,7 +75,6 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 	isOpen,
 	onClose,
 	onBack,
-	eventId,
 	userId,
 	displayName,
 	peerId,
@@ -90,14 +88,13 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
-		if (!isOpen || !eventId || !userId || !peerId) return;
+		if (!isOpen || !userId || !peerId) return;
 
 		const load = async () => {
 			setLoading(true);
 			const { data } = await supabase
 				.from("direct_messages")
 				.select("id, sender_id, sender_name, recipient_id, recipient_name, text, is_read, created_at")
-				.eq("event_id", eventId)
 				.or(
 					`and(sender_id.eq.${userId},recipient_id.eq.${peerId}),and(sender_id.eq.${peerId},recipient_id.eq.${userId})`,
 				)
@@ -107,16 +104,14 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 		};
 		load();
 
-		// Subscribe to new messages in this conversation
 		const channel = supabase
-			.channel(`dm_${eventId}_${[userId, peerId].sort().join("_")}`)
+			.channel(`dm_global_${[userId, peerId].sort().join("_")}`)
 			.on(
 				"postgres_changes",
 				{
 					event: "INSERT",
 					schema: "public",
 					table: "direct_messages",
-					filter: `event_id=eq.${eventId}`,
 				},
 				(payload) => {
 					const msg = payload.new as DMMessage;
@@ -134,7 +129,7 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 		return () => {
 			supabase.removeChannel(channel);
 		};
-	}, [isOpen, eventId, userId, peerId]);
+	}, [isOpen, userId, peerId]);
 
 	// Fetch peer's profile picture via investors → users join
 	useEffect(() => {
@@ -196,7 +191,6 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 		const { data, error } = await supabase
 			.from("direct_messages")
 			.insert({
-				event_id: eventId,
 				sender_id: userId,
 				recipient_id: peerId,
 				sender_name: displayName,
