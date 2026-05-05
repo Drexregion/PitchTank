@@ -2686,9 +2686,9 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 							</div>
 
 							{/* Application Q&A */}
-							{founderApplicationAnswers && event?.registration_questions?.length > 0 && (
+							{founderApplicationAnswers && (event?.registration_questions?.length ?? 0) > 0 && (
 								<div className="space-y-4">
-									{event.registration_questions
+									{event?.registration_questions
 										.slice()
 										.sort((a, b) => a.sort_order - b.sort_order)
 										.map((q) => {
