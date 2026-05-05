@@ -136,15 +136,18 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 		};
 	}, [isOpen, eventId, userId, peerId]);
 
-	// Fetch peer's profile picture
+	// Fetch peer's profile picture via investors → users join
 	useEffect(() => {
 		if (!isOpen || !peerId) { setPeerProfilePic(null); return; }
 		supabase
-			.from("users")
-			.select("profile_picture_url")
-			.eq("auth_user_id", peerId)
+			.from("investors")
+			.select("users!investors_profile_user_id_fkey(profile_picture_url)")
+			.eq("id", peerId)
 			.maybeSingle()
-			.then(({ data }) => setPeerProfilePic(data?.profile_picture_url ?? null));
+			.then(({ data }) => {
+				const pic = (data?.users as any)?.profile_picture_url ?? null;
+				setPeerProfilePic(pic);
+			});
 	}, [isOpen, peerId]);
 
 	// Mark incoming messages as read when panel is open
@@ -178,15 +181,40 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 		const text = inputText.trim();
 		if (!text) return;
 		setInputText("");
-		await supabase.from("direct_messages").insert({
-			event_id: eventId,
+		const tempId = crypto.randomUUID();
+		const optimistic: DMMessage = {
+			id: tempId,
 			sender_id: userId,
-			recipient_id: peerId,
 			sender_name: displayName,
+			recipient_id: peerId,
 			recipient_name: peerName,
 			text,
 			is_read: false,
-		});
+			created_at: new Date().toISOString(),
+		};
+		setMessages((prev) => [...prev, optimistic]);
+		const { data, error } = await supabase
+			.from("direct_messages")
+			.insert({
+				event_id: eventId,
+				sender_id: userId,
+				recipient_id: peerId,
+				sender_name: displayName,
+				recipient_name: peerName,
+				text,
+				is_read: false,
+			})
+			.select()
+			.single();
+		if (error) {
+			setMessages((prev) => prev.filter((m) => m.id !== tempId));
+			return;
+		}
+		if (data) {
+			setMessages((prev) =>
+				prev.map((m) => (m.id === tempId ? (data as DMMessage) : m)),
+			);
+		}
 	};
 
 	const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

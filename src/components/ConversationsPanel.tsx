@@ -6,6 +6,7 @@ import { supabase, supabaseUrl, supabaseAnonKey } from "../lib/supabaseClient";
 interface DMThread {
 	peerId: string;
 	peerName: string;
+	peerAvatar: string | null;
 	lastMessage: string;
 	lastAt: string;
 	unread: number;
@@ -17,6 +18,7 @@ interface Recommendation {
 	reason: string;
 	bio: string | null;
 	profile_picture_url: string | null;
+	profile_auth_id: string | null;
 }
 
 interface ConversationsPanelProps {
@@ -91,11 +93,13 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 	const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
 	const [recLoading, setRecLoading] = useState(false);
 	const [recEmpty, setRecEmpty] = useState(false);
-	const recFetchedRef = useRef(false);
+	const recFetchedAtRef = useRef<number | null>(null);
 
 	const fetchRecommendations = useCallback(async (force = false) => {
-		if ((recFetchedRef.current && !force) || !eventId || !userId) return;
-		recFetchedRef.current = true;
+		const now = Date.now();
+		const stale = !recFetchedAtRef.current || now - recFetchedAtRef.current > 5 * 60 * 1000;
+		if ((!stale && !force) || !eventId || !userId) return;
+		recFetchedAtRef.current = now;
 		setRecLoading(true);
 		try {
 			const { data: { session } } = await supabase.auth.getSession();
@@ -142,6 +146,7 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 				map.set(peerId, {
 					peerId,
 					peerName,
+					peerAvatar: null,
 					lastMessage: row.text,
 					lastAt: row.created_at,
 					unread: (existing?.unread ?? 0) + unreadDelta,
@@ -189,7 +194,27 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 				.eq("event_id", eventId)
 				.or(`sender_id.eq.${userId},recipient_id.eq.${userId}`)
 				.order("created_at", { ascending: true });
-			if (data) setThreads(buildThreads(data as Parameters<typeof buildThreads>[0]));
+			if (data) {
+				const threads = buildThreads(data as Parameters<typeof buildThreads>[0]);
+				const peerIds = threads.map((t) => t.peerId);
+				if (peerIds.length > 0) {
+					const { data: investors } = await supabase
+						.from("investors")
+						.select("id, name, users!investors_profile_user_id_fkey(profile_picture_url)")
+						.in("id", peerIds);
+					if (investors) {
+						const infoMap = new Map(investors.map((inv: any) => [inv.id, { name: inv.name, avatar: inv.users?.profile_picture_url ?? null }]));
+						setThreads(threads.map((t) => {
+							const info = infoMap.get(t.peerId);
+							return { ...t, peerName: info?.name ?? t.peerName, peerAvatar: info?.avatar ?? null };
+						}));
+					} else {
+						setThreads(threads);
+					}
+				} else {
+					setThreads(threads);
+				}
+			}
 			setLoading(false);
 		};
 		load();
@@ -216,6 +241,7 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 						const updated: DMThread = {
 							peerId,
 							peerName,
+							peerAvatar: existing?.peerAvatar ?? null,
 							lastMessage: row.text,
 							lastAt: row.created_at,
 							unread: (existing?.unread ?? 0) + unreadDelta,
@@ -257,6 +283,8 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 	}, [eventId, userId]);
 
 	const totalUnread = threads.reduce((s, t) => s + t.unread, 0);
+	const dmPeerIds = new Set(threads.map((t) => t.peerId));
+	const filteredRecommendations = recommendations.filter((r) => !dmPeerIds.has(r.investor_id));
 
 	return (
 		<div
@@ -397,7 +425,7 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 										<div className="w-4 h-4 rounded-full border-2 border-white/10 border-t-white/40 animate-spin flex-shrink-0" />
 										<p className="text-white/25 text-xs">Finding connections...</p>
 									</div>
-								) : recEmpty ? (
+								) : recEmpty || filteredRecommendations.length === 0 ? (
 									<div
 										className="mx-5 mb-3 rounded-2xl px-4 py-3.5 flex items-start gap-3"
 										style={{
@@ -419,39 +447,44 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 										</div>
 									</div>
 								) : (
-									recommendations.map((rec) => (
-										<button
+									filteredRecommendations.map((rec) => (
+										<div
 											key={rec.investor_id}
-											onClick={() => onOpenDM(rec.investor_id, rec.name)}
-											className="w-full flex items-start gap-3 px-5 py-3.5 text-left transition-all active:scale-[0.98]"
+											className="flex items-start gap-3 px-5 py-3.5"
 											style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
 										>
-											{rec.profile_picture_url ? (
-												<img
-													src={rec.profile_picture_url}
-													alt={rec.name}
-													className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-												/>
-											) : (
-												<Avatar name={rec.name} size={40} />
-											)}
-											<div className="flex-1 min-w-0">
-												<p className="text-white font-bold text-sm leading-none mb-0.5">{rec.name}</p>
-												{rec.bio && (
-													<p className="text-white/40 text-xs leading-snug line-clamp-1 mb-1">{rec.bio}</p>
+											<button
+												onClick={() => { onClose(); navigate(`/profile/${rec.profile_auth_id}`); }}
+												className="flex items-start gap-3 flex-1 min-w-0 text-left transition-all active:scale-[0.98]"
+											>
+												{rec.profile_picture_url ? (
+													<img
+														src={rec.profile_picture_url}
+														alt={rec.name}
+														className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+													/>
+												) : (
+													<Avatar name={rec.name} size={40} />
 												)}
-												<div className="flex items-start gap-1 mt-1">
-													<Sparkles size={10} className="text-violet-400/60 mt-0.5 flex-shrink-0" />
-													<p className="text-violet-300/70 text-xs leading-snug line-clamp-2">{rec.reason}</p>
+												<div className="flex-1 min-w-0">
+													<p className="text-white font-bold text-sm leading-none mb-0.5">{rec.name}</p>
+													{rec.bio && (
+														<p className="text-white/40 text-xs leading-snug line-clamp-1 mb-1">{rec.bio}</p>
+													)}
+													<div className="flex items-start gap-1 mt-1">
+														<Sparkles size={10} className="text-violet-400/60 mt-0.5 flex-shrink-0" />
+														<p className="text-violet-300/70 text-xs leading-snug line-clamp-2">{rec.reason}</p>
+													</div>
 												</div>
-											</div>
-											<div
-												className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 mt-1"
+											</button>
+											<button
+												onClick={() => onOpenDM(rec.investor_id, rec.name)}
+												className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 mt-1 transition-all active:scale-90"
 												style={{ background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.2)" }}
 											>
 												<MessageCircle size={13} className="text-indigo-300/70" />
-											</div>
-										</button>
+											</button>
+										</div>
 									))
 								)}
 							</div>
@@ -494,7 +527,11 @@ export const ConversationsPanel: React.FC<ConversationsPanelProps> = ({
 										className="w-full flex items-center gap-3 px-5 py-3.5 text-left transition-all active:scale-[0.98]"
 										style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
 									>
-										<Avatar name={thread.peerName} size={40} />
+										{thread.peerAvatar ? (
+											<img src={thread.peerAvatar} alt={thread.peerName} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+										) : (
+											<Avatar name={thread.peerName} size={40} />
+										)}
 										<div className="flex-1 min-w-0">
 											<div className="flex items-center gap-1.5 mb-0.5">
 												<p className="text-white font-bold text-sm leading-none truncate">

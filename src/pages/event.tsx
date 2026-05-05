@@ -1005,7 +1005,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const canTrade = event ? isEventActive(event) : false;
 	const simpleMode = event?.hide_leaderboard_and_prices ?? false;
 
-	const displayName = user ? (user.email?.split("@")[0] ?? "Trader") : null;
+	const displayName = user ? (investor?.name ?? user.email?.split("@")[0] ?? "Trader") : null;
 
 	const hour = new Date().getHours();
 	const greeting =

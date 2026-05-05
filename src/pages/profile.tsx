@@ -5,9 +5,11 @@ import {
 	useNavigate,
 	useParams,
 } from "react-router-dom";
+import { MessageCircle } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import { ScannerModal } from "../components/ScannerModal";
+import { DMPanel } from "../components/DMPanel";
 
 interface ApplicationData {
 	id: string;
@@ -79,11 +81,23 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({
 	founderUserId,
 }) => {
 	const navigate = useNavigate();
+	const { user } = useAuth();
 	const [profile, setProfile] = useState<ProfileData | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 	const [showScanner, setShowScanner] = useState(false);
 
+	// DM state: find a shared event to open a chat in
+	const [dmContext, setDmContext] = useState<{
+		eventId: string;
+		myInvestorId: string;
+		theirInvestorId: string;
+		myName: string;
+	} | null>(null);
+	const [showDM, setShowDM] = useState(false);
+
 	const profileUrl = `${window.location.origin}/profile/${founderUserId}`;
+
+	const isOwnProfile = user?.id === founderUserId;
 
 	useEffect(() => {
 		supabase
@@ -110,6 +124,35 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({
 				setIsLoading(false);
 			});
 	}, [founderUserId]);
+
+	// Find a shared event where both users have an investor record
+	useEffect(() => {
+		if (!user || isOwnProfile) return;
+		(async () => {
+			const [{ data: myUser }, { data: theirUser }] = await Promise.all([
+				supabase.from("users").select("id, first_name, last_name").eq("auth_user_id", user.id).maybeSingle(),
+				supabase.from("users").select("id").eq("auth_user_id", founderUserId).maybeSingle(),
+			]);
+			if (!myUser || !theirUser) return;
+
+			const [{ data: myInvestors }, { data: theirInvestors }] = await Promise.all([
+				supabase.from("investors").select("id, event_id").eq("profile_user_id", myUser.id),
+				supabase.from("investors").select("id, event_id").eq("profile_user_id", theirUser.id),
+			]);
+			if (!myInvestors || !theirInvestors) return;
+
+			const theirEventMap = new Map(theirInvestors.map((i: any) => [i.event_id, i.id]));
+			const shared = myInvestors.find((i: any) => theirEventMap.has(i.event_id));
+			if (!shared) return;
+
+			setDmContext({
+				eventId: shared.event_id,
+				myInvestorId: shared.id,
+				theirInvestorId: theirEventMap.get(shared.event_id)!,
+				myName: [myUser.first_name, myUser.last_name].filter(Boolean).join(" ") || user.email?.split("@")[0] || "Me",
+			});
+		})();
+	}, [user, founderUserId, isOwnProfile]);
 
 	if (isLoading) {
 		return (
@@ -237,6 +280,20 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({
 									{ROLE_LABELS[profile.role] ?? profile.role}
 								</span>
 							)}
+							{dmContext && (
+								<button
+									onClick={() => setShowDM(true)}
+									className="flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95"
+									style={{
+										background: "rgba(99,102,241,0.15)",
+										border: "1px solid rgba(99,102,241,0.3)",
+										color: "#a5b4fc",
+									}}
+								>
+									<MessageCircle size={12} />
+									Start chat
+								</button>
+							)}
 						</div>
 					</div>
 
@@ -323,6 +380,18 @@ const PublicProfileView: React.FC<{ founderUserId: string }> = ({
 				}
 				profileAvatarUrl={profile?.profile_picture_url || undefined}
 			/>
+			{dmContext && (
+				<DMPanel
+					isOpen={showDM}
+					onClose={() => setShowDM(false)}
+					onBack={() => setShowDM(false)}
+					eventId={dmContext.eventId}
+					userId={dmContext.myInvestorId}
+					displayName={dmContext.myName}
+					peerId={dmContext.theirInvestorId}
+					peerName={`${profile.first_name} ${profile.last_name}`.trim() || "User"}
+				/>
+			)}
 		</>
 	);
 };
@@ -538,7 +607,7 @@ const ProfilePage: React.FC = () => {
 		setIsSaving(true);
 		setSaveMsg(null);
 
-		const { error } = await supabase.from("users").upsert(
+		const { data: upsertedUser, error } = await supabase.from("users").upsert(
 			{
 				auth_user_id: user.id,
 				email: user.email ?? "",
@@ -552,11 +621,19 @@ const ProfilePage: React.FC = () => {
 				looking_to_connect: draft.looking_to_connect || null,
 			},
 			{ onConflict: "auth_user_id" },
-		);
+		).select("id").maybeSingle();
 
 		if (error) {
 			setSaveMsg({ ok: false, text: "Failed to save. Please try again." });
 		} else {
+			const fullName = `${draft.first_name} ${draft.last_name}`.trim();
+			const userId = upsertedUser?.id ?? profile.id;
+			if (fullName && userId) {
+				await supabase
+					.from("investors")
+					.update({ name: fullName })
+					.eq("profile_user_id", userId);
+			}
 			setProfile(draft);
 			setSaveMsg({ ok: true, text: "Profile saved!" });
 			setTimeout(() => {

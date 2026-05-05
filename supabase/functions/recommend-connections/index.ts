@@ -13,6 +13,7 @@ interface AttendeeProfile {
   bio: string | null;
   role: string | null;
   profile_picture_url: string | null;
+  profile_auth_id: string | null;
 }
 
 interface Recommendation {
@@ -21,6 +22,7 @@ interface Recommendation {
   reason: string;
   bio: string | null;
   profile_picture_url: string | null;
+  profile_auth_id: string | null;
 }
 
 serve(async (req: Request) => {
@@ -74,7 +76,7 @@ serve(async (req: Request) => {
     // Fetch current user's profile
     const { data: currentUser } = await serviceClient
       .from("users")
-      .select("first_name, last_name, bio, role, looking_to_connect")
+      .select("id, first_name, last_name, bio, role, looking_to_connect")
       .eq("auth_user_id", user.id)
       .maybeSingle();
 
@@ -85,14 +87,38 @@ serve(async (req: Request) => {
       );
     }
 
+    // Find the current user's investor record for this event (to query DMs by investor id)
+    const { data: currentInvestor } = await serviceClient
+      .from("investors")
+      .select("id")
+      .eq("event_id", eventId)
+      .eq("profile_user_id", currentUser.id)
+      .maybeSingle();
+
+    // Collect investor ids the user already has DM threads with
+    const existingPeerIds = new Set<string>();
+    if (currentInvestor) {
+      const { data: dms } = await serviceClient
+        .from("direct_messages")
+        .select("sender_id, recipient_id")
+        .eq("event_id", eventId)
+        .or(`sender_id.eq.${currentInvestor.id},recipient_id.eq.${currentInvestor.id}`);
+      if (dms) {
+        for (const dm of dms) {
+          if (dm.sender_id !== currentInvestor.id) existingPeerIds.add(dm.sender_id);
+          if (dm.recipient_id !== currentInvestor.id) existingPeerIds.add(dm.recipient_id);
+        }
+      }
+    }
+
     // Fetch all event attendees (excluding current user)
     const { data: attendees } = await serviceClient
       .from("investors")
       .select(
-        "id, name, profile_user_id, users!investors_profile_user_id_fkey(bio, role, profile_picture_url)",
+        "id, name, profile_user_id, users!investors_profile_user_id_fkey(bio, role, profile_picture_url, auth_user_id)",
       )
       .eq("event_id", eventId)
-      .neq("profile_user_id", user.id)
+      .neq("profile_user_id", currentUser.id)
       .order("name", { ascending: true })
       .limit(200);
 
@@ -103,12 +129,15 @@ serve(async (req: Request) => {
       );
     }
 
-    const attendeeProfiles: AttendeeProfile[] = attendees.map((a: any) => ({
+    const attendeeProfiles: AttendeeProfile[] = attendees
+      .filter((a: any) => !existingPeerIds.has(a.id))
+      .map((a: any) => ({
       investor_id: a.id,
       name: a.name,
       bio: a.users?.bio ?? null,
       role: a.users?.role ?? null,
       profile_picture_url: a.users?.profile_picture_url ?? null,
+      profile_auth_id: a.users?.auth_user_id ?? null,
     }));
 
     const currentUserName = [currentUser.first_name, currentUser.last_name].filter(Boolean).join(" ") || "the user";
@@ -158,6 +187,7 @@ Use the exact investor_id values: ${attendeeProfiles.map((a) => `"${a.investor_i
             reason: r.reason,
             bio: profile?.bio ?? null,
             profile_picture_url: profile?.profile_picture_url ?? null,
+            profile_auth_id: profile?.profile_auth_id ?? null,
           };
         });
       }
