@@ -1,3 +1,11 @@
+/* ── Self-hosted Tomorrow display font (powers `.num` + `font-display`) ── */
+@import "@fontsource/tomorrow/400.css";
+@import "@fontsource/tomorrow/500.css";
+@import "@fontsource/tomorrow/600.css";
+
+/* ── Design system tokens (PitchTank v2.1.5 — used by event Trade view) ── */
+@import "./styles/design-tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -42,6 +50,13 @@ html {
 	-moz-osx-font-smoothing: grayscale;
 }
 
+html, body {
+	/* Use `clip` (not `hidden`): hidden silently promotes overflow-y to
+	   `auto`, which makes body a scroll container and can break
+	   position:fixed centering for floating elements like the bottom nav. */
+	overflow-x: clip;
+}
+
 body {
 	margin: 0;
 	min-height: 100vh;
@@ -59,4 +74,39 @@ body {
 		@apply bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-700 hover:to-primary-600 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 shadow-md hover:shadow-glow;
 	}
 
+}
+
+/* ── Auth page: animated collapse for signup-only fields ──
+   Collapses height via grid-template-rows 0fr↔1fr, plus zeroes the
+   space-y margin on the following sibling so closed rows leave no gap. */
+.auth-collapse {
+	display: grid;
+	grid-template-rows: 0fr;
+	opacity: 0;
+	transform: translateY(-4px);
+	transition:
+		grid-template-rows 320ms cubic-bezier(0.22, 1, 0.36, 1),
+		opacity 240ms ease,
+		transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.auth-collapse[data-open="true"] {
+	grid-template-rows: 1fr;
+	opacity: 1;
+	transform: translateY(0);
+}
+.auth-collapse-inner {
+	overflow: hidden;
+	min-height: 0;
+}
+.auth-collapse[data-open="false"] + * {
+	margin-top: 0 !important;
+}
+
+/* Auth input fields: gentle white glow for label + input on focus. */
+.auth-field label {
+	transition: color 200ms ease, text-shadow 200ms ease;
+}
+.auth-field:focus-within label {
+	color: rgba(255, 255, 255, 0.78);
+	text-shadow: 0 0 8px rgba(255, 255, 255, 0.22);
 }
