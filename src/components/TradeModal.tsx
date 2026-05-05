@@ -1,11 +1,14 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { ArrowRight, ClipboardList, Info, Loader2, X } from "lucide-react";
 import { PitchWithPrice } from "../types/Pitch";
 import { supabase, supabaseUrl } from "../lib/supabaseClient";
-import {
-	simulateBuyTrade,
-	simulateSellTrade,
-} from "../lib/ammEngine";
+import { simulateBuyTrade, simulateSellTrade } from "../lib/ammEngine";
 import { useEventData } from "../contexts/EventDataContext";
+import { GlassCard } from "./design-system/GlassCard";
+import { Button } from "./design-system/Button";
+import { IconButton } from "./design-system/IconButton";
+import { Money } from "./design-system/Money";
 
 interface TradeModalProps {
 	isOpen: boolean;
@@ -17,6 +20,73 @@ interface TradeModalProps {
 	simpleMode?: boolean;
 	initialTradeType?: "buy" | "sell";
 	initialShares?: number;
+}
+
+type SubmitState = "idle" | "submitting" | "sent";
+
+function formatShares(value: number): string {
+	return value.toLocaleString("en-US");
+}
+
+function formatCompact(value: number): string {
+	if (Math.abs(value) >= 1_000_000) {
+		return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 2)}M`;
+	}
+	if (Math.abs(value) >= 10_000) {
+		return `${(value / 1_000).toFixed(value >= 100_000 ? 0 : 1)}K`;
+	}
+	return value.toLocaleString("en-US", {
+		minimumFractionDigits: 2,
+		maximumFractionDigits: 2,
+	});
+}
+
+function StatTile({
+	label,
+	children,
+	tone,
+}: {
+	label: string;
+	children: ReactNode;
+	tone?: "cyan" | "orange";
+}) {
+	const valueClass =
+		tone === "cyan"
+			? "trade-dialog-stat-cyan"
+			: tone === "orange"
+				? "trade-dialog-stat-orange"
+				: "trade-dialog-stat-value";
+	return (
+		<div className="trade-dialog-stat">
+			<div className="trade-dialog-label">{label}</div>
+			<div className={valueClass}>{children}</div>
+		</div>
+	);
+}
+
+function PreviewRow({
+	label,
+	value,
+	tone,
+}: {
+	label: string;
+	value: ReactNode;
+	tone?: "buy" | "sell" | "positive";
+}) {
+	const valueColor =
+		tone === "buy"
+			? "text-pt-cyan"
+			: tone === "sell"
+				? "text-pt-orange"
+				: tone === "positive"
+					? "text-[#21FFA6]"
+					: "text-white";
+	return (
+		<div className="trade-dialog-preview-row">
+			<span>{label}</span>
+			<span className={valueColor}>{value}</span>
+		</div>
+	);
 }
 
 export const TradeModal: React.FC<TradeModalProps> = ({
@@ -34,24 +104,34 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 
 	// Always use the live pitch from context so AMM price reflects other trades
 	const currentFounder: PitchWithPrice =
-		(pitches.find((f) => f.id === founder.id) as PitchWithPrice | undefined) ?? founder;
+		(pitches.find((f) => f.id === founder.id) as PitchWithPrice | undefined) ??
+		founder;
 
 	const [tradeType, setTradeType] = useState<"buy" | "sell">(initialTradeType);
 	const [dollarInput, setDollarInput] = useState<string>("100");
 	const dollarAmount = Math.max(0, parseFloat(dollarInput) || 0);
 	const [note, setNote] = useState<string>("");
-	const [isLoading, setIsLoading] = useState<boolean>(false);
+	const [noteTouched, setNoteTouched] = useState(false);
+	const [submitAttempted, setSubmitAttempted] = useState(false);
+	const [submitState, setSubmitState] = useState<SubmitState>("idle");
 	const [error, setError] = useState<string | null>(null);
 	const [successMessage, setSuccessMessage] = useState<string | null>(null);
 	const [investorShares, setInvestorShares] = useState<number>(initialShares);
 	const isSubmittingRef = useRef(false);
+	const noteId = useId();
+	const noteErrorId = useId();
+	const amountId = useId();
 
 	const isEventActiveServer = event?.status === "active" ? null : false;
+	const isBuy = tradeType === "buy";
 
 	useEffect(() => {
 		setTradeType(initialTradeType);
 		setDollarInput("100");
 		setNote("");
+		setNoteTouched(false);
+		setSubmitAttempted(false);
+		setSubmitState("idle");
 		setError(null);
 		setSuccessMessage(null);
 	}, [founder.id, investorId, initialTradeType]);
@@ -59,6 +139,21 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 	useEffect(() => {
 		setInvestorShares(initialShares);
 	}, [initialShares]);
+
+	// Lock body scroll + close on Escape
+	useEffect(() => {
+		if (!isOpen) return;
+		const previousOverflow = document.body.style.overflow;
+		document.body.style.overflow = "hidden";
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape" && submitState !== "submitting") onClose();
+		};
+		window.addEventListener("keydown", onKey);
+		return () => {
+			document.body.style.overflow = previousOverflow;
+			window.removeEventListener("keydown", onKey);
+		};
+	}, [isOpen, onClose, submitState]);
 
 	// Buy: binary search for max shares with cost ≤ amount
 	const computeBuyResult = (
@@ -115,59 +210,55 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 		};
 	};
 
-	const buyResult = tradeType === "buy" ? computeBuyResult(dollarAmount) : null;
-	const sellResult =
-		tradeType === "sell" ? computeSellResult(dollarAmount) : null;
+	const buyResult = isBuy ? computeBuyResult(dollarAmount) : null;
+	const sellResult = !isBuy ? computeSellResult(dollarAmount) : null;
 
-	const handleBuyMax = () =>
-		setDollarInput(String(Math.floor(investorBalance)));
-	const handleSellMax = () => {
-		const allSharesValue = investorShares * currentFounder.current_price;
-		setDollarInput(String(Math.floor(allSharesValue)));
+	const handleMax = () => {
+		if (isBuy) {
+			setDollarInput(String(Math.floor(investorBalance)));
+		} else {
+			const allSharesValue = investorShares * currentFounder.current_price;
+			setDollarInput(String(Math.floor(allSharesValue)));
+		}
 	};
 
 	const handleTrade = async () => {
 		if (isSubmittingRef.current) return;
-		isSubmittingRef.current = true;
+		setSubmitAttempted(true);
 
 		const trimmedNote = note.trim();
 		if (!trimmedNote) {
-			setError("Please add a brief note explaining your trade");
-			isSubmittingRef.current = false;
+			setError(`A short ${tradeType} note is required`);
 			return;
 		}
 
-		if (tradeType === "buy") {
+		if (isBuy) {
 			if (dollarAmount <= 0) {
 				setError("Please enter a valid amount");
-				isSubmittingRef.current = false;
 				return;
 			}
 			if (dollarAmount > investorBalance) {
 				setError("Insufficient balance");
-				isSubmittingRef.current = false;
 				return;
 			}
 			if ((buyResult?.shares ?? 0) <= 0) {
 				setError("Amount too small to purchase any shares");
-				isSubmittingRef.current = false;
 				return;
 			}
 		} else {
 			if (!sellResult || sellResult.shares <= 0) {
 				setError("Please enter a valid amount to sell");
-				isSubmittingRef.current = false;
 				return;
 			}
 		}
 
 		if (event?.status !== "active") {
 			setError("Trading has closed for this event");
-			isSubmittingRef.current = false;
 			return;
 		}
 
-		setIsLoading(true);
+		isSubmittingRef.current = true;
+		setSubmitState("submitting");
 		setError(null);
 		setSuccessMessage(null);
 
@@ -178,10 +269,9 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 			const accessToken =
 				session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-			const sharesToTrade =
-				tradeType === "buy"
-					? (buyResult?.shares ?? 0)
-					: (sellResult?.shares ?? 0);
+			const sharesToTrade = isBuy
+				? (buyResult?.shares ?? 0)
+				: (sellResult?.shares ?? 0);
 
 			const response = await fetch(
 				`${supabaseUrl}/functions/v1/executeTrade`,
@@ -203,570 +293,404 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 			);
 
 			const data = await response.json();
-			if (!response.ok) throw new Error(data.error || "Failed to execute trade");
+			if (!response.ok)
+				throw new Error(data.error || "Failed to execute trade");
 
 			setSuccessMessage(
-				tradeType === "buy"
+				isBuy
 					? `Successfully purchased ${sharesToTrade.toLocaleString()} shares for $${(buyResult?.actualCost ?? 0).toFixed(2)}`
 					: `Successfully sold ${sharesToTrade.toLocaleString()} shares for $${(sellResult?.proceeds ?? 0).toFixed(2)}`,
 			);
+			setSubmitState("sent");
 
-			if (onTradeComplete) onTradeComplete();
+			if (onTradeComplete) {
+				window.setTimeout(onTradeComplete, 720);
+			}
 		} catch (err: any) {
 			setError(err.message || "An error occurred while executing the trade");
+			setSubmitState("idle");
 		} finally {
-			setIsLoading(false);
 			isSubmittingRef.current = false;
 		}
 	};
 
 	if (!isOpen) return null;
 
+	const noteInvalid =
+		(noteTouched || submitAttempted) && note.trim().length === 0;
+	const isPending = submitState !== "idle";
+	const isLoading = submitState === "submitting";
+
+	const showOrderPreview =
+		dollarAmount > 0 &&
+		((isBuy && (buyResult?.shares ?? 0) > 0) ||
+			(!isBuy && (sellResult?.shares ?? 0) > 0));
+
+	const title = `${isBuy ? "BUY" : "SELL"} ${currentFounder.name.toUpperCase()} SHARES`;
+	const titleParts = title.split(" ");
+	const titleHead = titleParts.slice(0, -1).join(" ");
+	const titleTail = titleParts[titleParts.length - 1] ?? "";
+
+	const amountLabel = isBuy ? "Amount to commit ($)" : "Amount to sell ($)";
+	const maxLabel = isBuy ? "Buy Max" : "Sell Max";
+	const noteLabel = isBuy
+		? "Why this trade? (required)"
+		: "Why this sell? (required)";
+	const noteHelp = isBuy
+		? "Add a short reason for your trade."
+		: "Add a short reason for your sell order.";
+	const notePlaceholder = isBuy
+		? "e.g. Strong pitch, clear market need, great traction..."
+		: "e.g. Taking profits, reducing exposure, market cooling off...";
+	const submitLabel = isBuy ? "Confirm Purchase" : "Confirm Sale";
+
+	const handleOverlayClick = () => {
+		if (submitState !== "submitting") onClose();
+	};
+
 	const isConfirmDisabled = (() => {
-		if (
-			isLoading ||
-			isEventActiveServer === false ||
-			!note.trim()
-		)
-			return true;
-		if (tradeType === "buy")
+		if (isPending || isEventActiveServer === false) return true;
+		if (note.trim().length === 0) return true;
+		if (isBuy) {
 			return (
 				dollarAmount <= 0 ||
 				dollarAmount > investorBalance ||
 				(buyResult?.shares ?? 0) <= 0
 			);
+		}
 		return !sellResult || sellResult.shares <= 0;
 	})();
 
-	const showOrderPreview =
-		dollarAmount > 0 &&
-		((tradeType === "buy" && (buyResult?.shares ?? 0) > 0) ||
-			(tradeType === "sell" && (sellResult?.shares ?? 0) > 0));
-
-	return (
-		<div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50">
+	const dialog = (
+		<>
 			<div
-				className="w-full sm:max-w-[440px] rounded-t-3xl sm:rounded-3xl overflow-y-auto"
-				style={{
-					background: "linear-gradient(180deg, #13102e 0%, #0d0b22 100%)",
-					border: "1px solid rgba(255,255,255,0.08)",
-					maxHeight: "92vh",
-				}}
+				className="trade-dialog-overlay"
+				onClick={handleOverlayClick}
+				aria-hidden="true"
+			/>
+			<div
+				role="dialog"
+				aria-modal="true"
+				aria-label={title}
 				onClick={(e) => e.stopPropagation()}
 			>
-				{/* Header */}
-				<div className="px-6 pt-6 pb-4 flex items-start justify-between gap-3">
-					<div className="flex-1 min-w-0">
-						<p className="text-white/40 text-[10px] font-semibold uppercase tracking-widest mb-1">
-							Market ticket
-						</p>
-						<h2 className="text-xl font-black text-white uppercase leading-tight">
-							{tradeType === "buy" ? "Buy" : "Sell"} {currentFounder.name} Shares
-						</h2>
-					</div>
-					<div className="flex items-center gap-2 flex-shrink-0 mt-1">
-						<span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-green-500/15 text-green-400 border border-green-500/30 flex items-center gap-1.5 flex-shrink-0">
-							LIVE
-							<span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" />
-						</span>
-						<button
-							onClick={onClose}
-							className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
-							style={{
-								background: "rgba(255,255,255,0.06)",
-								border: "1px solid rgba(255,255,255,0.1)",
-							}}
-						>
-							<svg
-								className="w-3.5 h-3.5 text-white/50"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									strokeWidth={2}
-									d="M6 18L18 6M6 6l12 12"
-								/>
-							</svg>
-						</button>
-					</div>
-				</div>
-
-				{/* Info Cards */}
-				<div className="px-6 pb-4 grid grid-cols-2 gap-3">
-					<div
-						className="rounded-2xl px-4 py-3"
-						style={{
-							background: "rgba(255,255,255,0.04)",
-							border: "1px solid rgba(255,255,255,0.06)",
+				<GlassCard tone="frame" size="lg" className="trade-dialog-content">
+					<form
+						onSubmit={(e) => {
+							e.preventDefault();
+							handleTrade();
 						}}
+						className="trade-dialog-form"
 					>
-						<p className="text-white/35 text-[10px] font-semibold uppercase tracking-wider mb-1.5">
-							Available Balance
-						</p>
-						<p className="text-cyan-400 font-black text-xl tabular-nums leading-none">
-							$
-							{investorBalance.toLocaleString(undefined, {
-								minimumFractionDigits: 2,
-								maximumFractionDigits: 2,
-							})}
-						</p>
-					</div>
-					<div
-						className="rounded-2xl px-4 py-3"
-						style={{
-							background: "rgba(255,255,255,0.04)",
-							border: "1px solid rgba(255,255,255,0.06)",
-						}}
-					>
-						<p className="text-white/35 text-[10px] font-semibold uppercase tracking-wider mb-1.5">
-							Shares Owned
-						</p>
-						<p className="text-white font-black text-xl tabular-nums leading-none">
-							{investorShares.toLocaleString()}
-						</p>
-					</div>
-				</div>
-
-				{/* Buy/Sell Toggle */}
-				<div className="px-6 pb-4">
-					<div
-						className="grid grid-cols-2 rounded-2xl overflow-hidden"
-						style={{
-							border: "1px solid rgba(255,255,255,0.08)",
-							background: "rgba(255,255,255,0.03)",
-						}}
-					>
-						<button
-							onClick={() => setTradeType("buy")}
-							className={`py-3.5 flex items-center justify-center gap-2 font-bold text-sm transition-all ${
-								tradeType === "buy" ? "text-white" : "text-white/35 hover:text-white/60"
-							}`}
-							style={
-								tradeType === "buy"
-									? {
-											background:
-												"linear-gradient(135deg, #22d3ee 0%, #3b82f6 100%)",
-											boxShadow: "0 0 20px rgba(34,211,238,0.25)",
-										}
-									: {}
-							}
-						>
-							<svg
-								className="w-3 h-3"
-								fill="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path d="M12 4L4 16h16L12 4z" />
-							</svg>
-							BUY
-						</button>
-						<button
-							onClick={() => investorShares > 0 && setTradeType("sell")}
-							className={`py-3.5 flex items-center justify-center gap-2 font-bold text-sm transition-all ${
-								tradeType === "sell"
-									? "text-white"
-									: investorShares <= 0
-										? "text-white/20 cursor-not-allowed"
-										: "text-white/35 hover:text-white/60"
-							}`}
-							style={
-								tradeType === "sell"
-									? {
-											background:
-												"linear-gradient(135deg, #f97316 0%, #ef4444 100%)",
-											boxShadow: "0 0 20px rgba(249,115,22,0.25)",
-										}
-									: {}
-							}
-						>
-							<svg
-								className="w-3 h-3"
-								fill="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path d="M12 20L4 8h16L12 20z" />
-							</svg>
-							SELL
-						</button>
-					</div>
-				</div>
-
-				{/* Dollar Amount Input */}
-				<div className="px-6 pb-4">
-					<p className="text-white/40 text-[10px] font-semibold uppercase tracking-widest mb-3">
-						Amount to {tradeType === "buy" ? "Buy" : "Sell"} ($)
-					</p>
-					<div className="flex gap-3">
-						<div
-							className="flex-1 flex items-center rounded-2xl overflow-hidden"
-							style={{
-								background: "rgba(255,255,255,0.05)",
-								border: `1px solid ${tradeType === "buy" ? "rgba(34,211,238,0.3)" : "rgba(249,115,22,0.3)"}`,
-							}}
-						>
-							<span className="pl-4 text-white/40 font-bold text-lg select-none">
-								$
-							</span>
-							<input
-								type="text"
-								inputMode="numeric"
-								value={dollarInput}
-								onChange={(e) =>
-									setDollarInput(
-										e.target.value
-											.replace(/[^0-9]/g, "")
-											.replace(/^0+(?=\d)/, ""),
-									)
-								}
-								className="flex-1 bg-transparent px-3 py-4 text-white font-bold text-lg outline-none"
-								style={{ caretColor: tradeType === "buy" ? "#22d3ee" : "#f97316" }}
-							/>
-						</div>
-						<button
-							onClick={tradeType === "buy" ? handleBuyMax : handleSellMax}
-							className="px-5 py-4 rounded-2xl font-bold text-sm text-white transition-all hover:opacity-90 active:scale-95 flex-shrink-0"
-							style={
-								tradeType === "buy"
-									? {
-											background:
-												"linear-gradient(135deg, #22d3ee 0%, #3b82f6 100%)",
-											boxShadow: "0 0 15px rgba(34,211,238,0.2)",
-										}
-									: {
-											background:
-												"linear-gradient(135deg, #f97316 0%, #ef4444 100%)",
-											boxShadow: "0 0 15px rgba(249,115,22,0.2)",
-										}
-							}
-						>
-							{tradeType === "buy" ? "BUY MAX" : "SELL MAX"}
-						</button>
-					</div>
-					{tradeType === "buy" && dollarAmount > investorBalance && (
-						<p className="text-red-400 text-xs mt-2 flex items-center gap-1.5">
-							<svg
-								className="w-3.5 h-3.5 flex-shrink-0"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									strokeWidth={2}
-									d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-								/>
-							</svg>
-							Exceeds your available balance
-						</p>
-					)}
-				</div>
-
-				{/* Order Preview */}
-				<div className="px-6 pb-4">
-					<div
-						className="rounded-2xl p-4"
-						style={{
-							background: "rgba(255,255,255,0.04)",
-							border: "1px solid rgba(255,255,255,0.06)",
-						}}
-					>
-						<div className="flex items-center justify-between mb-3">
-							<p className="text-cyan-400 text-[10px] font-bold uppercase tracking-widest">
-								Order Preview
-							</p>
-							<svg
-								className="w-4 h-4 text-white/20"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									strokeWidth={2}
-									d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-								/>
-							</svg>
-						</div>
-
-						<div
-							style={
-								!showOrderPreview
-									? { filter: "blur(4px)", userSelect: "none", pointerEvents: "none" }
-									: {}
-							}
-						>
-							{tradeType === "buy" ? (
-								<div className="space-y-0 divide-y divide-white/5">
-									{!simpleMode && (
-										<div className="flex justify-between items-center text-sm py-2.5">
-											<span className="text-white/50">Shares bought</span>
-											<span className="text-white font-bold tabular-nums">
-												{buyResult && buyResult.shares > 0 ? buyResult.shares.toLocaleString() : "—"}
-											</span>
-										</div>
-									)}
-									<div className="flex justify-between items-center text-sm py-2.5">
-										<span className="text-white/50">Estimated cost</span>
-										<span className="text-cyan-400 font-bold tabular-nums">
-											{buyResult && buyResult.shares > 0 ? `$${buyResult.actualCost.toFixed(2)}` : "$—"}
-										</span>
-									</div>
-									{buyResult && buyResult.remainder > 0.01 && (
-										<div className="flex justify-between items-center text-sm py-2.5">
-											<span className="text-white/50">Change returned</span>
-											<span className="text-green-400 font-bold tabular-nums">
-												${buyResult.remainder.toFixed(2)}
-											</span>
-										</div>
-									)}
-									<div className="flex justify-between items-center text-sm py-2.5">
-										<span className="text-white/50">Remaining balance</span>
-										<span className="text-white font-bold tabular-nums">
-											{buyResult && buyResult.shares > 0
-												? `$${(investorBalance - buyResult.actualCost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-												: "$—"}
-										</span>
-									</div>
-								</div>
-							) : (
-								<div className="space-y-0 divide-y divide-white/5">
-									{!simpleMode && (
-										<div className="flex justify-between items-center text-sm py-2.5">
-											<span className="text-white/50">Shares sold</span>
-											<span className="text-white font-bold tabular-nums">
-												{sellResult ? sellResult.shares.toLocaleString() : "—"}
-											</span>
-										</div>
-									)}
-									<div className="flex justify-between items-center text-sm py-2.5">
-										<span className="text-white/50">Estimated proceeds</span>
-										<span
-											className="font-bold tabular-nums"
-											style={{ color: "#f97316" }}
-										>
-											{sellResult ? `$${sellResult.proceeds.toFixed(2)}` : "$—"}
-										</span>
-									</div>
-									{!simpleMode && (
-										<div className="flex justify-between items-center text-sm py-2.5">
-											<span className="text-white/50">Shares remaining</span>
-											<span className="text-white font-bold tabular-nums">
-												{sellResult ? sellResult.sharesRemaining.toLocaleString() : "—"}
-											</span>
-										</div>
-									)}
-								</div>
-							)}
-						</div>
-					</div>
-				</div>
-
-				{/* Note Section */}
-				<div className="px-6 pb-4">
-					<div className="flex items-center gap-2 mb-1">
-						<p className="text-white/40 text-[10px] font-semibold uppercase tracking-widest">
-							Why this {tradeType}? (Required)
-						</p>
-						<svg
-							className="w-3.5 h-3.5 text-white/25 flex-shrink-0"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								strokeWidth={2}
-								d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-							/>
-						</svg>
-					</div>
-					<p className="text-white/30 text-xs mb-3">
-						Add a short reason for your {tradeType} order.
-					</p>
-					<textarea
-						value={note}
-						onChange={(e) => setNote(e.target.value)}
-						placeholder={
-							tradeType === "buy"
-								? "e.g. Strong pitch, high growth potential..."
-								: "e.g. Taking profits, reducing exposure, market cooling off..."
-						}
-						rows={3}
-						maxLength={500}
-						className="w-full rounded-2xl px-4 py-3.5 text-white text-sm resize-none outline-none transition-all placeholder:text-white/20"
-						style={{
-							background: "rgba(255,255,255,0.05)",
-							border: "1px solid rgba(255,255,255,0.1)",
-							caretColor: tradeType === "buy" ? "#22d3ee" : "#f97316",
-						}}
-					/>
-					<div className="flex items-center justify-between mt-2">
-						<div>
-							{note.trim().length === 0 && (
-								<div className="flex items-center gap-1.5">
-									<svg
-										className="w-3.5 h-3.5 text-orange-400 flex-shrink-0"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
+						<div className="trade-dialog-header">
+							<h2 className="trade-dialog-title">
+								{titleHead && (
+									<>
+										<span className="trade-dialog-title-text">
+											{titleHead}
+										</span>{" "}
+									</>
+								)}
+								<span className="trade-dialog-title-tail">
+									{titleTail}
+									<span
+										className="trade-dialog-live"
+										aria-label="Live market"
 									>
-										<path
-											strokeLinecap="round"
-											strokeLinejoin="round"
-											strokeWidth={2}
-											d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-										/>
-									</svg>
-									<p className="text-orange-400 text-xs font-medium">
-										A short {tradeType} note is required.
-									</p>
+										<span className="trade-dialog-live-text">Live</span>
+										<span aria-hidden className="trade-dialog-live-dot" />
+									</span>
+								</span>
+							</h2>
+							<IconButton
+								type="button"
+								size="md"
+								aria-label="Close trade dialog"
+								icon={<X strokeWidth={1.5} />}
+								onClick={onClose}
+								disabled={submitState === "submitting"}
+							/>
+						</div>
+
+						<div className="trade-dialog-stats">
+							<StatTile label="Available balance" tone="cyan">
+								${formatCompact(investorBalance)}
+							</StatTile>
+							<StatTile label="Shares owned">
+								{formatShares(investorShares)}
+							</StatTile>
+							<StatTile
+								label="Current price"
+								tone={isBuy ? "cyan" : "orange"}
+							>
+								<Money value={currentFounder.current_price} decimals={2} />
+							</StatTile>
+						</div>
+
+						<div
+							className="trade-dialog-side-switch"
+							role="group"
+							aria-label="Trade side"
+						>
+							<Button
+								type="button"
+								variant={isBuy ? "buy" : "secondary"}
+								size="lg"
+								aria-pressed={isBuy}
+								className="w-full"
+								onClick={() => setTradeType("buy")}
+								disabled={isPending}
+							>
+								▲ Buy
+							</Button>
+							<Button
+								type="button"
+								variant={!isBuy ? "sell" : "secondary"}
+								size="lg"
+								aria-pressed={!isBuy}
+								className="w-full"
+								onClick={() => investorShares > 0 && setTradeType("sell")}
+								disabled={isPending || investorShares <= 0}
+							>
+								▼ Sell
+							</Button>
+						</div>
+
+						<div className="trade-dialog-field">
+							<label htmlFor={amountId} className="trade-dialog-label">
+								{amountLabel}
+							</label>
+							<div className="trade-dialog-amount-row" style={{ marginTop: 12 }}>
+								<div
+									className={`trade-dialog-input-shell ${isBuy ? "is-buy" : "is-sell"}`}
+								>
+									<span aria-hidden="true">$</span>
+									<input
+										id={amountId}
+										type="text"
+										inputMode="numeric"
+										value={dollarInput}
+										onChange={(e) =>
+											setDollarInput(
+												e.target.value
+													.replace(/[^0-9]/g, "")
+													.replace(/^0+(?=\d)/, ""),
+											)
+										}
+										disabled={isPending}
+									/>
+								</div>
+								<Button
+									type="button"
+									variant={isBuy ? "buy" : "sell"}
+									size="lg"
+									className="trade-dialog-max"
+									onClick={handleMax}
+									disabled={isPending}
+								>
+									{maxLabel}
+								</Button>
+							</div>
+							{isBuy && dollarAmount > investorBalance && (
+								<div className="trade-dialog-error" style={{ marginTop: 8 }}>
+									Exceeds your available balance
 								</div>
 							)}
 						</div>
-						<p className="text-white/25 text-[10px] tabular-nums flex-shrink-0">
-							{note.length}/500
-						</p>
-					</div>
-				</div>
 
-				{/* Trading closed banner */}
-				{isEventActiveServer === false && (
-					<div
-						className="mx-6 mb-4 p-3 rounded-2xl text-red-400 text-sm flex items-center gap-2"
-						style={{
-							background: "rgba(239,68,68,0.08)",
-							border: "1px solid rgba(239,68,68,0.3)",
-						}}
-					>
-						<svg
-							className="w-4 h-4 flex-shrink-0"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								strokeWidth={2}
-								d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+						<div className="trade-dialog-preview">
+							<div className="trade-dialog-preview-head">
+								<span>Order Preview</span>
+								<ClipboardList
+									aria-hidden="true"
+									size={18}
+									strokeWidth={1.5}
+								/>
+							</div>
+							<div
+								style={
+									!showOrderPreview
+										? {
+												filter: "blur(4px)",
+												userSelect: "none",
+												pointerEvents: "none",
+											}
+										: undefined
+								}
+							>
+								{isBuy ? (
+									<>
+										{!simpleMode && (
+											<PreviewRow
+												label="Shares received"
+												value={
+													buyResult && buyResult.shares > 0
+														? formatShares(buyResult.shares)
+														: "—"
+												}
+											/>
+										)}
+										<PreviewRow
+											label="Estimated cost"
+											value={
+												buyResult && buyResult.shares > 0 ? (
+													<Money value={buyResult.actualCost} />
+												) : (
+													"$—"
+												)
+											}
+											tone="buy"
+										/>
+										{buyResult && buyResult.remainder > 0.01 && (
+											<PreviewRow
+												label="Change returned"
+												value={<Money value={buyResult.remainder} />}
+												tone="positive"
+											/>
+										)}
+										<PreviewRow
+											label="Remaining balance"
+											value={
+												buyResult && buyResult.shares > 0 ? (
+													<Money
+														value={investorBalance - buyResult.actualCost}
+													/>
+												) : (
+													"$—"
+												)
+											}
+										/>
+									</>
+								) : (
+									<>
+										{!simpleMode && (
+											<PreviewRow
+												label="Shares sold"
+												value={
+													sellResult ? formatShares(sellResult.shares) : "—"
+												}
+											/>
+										)}
+										<PreviewRow
+											label="Estimated proceeds"
+											value={
+												sellResult ? <Money value={sellResult.proceeds} /> : "$—"
+											}
+											tone="sell"
+										/>
+										{!simpleMode && (
+											<PreviewRow
+												label="Shares remaining"
+												value={
+													sellResult
+														? formatShares(sellResult.sharesRemaining)
+														: "—"
+												}
+											/>
+										)}
+									</>
+								)}
+							</div>
+						</div>
+
+						<div className="trade-dialog-field">
+							<div className="trade-dialog-note-head">
+								<label htmlFor={noteId} className="trade-dialog-label">
+									{noteLabel}
+								</label>
+								<Info aria-hidden="true" size={16} strokeWidth={1.5} />
+							</div>
+							<p className="trade-dialog-help">{noteHelp}</p>
+							<textarea
+								id={noteId}
+								value={note}
+								maxLength={500}
+								placeholder={notePlaceholder}
+								aria-invalid={noteInvalid}
+								aria-describedby={noteInvalid ? noteErrorId : undefined}
+								onBlur={() => setNoteTouched(true)}
+								onChange={(e) => setNote(e.target.value)}
+								className="trade-dialog-textarea"
+								disabled={isPending}
 							/>
-						</svg>
-						Trading has closed for this event
-					</div>
-				)}
-
-				{/* Error */}
-				{error && (
-					<div
-						className="mx-6 mb-4 p-3 rounded-2xl text-red-400 text-sm flex items-center gap-2"
-						style={{
-							background: "rgba(239,68,68,0.08)",
-							border: "1px solid rgba(239,68,68,0.3)",
-						}}
-					>
-						<svg
-							className="w-4 h-4 flex-shrink-0"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								strokeWidth={2}
-								d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-							/>
-						</svg>
-						{error}
-					</div>
-				)}
-
-				{/* Success */}
-				{successMessage && (
-					<div
-						className="mx-6 mb-4 p-3 rounded-2xl text-green-400 text-sm flex items-center gap-2"
-						style={{
-							background: "rgba(34,197,94,0.08)",
-							border: "1px solid rgba(34,197,94,0.3)",
-						}}
-					>
-						<svg
-							className="w-4 h-4 flex-shrink-0"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								strokeWidth={2}
-								d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-							/>
-						</svg>
-						{successMessage}
-					</div>
-				)}
-
-				{/* Action Buttons */}
-				<div className="px-6 pb-8 grid grid-cols-2 gap-3">
-					<button
-						onClick={onClose}
-						className="py-4 rounded-2xl font-bold text-sm text-white/60 transition-all hover:text-white/80 active:scale-[0.98]"
-						style={{
-							background: "rgba(255,255,255,0.06)",
-							border: "1px solid rgba(255,255,255,0.1)",
-						}}
-					>
-						CANCEL
-					</button>
-					<button
-						onClick={handleTrade}
-						disabled={isConfirmDisabled}
-						className="py-4 rounded-2xl font-bold text-sm text-white transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-						style={
-							!isConfirmDisabled
-								? {
-										background:
-											tradeType === "buy"
-												? "linear-gradient(135deg, #22d3ee 0%, #3b82f6 100%)"
-												: "linear-gradient(135deg, #f97316 0%, #ef4444 100%)",
-										boxShadow:
-											tradeType === "buy"
-												? "0 0 20px rgba(34,211,238,0.3)"
-												: "0 0 20px rgba(249,115,22,0.3)",
-									}
-								: { background: "rgba(255,255,255,0.06)" }
-						}
-					>
-						{isLoading ? (
-							"Processing..."
-						) : (
-							<>
-								CONFIRM {tradeType === "buy" ? "PURCHASE" : "SALE"}
-								<svg
-									className="w-4 h-4"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
+							<div className="trade-dialog-note-meta">
+								<div
+									id={noteErrorId}
+									aria-live="polite"
+									className="trade-dialog-error"
 								>
-									<path
-										strokeLinecap="round"
-										strokeLinejoin="round"
-										strokeWidth={2.5}
-										d="M13 7l5 5m0 0l-5 5m5-5H6"
-									/>
-								</svg>
-							</>
+									{noteInvalid
+										? `A short ${isBuy ? "trade" : "sell"} note is required.`
+										: null}
+								</div>
+								<span className="trade-dialog-note-count num">
+									{note.length}/500
+								</span>
+							</div>
+						</div>
+
+						{isEventActiveServer === false && (
+							<div className="trade-dialog-banner is-error">
+								Trading has closed for this event
+							</div>
 						)}
-					</button>
-				</div>
+
+						{error && (
+							<div className="trade-dialog-banner is-error">{error}</div>
+						)}
+
+						{successMessage && (
+							<div className="trade-dialog-banner is-success">
+								{successMessage}
+							</div>
+						)}
+
+						<div className="trade-dialog-actions">
+							<Button
+								type="button"
+								variant="secondary"
+								size="lg"
+								className="w-full"
+								onClick={onClose}
+								disabled={submitState === "submitting"}
+							>
+								Cancel
+							</Button>
+							<Button
+								type="submit"
+								variant={isBuy ? "buy" : "sell"}
+								size="lg"
+								className="w-full trade-dialog-submit"
+								data-state={submitState}
+								disabled={isConfirmDisabled}
+							>
+								{submitState === "sent" ? (
+									<span className="trade-dialog-submit-label">Done</span>
+								) : (
+									<>
+										<span className="trade-dialog-submit-label">
+											{submitLabel}
+										</span>
+										<span className="trade-dialog-submit-icon" aria-hidden>
+											{isLoading ? (
+												<Loader2
+													size={18}
+													strokeWidth={2}
+													className="trade-dialog-spin"
+												/>
+											) : (
+												<ArrowRight size={18} strokeWidth={1.5} />
+											)}
+										</span>
+									</>
+								)}
+							</Button>
+						</div>
+					</form>
+				</GlassCard>
 			</div>
-		</div>
+		</>
 	);
+
+	return createPortal(dialog, document.body);
 };

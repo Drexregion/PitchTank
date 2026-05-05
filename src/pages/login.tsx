@@ -90,6 +90,35 @@ const AuthPage: React.FC = () => {
 			);
 			if (signUpError) throw signUpError;
 
+			// Split the single "Full name" field into first/last and seed the
+			// users row. The DB trigger creates the row with just
+			// (auth_user_id, email) and ignores the name in user_metadata, so
+			// without this the user sees "Investor" everywhere until they edit
+			// their profile manually.
+			if (newUser?.id) {
+				const trimmedName = name.trim();
+				const spaceIdx = trimmedName.indexOf(" ");
+				const firstName =
+					spaceIdx === -1 ? trimmedName : trimmedName.slice(0, spaceIdx);
+				const lastName =
+					spaceIdx === -1
+						? ""
+						: trimmedName.slice(spaceIdx + 1).trim();
+				try {
+					await supabase.from("users").upsert(
+						{
+							auth_user_id: newUser.id,
+							email,
+							first_name: firstName,
+							last_name: lastName || null,
+						},
+						{ onConflict: "auth_user_id" },
+					);
+				} catch {
+					/* non-fatal — user can still set name in profile */
+				}
+			}
+
 			if (eventId && newUser?.id) {
 				try {
 					// Resolve users.id (row created by DB trigger on signup)

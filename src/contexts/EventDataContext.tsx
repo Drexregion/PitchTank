@@ -215,7 +215,7 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
         const { data: pitchesData, error: pitchesError } = await supabase
           .from("pitches")
           .select(
-            "id, event_id, profile_user_id, name, bio, logo_url, pitch_summary, pitch_url, shares_in_pool, cash_in_pool, k_constant, min_reserve_shares, created_at, updated_at, users!pitches_profile_user_id_fkey(id, first_name, last_name, profile_picture_url, bio)"
+            "id, event_id, profile_user_id, name, bio, logo_url, pitch_summary, pitch_url, shares_in_pool, cash_in_pool, k_constant, min_reserve_shares, created_at, updated_at, users!pitches_profile_user_id_fkey(id, auth_user_id, first_name, last_name, profile_picture_url, profile_color, bio)"
           )
           .eq("event_id", eventId);
 
@@ -363,7 +363,7 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
           const { data } = await supabase
             .from("pitches")
             .select(
-              "id, event_id, profile_user_id, name, bio, logo_url, pitch_summary, pitch_url, shares_in_pool, cash_in_pool, k_constant, min_reserve_shares, created_at, updated_at, users!pitches_profile_user_id_fkey(id, first_name, last_name, profile_picture_url, bio)"
+              "id, event_id, profile_user_id, name, bio, logo_url, pitch_summary, pitch_url, shares_in_pool, cash_in_pool, k_constant, min_reserve_shares, created_at, updated_at, users!pitches_profile_user_id_fkey(id, auth_user_id, first_name, last_name, profile_picture_url, profile_color, bio)"
             )
             .eq("id", updatedId)
             .maybeSingle();
@@ -442,18 +442,25 @@ export function EventDataProvider({ eventId, userId, children }: EventDataProvid
 
     const currentPitches = pitchesRef.current;
 
-    // Resolve users.id from auth UID
+    // Resolve users.id + name from auth UID so the investor row carries the
+    // user's real name from the start. Falls back to "Investor" only when no
+    // first/last name has been set.
     const { data: userData } = await supabase
       .from("users")
-      .select("id")
+      .select("id, first_name, last_name")
       .eq("auth_user_id", userId)
       .maybeSingle();
+
+    const fullName = [userData?.first_name, userData?.last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
 
     const { data: newInvestor, error: investorError } = await supabase
       .from("investors")
       .insert({
         event_id: eventId,
-        name: "Investor",
+        name: fullName || "Investor",
         profile_user_id: userData?.id ?? null,
         initial_balance: 1000000,
         current_balance: STARTING_CASH,

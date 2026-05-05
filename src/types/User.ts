@@ -5,6 +5,7 @@ export interface User {
   first_name: string;
   last_name: string;
   profile_picture_url: string | null;
+  profile_color: string | null;
   bio: string | null;
   linkedin_url: string | null;
   twitter_url: string | null;

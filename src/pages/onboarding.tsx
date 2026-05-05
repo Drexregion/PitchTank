@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Button, GlassCard, IridescentArc } from "../components/design-system";
+import { Navigate, useNavigate } from "react-router-dom";
+import { Button, IridescentArc } from "../components/design-system";
+import { useAuth } from "../contexts/AuthContext";
+import { supabase } from "../lib/supabaseClient";
+import { TradeDemo } from "./onboarding-demos/TradeDemo";
+import { LeaderboardDemo } from "./onboarding-demos/LeaderboardDemo";
+import { ProfileDemo } from "./onboarding-demos/ProfileDemo";
+import { NetworkDemo } from "./onboarding-demos/NetworkDemo";
+import { ChatDemo } from "./onboarding-demos/ChatDemo";
 
 type StepKind = "welcome" | "feature" | "team" | "complete";
 
@@ -10,7 +17,8 @@ interface Step {
 	title: string;
 	subtitle: string;
 	body?: string;
-	icon: React.ReactNode;
+	icon?: React.ReactNode;
+	demo?: React.ComponentType;
 	accent: [string, string];
 }
 
@@ -155,25 +163,6 @@ const TeamIcon = (
 	</svg>
 );
 
-const SparkIcon = (
-	<svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 64 64" fill="none">
-		<defs>
-			<linearGradient id="ob-spark" x1="0" y1="0" x2="1" y2="1">
-				<stop offset="0%" stopColor="#22D3EE" />
-				<stop offset="50%" stopColor="#A259FF" />
-				<stop offset="100%" stopColor="#FF8A00" />
-			</linearGradient>
-		</defs>
-		<path
-			d="M32 8 L36 26 L54 32 L36 38 L32 56 L28 38 L10 32 L28 26 Z"
-			fill="url(#ob-spark)"
-		/>
-		<circle cx="14" cy="14" r="2.5" fill="#22D3EE" />
-		<circle cx="50" cy="50" r="2" fill="#FF8A00" />
-		<circle cx="52" cy="14" r="1.8" fill="#A259FF" />
-	</svg>
-);
-
 const STEPS: Step[] = [
 	{
 		kind: "welcome",
@@ -182,7 +171,6 @@ const STEPS: Step[] = [
 		subtitle: "The new way to discover and connect with founders",
 		body:
 			"We've made some big upgrades. Take 60 seconds to see what's new — then let's get you in.",
-		icon: SparkIcon,
 		accent: ["#4F7CFF", "#A259FF"],
 	},
 	{
@@ -193,6 +181,7 @@ const STEPS: Step[] = [
 		body:
 			"Back the pitches that move you. Share feedback that helps founders sharpen their story.",
 		icon: TradeIcon,
+		demo: TradeDemo,
 		accent: ["#4F7CFF", "#A259FF"],
 	},
 	{
@@ -203,6 +192,7 @@ const STEPS: Step[] = [
 		body:
 			"Top investors get featured. Sharper picks earn better placement and reputation over time.",
 		icon: LeaderboardIcon,
+		demo: LeaderboardDemo,
 		accent: ["#FFD37A", "#FF8A00"],
 	},
 	{
@@ -213,6 +203,7 @@ const STEPS: Step[] = [
 		body:
 			"A strong profile gets you noticed. Share it anywhere — founders and investors discover you through it.",
 		icon: ProfileIcon,
+		demo: ProfileDemo,
 		accent: ["#22D3EE", "#A259FF"],
 	},
 	{
@@ -223,6 +214,7 @@ const STEPS: Step[] = [
 		body:
 			"Smart matching surfaces the founders and investors most relevant to you. DM them directly — no warm intro needed.",
 		icon: NetworkIcon,
+		demo: NetworkDemo,
 		accent: ["#A259FF", "#22D3EE"],
 	},
 	{
@@ -233,6 +225,7 @@ const STEPS: Step[] = [
 		body:
 			"Drop questions during pitches, react to moments, and feel the room move with you.",
 		icon: ChatIcon,
+		demo: ChatDemo,
 		accent: ["#4F7CFF", "#22D3EE"],
 	},
 	{
@@ -250,7 +243,6 @@ const STEPS: Step[] = [
 		id: "complete",
 		title: "You're all set",
 		subtitle: "Welcome to the future of founder discovery",
-		icon: SparkIcon,
 		accent: ["#22D3EE", "#A259FF"],
 	},
 ];
@@ -259,17 +251,83 @@ const TOTAL = STEPS.length;
 
 const OnboardingPage: React.FC = () => {
 	const navigate = useNavigate();
+	const { user, isLoading: authLoading } = useAuth();
 	const [step, setStep] = useState(0);
 	const [direction, setDirection] = useState<1 | -1>(1);
 	const [animKey, setAnimKey] = useState(0);
+	const [isFinishing, setIsFinishing] = useState(false);
 
 	const current = STEPS[step];
 	const isFirst = step === 0;
 	const isLast = step === TOTAL - 1;
 
+	const finish = async () => {
+		if (isFinishing) return;
+		setIsFinishing(true);
+		// Wait for the DB write to land before navigating, otherwise the
+		// gate races the update and bounces the user right back to
+		// /onboarding.
+		if (user?.id) {
+			const onboardedAt = new Date().toISOString();
+			try {
+				// Try update first (covers existing users). .select() so we
+				// can detect the 0-row case — without it, the response is
+				// always { data: null, error: null } and we can't tell.
+				const { data, error } = await supabase
+					.from("users")
+					.update({ onboarded_at: onboardedAt })
+					.eq("auth_user_id", user.id)
+					.select("id")
+					.maybeSingle();
+
+				if (error) {
+					console.warn("[onboarding] update errored", error);
+				}
+
+				// 0 rows affected → row doesn't exist yet (e.g. new signup
+				// where the auth-trigger row hasn't been created). Fall back
+				// to upsert so we both create and mark it onboarded.
+				if (!error && !data) {
+					const { error: upsertError } = await supabase
+						.from("users")
+						.upsert(
+							{
+								auth_user_id: user.id,
+								email: user.email ?? "",
+								onboarded_at: onboardedAt,
+							},
+							{ onConflict: "auth_user_id" },
+						);
+					if (upsertError) {
+						console.warn(
+							"[onboarding] upsert fallback errored",
+							upsertError,
+						);
+					}
+				}
+			} catch (err) {
+				console.warn("[onboarding] failed to mark complete", err);
+			}
+
+			// Mark in sessionStorage so the gate trusts this for the rest
+			// of the session, even if realtime delivery for the user's row
+			// is delayed or doesn't arrive (which we've seen happen for
+			// brand-new accounts). Cleared automatically when the tab closes.
+			try {
+				sessionStorage.setItem(`pt_onboarded:${user.id}`, "1");
+			} catch {
+				/* sessionStorage unavailable — fall back to realtime/refetch */
+			}
+		}
+		// Hint to the global OnboardingGate that we just finished, so it
+		// doesn't bounce the user back if its hook hasn't refreshed yet.
+		navigate("/", { state: { justOnboarded: true } });
+	};
+
 	const goNext = () => {
+		if (isFinishing) return;
 		if (isLast) {
-			navigate("/");
+			void finish();
 			return;
 		}
 		setDirection(1);
@@ -322,6 +380,22 @@ const OnboardingPage: React.FC = () => {
 			})),
 		[step === TOTAL - 1],
 	);
+
+	// Auth gate: while resolving, show a quiet spinner; if logged out,
+	// send them to /welcome (they need a user record to mark onboarded).
+	if (authLoading) {
+		return (
+			<div
+				className="min-h-screen flex items-center justify-center"
+				style={{ background: "#080a14" }}
+			>
+				<div className="w-8 h-8 rounded-full border-2 border-pt-purple border-t-transparent animate-spin" />
+			</div>
+		);
+	}
+	if (!user) {
+		return <Navigate to="/welcome" replace />;
+	}
 
 	const ctaLabel = isFirst
 		? "Get started"
@@ -440,6 +514,8 @@ const OnboardingPage: React.FC = () => {
 					size="lg"
 					className="flex-1"
 					onClick={goNext}
+					loading={isFinishing}
+					loadingText="Finishing up…"
 				>
 					{ctaLabel}
 				</Button>
@@ -450,21 +526,52 @@ const OnboardingPage: React.FC = () => {
 	);
 };
 
-const ContentStep: React.FC<{ step: Step }> = ({ step }) => (
-	<GlassCard tone="frame" size="lg" className="text-center">
-		<div className="flex flex-col items-center px-2 py-4">
-			<div
-				className="ob-icon-wrap mb-6"
-				style={
-					{
-						"--a1": step.accent[0],
-						"--a2": step.accent[1],
-					} as React.CSSProperties
-				}
-			>
-				<div className="ob-icon-glow" />
-				<div className="ob-icon-inner">{step.icon}</div>
+const ContentStep: React.FC<{ step: Step }> = ({ step }) => {
+	const isLogoStep = step.kind === "welcome" || step.kind === "complete";
+	const accentVars = {
+		"--a1": step.accent[0],
+		"--a2": step.accent[1],
+	} as React.CSSProperties;
+
+	if (step.demo) {
+		const Demo = step.demo;
+		return (
+			<div className="flex flex-col w-full">
+				<div className="ob-demo-wrap" style={accentVars}>
+					<div className="ob-demo-glow" aria-hidden="true" />
+					<div className="ob-demo-stage">
+						<Demo />
+					</div>
+				</div>
+				<IridescentArc className="w-3/4 self-center mt-3 mb-2" />
+				<div className="text-center px-2">
+					<h1 className="ob-title ob-title-compact font-display">
+						{step.title}
+					</h1>
+					<p className="ob-subtitle">{step.subtitle}</p>
+					{step.body && <p className="ob-body">{step.body}</p>}
+				</div>
 			</div>
+		);
+	}
+
+	return (
+		<div className="flex flex-col items-center text-center px-2 py-4">
+			{isLogoStep ? (
+				<div className="ob-logo-wrap mb-6" style={accentVars}>
+					<div className="ob-icon-glow" />
+					<img
+						src="/leaderboard/logo.png"
+						alt="PitchTank"
+						className="ob-logo-img"
+					/>
+				</div>
+			) : (
+				<div className="ob-icon-wrap mb-6" style={accentVars}>
+					<div className="ob-icon-glow" />
+					<div className="ob-icon-inner">{step.icon}</div>
+				</div>
+			)}
 
 			<IridescentArc className="w-3/4 -mt-2 mb-2" />
 
@@ -472,8 +579,8 @@ const ContentStep: React.FC<{ step: Step }> = ({ step }) => (
 			<p className="ob-subtitle">{step.subtitle}</p>
 			{step.body && <p className="ob-body">{step.body}</p>}
 		</div>
-	</GlassCard>
-);
+	);
+};
 
 const CompleteStep: React.FC<{
 	step: Step;
@@ -521,7 +628,7 @@ const CompleteStep: React.FC<{
 		</div>
 
 		<div
-			className="ob-icon-wrap ob-icon-pulse mb-6 mx-auto"
+			className="ob-logo-wrap ob-icon-pulse mb-6 mx-auto"
 			style={
 				{
 					"--a1": step.accent[0],
@@ -530,7 +637,11 @@ const CompleteStep: React.FC<{
 			}
 		>
 			<div className="ob-icon-glow" />
-			<div className="ob-icon-inner">{step.icon}</div>
+			<img
+				src="/leaderboard/logo.png"
+				alt="PitchTank"
+				className="ob-logo-img"
+			/>
 		</div>
 
 		<IridescentArc className="w-3/4 mx-auto -mt-2 mb-2" />
@@ -588,6 +699,54 @@ const OnboardingStyles: React.FC = () => (
 			position: relative;
 			width: 110px; height: 110px;
 			display: flex; align-items: center; justify-content: center;
+		}
+
+		/* Demo stage — feature steps that show real UI loops */
+		.ob-demo-wrap {
+			position: relative;
+			width: 100%;
+			padding: 4px;
+			margin: 0 auto;
+		}
+		.ob-demo-glow {
+			position: absolute;
+			inset: -28px -8px -8px -8px;
+			border-radius: 22px;
+			background:
+				radial-gradient(60% 80% at 50% 0%, var(--a1, #4F7CFF)45 0%, transparent 60%),
+				radial-gradient(50% 70% at 50% 100%, var(--a2, #A259FF)33 0%, transparent 65%);
+			filter: blur(12px);
+			opacity: 0.55;
+			pointer-events: none;
+			z-index: 0;
+		}
+		.ob-demo-stage {
+			position: relative;
+			z-index: 1;
+		}
+
+		.ob-title-compact {
+			font-size: 22px;
+			line-height: 1.15;
+			margin-top: 6px;
+			margin-bottom: 4px;
+		}
+
+		/* Logo container — used for welcome + complete steps */
+		.ob-logo-wrap {
+			position: relative;
+			width: 220px;
+			height: 140px;
+			display: flex; align-items: center; justify-content: center;
+		}
+		.ob-logo-img {
+			position: relative;
+			z-index: 1;
+			width: 100%;
+			height: 100%;
+			object-fit: contain;
+			filter: drop-shadow(0 0 22px rgba(162,89,255,0.45))
+				drop-shadow(0 0 12px rgba(34,211,238,0.30));
 		}
 		.ob-icon-glow {
 			position: absolute; inset: -18px;
@@ -746,6 +905,7 @@ const OnboardingStyles: React.FC = () => (
 			.ob-title-mega { font-size: 30px; }
 			.ob-icon-wrap { width: 90px; height: 90px; }
 			.ob-icon-inner { width: 80px; height: 80px; border-radius: 20px; }
+			.ob-logo-wrap { width: 180px; height: 110px; }
 		}
 	`}</style>
 );

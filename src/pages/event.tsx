@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import {
-	Info,
 	Clock,
 	ArrowUp,
 	ChevronDown,
 	ArrowLeft,
-	Settings,
 	Users,
 } from "lucide-react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
@@ -35,10 +33,12 @@ import {
 	Sparkline,
 	ExpandedSparkline,
 	gradientForId,
+	gradientForUser,
 } from "../components/design-system";
 import { useAuth } from "../contexts/AuthContext";
 import { usePortfolioHistory } from "../hooks/usePortfolioHistory";
 import { useGlobalUnreadDMs } from "../hooks/useGlobalUnreadDMs";
+import { useMyProfile } from "../hooks/useMyProfile";
 import { Event, Judge, Sponsor } from "../types/Event";
 import { PitchWithPriceAndUser } from "../types/Pitch";
 import { EventDataProvider, useEventData } from "../contexts/EventDataContext";
@@ -116,164 +116,153 @@ const EventInfoSheet: React.FC<{
 			onClick={close}
 		>
 			<div
-				className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+				className="absolute inset-0 bg-black/55 backdrop-blur-sm"
 				style={{ opacity: visible ? 1 : 0, transition: "opacity 0.3s" }}
 			/>
 			<div
 				className="relative w-full max-w-lg rounded-b-3xl overflow-hidden"
 				style={{
 					...sheetStyle,
-					background: "linear-gradient(180deg, #13102e 0%, #0d0b22 100%)",
-					border: "1px solid rgba(255,255,255,0.08)",
+					background:
+						"radial-gradient(ellipse 80% 50% at 50% 0%, rgba(79,124,255,0.18) 0%, transparent 60%)," +
+						"linear-gradient(180deg, #100d28 0%, #08071a 100%)",
+					border: "1px solid rgba(184,212,255,0.10)",
 					borderTop: "none",
+					boxShadow:
+						"inset 0 1px 0 rgba(184,212,255,0.10), 0 24px 48px rgba(0,0,0,0.55)",
 				}}
 				onClick={(e) => e.stopPropagation()}
 				onPointerDown={onPointerDown}
 				onPointerMove={onPointerMove}
 				onPointerUp={onPointerUp}
 			>
-				<div className="px-6 pt-6 pb-4">
-					<div className="flex items-start justify-between gap-4">
-						<div className="flex-1 min-w-0">
-							<p className="text-white/40 text-[10px] font-semibold uppercase tracking-widest mb-1">
-								Event
-							</p>
-							<h2 className="text-xl font-black text-white leading-tight">
-								{event.name}
-							</h2>
-							{event.description && (
-								<div className="text-white/45 text-sm mt-1.5 leading-relaxed prose prose-sm prose-invert max-w-none">
-									<ReactMarkdown>{event.description}</ReactMarkdown>
-								</div>
-							)}
-						</div>
-						<div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
+				{/* Hero */}
+				<div className="px-6 pt-6 pb-2">
+					<div className="flex items-center justify-between gap-3 mb-3">
+						<p className="text-pt-text-3 text-[10px] font-semibold uppercase tracking-widest min-w-0 truncate">
+							<span className="text-pt-text-2">Event</span>
+							<span className="mx-2 text-pt-text-3">·</span>
+							<span className="text-pt-text-1 num normal-case tracking-normal font-semibold">
+								{formatEventDate(event.start_time)}
+							</span>
+						</p>
+						<div className="flex items-center gap-2 flex-shrink-0">
 							{statusBadge(event)}
-							<button
+							<IconButton
+								size="sm"
+								aria-label="Close"
 								onClick={close}
-								className="w-7 h-7 rounded-full flex items-center justify-center"
-								style={{
-									background: "rgba(255,255,255,0.06)",
-									border: "1px solid rgba(255,255,255,0.1)",
-								}}
-							>
-								<svg
-									className="w-3.5 h-3.5 text-white/50"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										strokeLinecap="round"
-										strokeLinejoin="round"
-										strokeWidth={2}
-										d="M6 18L18 6M6 6l12 12"
-									/>
-								</svg>
-							</button>
+								icon={
+									<svg
+										className="w-3.5 h-3.5"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
+										<path
+											strokeLinecap="round"
+											strokeLinejoin="round"
+											strokeWidth={2}
+											d="M6 18L18 6M6 6l12 12"
+										/>
+									</svg>
+								}
+							/>
 						</div>
 					</div>
+
+					<h2 className="font-display font-semibold text-pt-text-1 text-2xl leading-tight tracking-tight">
+						{event.name}
+					</h2>
+					{event.description && (
+						<div className="text-pt-text-2 text-sm mt-2 leading-relaxed prose prose-sm prose-invert max-w-none">
+							<ReactMarkdown>{event.description}</ReactMarkdown>
+						</div>
+					)}
 				</div>
 
+				<div className="px-6 -mt-1 mb-3">
+					<IridescentArc className="w-full" />
+				</div>
+
+				{/* Companies count */}
 				<div className="px-6 pb-4">
-					<div className="grid grid-cols-2 gap-2">
-						{[
-							{ label: "Starts", value: formatEventDate(event.start_time) },
-							{ label: "Ends", value: formatEventDate(event.end_time) },
-						].map(({ label, value }) => (
-							<div
-								key={label}
-								className="rounded-2xl px-4 py-3"
-								style={{
-									background: "rgba(255,255,255,0.04)",
-									border: "1px solid rgba(255,255,255,0.06)",
-								}}
-							>
-								<p className="text-white/35 text-[10px] font-semibold uppercase tracking-wider mb-1">
-									{label}
-								</p>
-								<p className="text-white font-semibold text-sm leading-snug">
-									{value}
-								</p>
-							</div>
-						))}
-						<div
-							className="col-span-2 rounded-2xl px-4 py-3"
-							style={{
-								background: "rgba(255,255,255,0.04)",
-								border: "1px solid rgba(255,255,255,0.06)",
-							}}
-						>
-							<p className="text-white/35 text-[10px] font-semibold uppercase tracking-wider mb-1">
+					<GlassCard
+						tone="neutral"
+						size="sm"
+						className="flex items-center justify-between"
+					>
+						<div>
+							<p className="text-pt-text-3 text-[10px] font-semibold uppercase tracking-wider mb-1">
 								Companies
 							</p>
-							<p className="text-white font-semibold text-sm">
-								{pitches.length} pitch{pitches.length !== 1 ? "es" : ""}{" "}
-								competing
+							<p className="font-display text-pt-text-1 font-semibold text-sm">
+								<span className="num">{pitches.length}</span>{" "}
+								pitch{pitches.length !== 1 ? "es" : ""} competing
 							</p>
 						</div>
-					</div>
+						<svg
+							className="w-5 h-5 text-pt-text-3"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+							aria-hidden="true"
+						>
+							<path
+								strokeLinecap="round"
+								strokeLinejoin="round"
+								strokeWidth={1.5}
+								d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+							/>
+						</svg>
+					</GlassCard>
 				</div>
 
 				{/* Judges */}
 				{event.judges && event.judges.length > 0 && (
 					<div className="px-6 pb-4">
-						<p className="text-white/35 text-[10px] font-semibold uppercase tracking-wider mb-2">
-							Judges
-						</p>
+						<SheetSectionTitle>Judges</SheetSectionTitle>
 						<div className="space-y-2">
 							{event.judges.map((judge: Judge) => (
-								<div
-									key={judge.name}
-									className="rounded-2xl px-4 py-3 flex items-center gap-3"
-									style={{
-										background: "rgba(255,255,255,0.04)",
-										border: "1px solid rgba(255,255,255,0.06)",
-									}}
-								>
-									<div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-white/10">
-										{judge.profile_picture ? (
-											<img
-												src={judge.profile_picture}
-												alt={judge.name}
-												className="w-full h-full object-cover"
-											/>
-										) : (
-											<div className="w-full h-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white font-bold text-sm">
-												{judge.name.charAt(0)}
-											</div>
-										)}
-									</div>
-									<div className="flex-1 min-w-0">
-										<div className="flex items-center gap-2">
-											<p className="text-white font-semibold text-sm">
-												{judge.name}
-											</p>
-											{judge.linkedin && (
-												<a
-													href={judge.linkedin}
-													target="_blank"
-													rel="noopener noreferrer"
-													onClick={(e) => e.stopPropagation()}
-													className="text-cyan-400/70 hover:text-cyan-400 transition-colors flex-shrink-0"
-												>
-													<svg
-														className="w-3.5 h-3.5"
-														fill="currentColor"
-														viewBox="0 0 24 24"
+								<GlassCard key={judge.name} tone="frame" size="sm">
+									<div className="flex items-center gap-3">
+										<Avatar
+											size="md"
+											name={judge.name}
+											photo={judge.profile_picture}
+										/>
+										<div className="flex-1 min-w-0">
+											<div className="flex items-center gap-2">
+												<p className="font-display text-pt-text-1 font-semibold text-sm truncate">
+													{judge.name}
+												</p>
+												{judge.linkedin && (
+													<a
+														href={judge.linkedin}
+														target="_blank"
+														rel="noopener noreferrer"
+														onClick={(e) => e.stopPropagation()}
+														aria-label={`${judge.name} on LinkedIn`}
+														className="text-pt-cyan/70 hover:text-pt-cyan transition-colors flex-shrink-0"
 													>
-														<path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
-													</svg>
-												</a>
+														<svg
+															className="w-3.5 h-3.5"
+															fill="currentColor"
+															viewBox="0 0 24 24"
+														>
+															<path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+														</svg>
+													</a>
+												)}
+											</div>
+											{judge.bio && (
+												<p className="text-pt-text-2 text-xs mt-0.5 leading-relaxed line-clamp-2">
+													{judge.bio}
+												</p>
 											)}
 										</div>
-										{judge.bio && (
-											<p className="text-white/45 text-xs mt-0.5 leading-relaxed line-clamp-2">
-												{judge.bio}
-											</p>
-										)}
 									</div>
-								</div>
+								</GlassCard>
 							))}
 						</div>
 					</div>
@@ -282,81 +271,79 @@ const EventInfoSheet: React.FC<{
 				{/* Sponsors */}
 				{event.sponsors && event.sponsors.length > 0 && (
 					<div className="px-6 pb-4">
-						<p className="text-white/35 text-[10px] font-semibold uppercase tracking-wider mb-2">
-							Sponsors
-						</p>
+						<SheetSectionTitle>Sponsors</SheetSectionTitle>
 						<div className="space-y-2">
 							{event.sponsors.map((sponsor: Sponsor) => (
-								<div
-									key={sponsor.name}
-									className="rounded-2xl px-4 py-3 flex items-center gap-3"
-									style={{
-										background: "rgba(255,255,255,0.04)",
-										border: "1px solid rgba(255,255,255,0.06)",
-									}}
-								>
-									<div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 border border-white/10 bg-white/5 flex items-center justify-center">
-										{sponsor.logo ? (
-											<img
-												src={sponsor.logo}
-												alt={sponsor.name}
-												className="w-full h-full object-contain p-1"
-											/>
-										) : (
-											<span className="text-white/40 font-bold text-sm">
-												{sponsor.name.charAt(0)}
-											</span>
-										)}
-									</div>
-									<div className="flex-1 min-w-0">
-										<div className="flex items-center gap-2">
-											<p className="text-white font-semibold text-sm">
-												{sponsor.name}
-											</p>
-											{sponsor.website && (
-												<a
-													href={sponsor.website}
-													target="_blank"
-													rel="noopener noreferrer"
-													onClick={(e) => e.stopPropagation()}
-													className="text-cyan-400/70 hover:text-cyan-400 transition-colors flex-shrink-0"
-												>
-													<svg
-														className="w-3.5 h-3.5"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															strokeLinecap="round"
-															strokeLinejoin="round"
-															strokeWidth={2}
-															d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-														/>
-													</svg>
-												</a>
+								<GlassCard key={sponsor.name} tone="frame" size="sm">
+									<div className="flex items-center gap-3">
+										<div
+											className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center"
+											style={{
+												background: "rgba(255,255,255,0.04)",
+												border: "1px solid rgba(255,255,255,0.08)",
+											}}
+										>
+											{sponsor.logo ? (
+												<img
+													src={sponsor.logo}
+													alt={sponsor.name}
+													className="w-full h-full object-contain p-1"
+												/>
+											) : (
+												<span className="font-display text-pt-text-2 font-bold text-sm">
+													{sponsor.name.charAt(0)}
+												</span>
 											)}
 										</div>
-										{sponsor.description && (
-											<p className="text-white/45 text-xs mt-0.5 leading-relaxed line-clamp-2">
-												{sponsor.description}
-											</p>
-										)}
+										<div className="flex-1 min-w-0">
+											<div className="flex items-center gap-2">
+												<p className="font-display text-pt-text-1 font-semibold text-sm truncate">
+													{sponsor.name}
+												</p>
+												{sponsor.website && (
+													<a
+														href={sponsor.website}
+														target="_blank"
+														rel="noopener noreferrer"
+														onClick={(e) => e.stopPropagation()}
+														aria-label={`${sponsor.name} website`}
+														className="text-pt-cyan/70 hover:text-pt-cyan transition-colors flex-shrink-0"
+													>
+														<svg
+															className="w-3.5 h-3.5"
+															fill="none"
+															stroke="currentColor"
+															viewBox="0 0 24 24"
+														>
+															<path
+																strokeLinecap="round"
+																strokeLinejoin="round"
+																strokeWidth={2}
+																d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+															/>
+														</svg>
+													</a>
+												)}
+											</div>
+											{sponsor.description && (
+												<p className="text-pt-text-2 text-xs mt-0.5 leading-relaxed line-clamp-2">
+													{sponsor.description}
+												</p>
+											)}
+										</div>
 									</div>
-								</div>
+								</GlassCard>
 							))}
 						</div>
 					</div>
 				)}
 
 				<div className="px-6 pb-6">
-					<button
+					<PtButton
+						variant="primary"
+						size="lg"
+						className="w-full"
 						onClick={onShare}
-						className="w-full py-4 rounded-2xl font-bold text-white text-sm flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all"
-						style={{
-							background: "linear-gradient(135deg, #22d3ee 0%, #6366f1 100%)",
-							boxShadow: "0 0 20px rgba(34,211,238,0.25)",
-						}}
 					>
 						<svg
 							className="w-4 h-4"
@@ -372,7 +359,7 @@ const EventInfoSheet: React.FC<{
 							/>
 						</svg>
 						Share Event
-					</button>
+					</PtButton>
 				</div>
 
 				<div className="flex justify-center pb-3">
@@ -382,6 +369,30 @@ const EventInfoSheet: React.FC<{
 		</div>
 	);
 };
+
+const SheetSectionTitle: React.FC<{ children: React.ReactNode }> = ({
+	children,
+}) => (
+	<div className="flex items-center gap-2 mb-3">
+		<span
+			aria-hidden="true"
+			className="h-px w-6"
+			style={{
+				background: "linear-gradient(to right, transparent, var(--c-cyan))",
+			}}
+		/>
+		<p className="font-display text-pt-text-2 text-[11px] font-semibold uppercase tracking-widest">
+			{children}
+		</p>
+		<span
+			aria-hidden="true"
+			className="h-px flex-1"
+			style={{
+				background: "linear-gradient(to right, var(--c-purple), transparent)",
+			}}
+		/>
+	</div>
+);
 
 // Top-sheet: Help guide
 const HelpSheet: React.FC<{ onClose: () => void }> = ({ onClose }) => {
@@ -687,6 +698,65 @@ const EventLoadingScreen: React.FC = () => (
 );
 
 // ── Shell: mounts the provider, then renders the inner page ──────────────────
+// Tweens between number values when `trigger` changes (e.g. user clicks a
+// toggle). Underlying `target` updates from data refreshes snap without animating,
+// so live price ticks don't cause the number to constantly slide.
+function useAnimatedNumber(
+	target: number,
+	trigger: unknown,
+	durationMs = 500,
+): number {
+	const [display, setDisplay] = useState(target);
+	const targetRef = useRef(target);
+	const displayRef = useRef(target);
+	const rafRef = useRef<number | null>(null);
+
+	useEffect(() => {
+		displayRef.current = display;
+	});
+
+	// Snap to latest target without animating (data refreshes, initial load).
+	useEffect(() => {
+		targetRef.current = target;
+		if (rafRef.current == null) {
+			setDisplay(target);
+		}
+	}, [target]);
+
+	// Animate from current display value → latest target whenever `trigger` flips.
+	const isFirst = useRef(true);
+	useEffect(() => {
+		if (isFirst.current) {
+			isFirst.current = false;
+			return;
+		}
+		const from = displayRef.current;
+		const to = targetRef.current;
+		if (from === to) return;
+		const start = performance.now();
+		const tick = (now: number) => {
+			const t = Math.min(1, (now - start) / durationMs);
+			const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+			setDisplay(from + (to - from) * eased);
+			if (t < 1) {
+				rafRef.current = requestAnimationFrame(tick);
+			} else {
+				rafRef.current = null;
+				setDisplay(targetRef.current); // settle on latest target
+			}
+		};
+		rafRef.current = requestAnimationFrame(tick);
+		return () => {
+			if (rafRef.current != null) {
+				cancelAnimationFrame(rafRef.current);
+				rafRef.current = null;
+			}
+		};
+	}, [trigger, durationMs]);
+
+	return display;
+}
+
 const EventPage: React.FC = () => {
 	const { eventId } = useParams<{ eventId: string }>();
 	const { user } = useAuth();
@@ -750,6 +820,13 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const [tradeModalInitialType, setTradeModalInitialType] = useState<
 		"buy" | "sell"
 	>("buy");
+	const [balanceView, setBalanceView] = useState<"cash" | "total">("cash");
+	const animatedBalance = useAnimatedNumber(
+		balanceView === "total"
+			? (investor?.current_balance ?? 0) + portfolioValue
+			: (investor?.current_balance ?? 0),
+		balanceView,
+	);
 	const [sortBy, setSortBy] = useState<"price" | "alphabetical">("price");
 	const [_showSortOptions, setShowSortOptions] = useState(false);
 	const [expandedPitchId, setExpandedPitchId] = useState<string | null>(null);
@@ -769,7 +846,9 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	);
 	const portfolioDropdownRef = useRef<HTMLDivElement>(null);
 	const profileUserId = user?.id ?? null;
-
+	const myProfile = useMyProfile(user?.id ?? null);
+	const myProfilePic = myProfile.profilePictureUrl;
+	const myProfileName = myProfile.displayName || null;
 
 	// Closing countdown UI state (driven by context's closingAt signal)
 	const [showTradingClosedNotification, setShowTradingClosedNotification] =
@@ -1008,7 +1087,9 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 	const canTrade = event ? isEventActive(event) : false;
 	const simpleMode = event?.hide_leaderboard_and_prices ?? false;
 
-	const displayName = user ? (investor?.name ?? user.email?.split("@")[0] ?? "Trader") : null;
+	const displayName = user
+		? (myProfileName ?? investor?.name ?? user.email?.split("@")[0] ?? "Trader")
+		: null;
 
 	const hour = new Date().getHours();
 	const greeting =
@@ -1239,39 +1320,8 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 						</div>
 					) : (
 						<>
-							{/* Top bar with back button + settings */}
-							<div className="px-5 pt-5 pb-0 flex items-center justify-between">
-								<button
-									type="button"
-									onClick={() => navigate("/")}
-									aria-label="Back to events"
-									className="inline-flex items-center gap-1.5 pl-2 pr-3 py-1.5 rounded-full text-white/70 hover:text-white transition-all active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
-									style={{
-										background: "rgba(255,255,255,0.05)",
-										border: "1px solid rgba(255,255,255,0.08)",
-									}}
-								>
-									<ArrowLeft className="w-4 h-4" aria-hidden="true" />
-									<span className="text-xs font-semibold tracking-wide">
-										Events
-									</span>
-								</button>
-								<button
-									type="button"
-									onClick={() => setShowSettings(true)}
-									aria-label="Settings"
-									className="w-8 h-8 rounded-full flex items-center justify-center text-white/70 hover:text-white transition-all active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
-									style={{
-										background: "rgba(255,255,255,0.05)",
-										border: "1px solid rgba(255,255,255,0.08)",
-									}}
-								>
-									<Settings className="w-4 h-4" aria-hidden="true" />
-								</button>
-							</div>
-
-							{/* Hero greeting (design system Header) */}
-							<div className="px-5 flex items-center justify-between pt-3 pb-4">
+							{/* Top bar: profile · back · (spacer) · info · help · settings */}
+							<div className="px-5 pt-5 pb-4 flex items-center gap-2.5">
 								<button
 									type="button"
 									onClick={() =>
@@ -1281,40 +1331,74 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 												: `/login?redirect=/events/${eventId}`,
 										)
 									}
-									className="flex items-center gap-3 transition-all active:scale-95"
+									className="flex items-center gap-2 transition-all active:scale-95 shrink-0 min-w-0"
 								>
 									<Avatar
 										size="md"
 										name={displayName ?? "Guest"}
-										photo={
-											(user && (investor as any)?.profile_picture_url) ||
-											undefined
-										}
+										photo={(user && myProfilePic) || undefined}
+										gradient={user ? myProfile.gradient : undefined}
 									/>
-									<div className="leading-tight text-left">
-										<div className="text-[11px] text-pt-text-2">
+									<div className="leading-tight text-left min-w-0">
+										<div className="text-[10px] text-pt-text-2 truncate">
 											{greeting}
 										</div>
-										<div className="font-display font-semibold text-white text-[15px] tracking-tight">
+										<div className="font-display font-semibold text-white text-[13px] tracking-tight truncate max-w-[110px]">
 											{displayName ?? "Guest"}
 										</div>
 									</div>
 								</button>
-								<div className="flex items-center gap-2">
-									<IconButton
-										size="md"
+								<div className="flex-1" />
+								<div className="flex items-center gap-0.5 shrink-0">
+									<button
+										type="button"
+										onClick={() => navigate("/")}
+										aria-label="Back to events"
+										className="inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-full text-white/70 hover:text-white transition-all active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 shrink-0"
+										style={{
+											background: "rgba(255,255,255,0.05)",
+											border: "1px solid rgba(255,255,255,0.08)",
+										}}
+									>
+										<ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
+										<span className="text-[11px] font-semibold tracking-wide">
+											Events
+										</span>
+									</button>
+									<button
+										type="button"
 										aria-label="Event info"
 										onClick={() => setShowEventInfoModal(true)}
-										icon={<Info size={16} strokeWidth={1.5} />}
-									/>
+										className="shrink-0 w-8 h-8 hover:brightness-125 transition-all"
+									>
+										<img
+											src="/event-icons/info4-icon.png"
+											alt=""
+											aria-hidden
+											className="w-full h-full object-contain"
+										/>
+									</button>
 									<button
 										type="button"
 										aria-label="Help"
 										onClick={() => setShowHelpModal(true)}
-										className="shrink-0 w-10 h-10 hover:brightness-125 transition-all"
+										className="shrink-0 w-8 h-8 hover:brightness-125 transition-all"
 									>
 										<img
-											src="/chat/chat-question.png"
+											src="/event-icons/question-icon.png"
+											alt=""
+											aria-hidden
+											className="w-full h-full object-contain"
+										/>
+									</button>
+									<button
+										type="button"
+										onClick={() => setShowSettings(true)}
+										aria-label="Settings"
+										className="shrink-0 w-8 h-8 hover:brightness-125 transition-all"
+									>
+										<img
+											src="/event-icons/gear2-icon.png"
 											alt=""
 											aria-hidden
 											className="w-full h-full object-contain"
@@ -1361,11 +1445,39 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 										<div className="px-5 mt-3">
 											<div className="flex items-start justify-between gap-3">
 												<div>
-													<div className="text-[11px] uppercase tracking-[0.14em] text-pt-text-2">
-														Your Balance
+													<div className="flex items-baseline gap-1.5 uppercase tracking-[0.14em] mb-1 select-none">
+														<button
+															type="button"
+															onClick={() => setBalanceView("cash")}
+															aria-pressed={balanceView === "cash"}
+															className={
+																"px-2 pt-0.5 pb-0 rounded-full border transition-colors " +
+																(balanceView === "cash"
+																	? "text-pt-cyan text-[11.5px] border-current bg-pt-cyan/[0.08]"
+																	: "text-pt-text-3 text-[11px] border-transparent hover:text-pt-text-2")
+															}
+														>
+															Cash
+														</button>
+														<span className="text-pt-text-3 text-[11px]" aria-hidden>
+															/
+														</span>
+														<button
+															type="button"
+															onClick={() => setBalanceView("total")}
+															aria-pressed={balanceView === "total"}
+															className={
+																"px-2 pt-0.5 pb-0 rounded-full border transition-colors " +
+																(balanceView === "total"
+																	? "text-pt-purple text-[11.5px] border-current bg-pt-purple/[0.08]"
+																	: "text-pt-text-3 text-[11px] border-transparent hover:text-pt-text-2")
+															}
+														>
+															Total Assets
+														</button>
 													</div>
 													<div className="font-display font-semibold text-white text-[44px] leading-[1.05] num tracking-tight mt-0.5">
-														{formatCurrency(investor.current_balance)}
+														{formatCurrency(animatedBalance)}
 													</div>
 													<div className="flex items-center gap-1.5 mt-1.5 text-[12px] num">
 														{!simpleMode && (
@@ -1519,7 +1631,13 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 																				size="sm"
 																				name={pitch?.name ?? "?"}
 																				photo={pitch?.user?.profile_picture_url ?? undefined}
-																				gradient={[c1, c2]}
+																				gradient={
+																					pitch?.user?.profile_color
+																						? gradientForUser(
+																								pitch.user.profile_color,
+																						  )
+																						: gradientForId(pitch?.id ?? "anon")
+																				}
 																			/>
 																		</button>
 																	</div>
@@ -1699,7 +1817,6 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 													// so the same founder shows the same number in both views.
 													const change = ((pitch.current_price - 10) / 10) * 100;
 													const sparkColor = isUp ? "#40F3C5" : "#FF4757";
-													const [c1, c2] = gradientForId(pitch.id);
 
 													const expandedActive = isExpanded && !simpleMode;
 													return (
@@ -1727,7 +1844,13 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 																		photo={
 																			pitch.user?.profile_picture_url ?? undefined
 																		}
-																		gradient={[c1, c2]}
+																		gradient={
+																			pitch.user?.profile_color
+																				? gradientForUser(
+																						pitch.user.profile_color,
+																				  )
+																				: gradientForId(pitch.id)
+																		}
 																	/>
 																</button>
 																<button
@@ -2056,11 +2179,12 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 			<div
 				className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-3 py-2 rounded-full"
 				style={{
-					background: "rgba(16, 14, 35, 0.92)",
+					background:
+						"linear-gradient(rgba(16,14,35,0.92), rgba(16,14,35,0.92)) padding-box, linear-gradient(140deg, #22d3ee 0%, #6366f1 100%) border-box",
 					backdropFilter: "blur(20px)",
-					border: "1px solid rgba(255,255,255,0.1)",
+					border: "2px solid transparent",
 					boxShadow:
-						"0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04), inset 0 1px 0 rgba(255,255,255,0.08)",
+						"0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08)",
 				}}
 			>
 				<button
@@ -2679,6 +2803,12 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 					);
 					setShowSettings(false);
 				}}
+				onSignIn={() => {
+					setShowSettings(false);
+					navigate(`/login?redirect=/events/${eventId}`);
+				}}
+				onEditProfile={() => navigate("/profile")}
+				isSignedIn={!!user}
 				isAdmin={isAdmin}
 				onOpenAdminAnalytics={() => setActiveTab("admin-analytics")}
 			/>
@@ -2716,10 +2846,6 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				eventId={eventId}
 				userId={user?.id ?? null}
 				displayName={displayName ?? "Guest"}
-				onStartDM={user?.id ? (peerId, peerName) => {
-					if (peerId === user.id) return;
-					navigate(`/events/${eventId}/dm/${peerId}`, { state: { peerName } });
-				} : undefined}
 			/>
 			<DMPanel
 				isOpen={!!activeDMPeer}

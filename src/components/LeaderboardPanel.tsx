@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { calculateCurrentPrice, calculateMarketCap } from "../lib/ammEngine";
 import { PitchWithPriceAndUser } from "../types/Pitch";
 import { EventInvestorEntry } from "../types/Investor";
+import { gradientForUser } from "./design-system";
 
 interface LeaderboardPanelProps {
 	isOpen: boolean;
@@ -30,6 +31,7 @@ type FounderEntry = {
 	market_cap: number;
 	price_change_percent: number;
 	profile_picture_url?: string | null;
+	profile_color?: string | null;
 };
 
 // ─── Avatar with gradient glow ring ───────────────────────────────────────────
@@ -38,36 +40,50 @@ const GlowAvatar: React.FC<{
 	imageUrl?: string | null;
 	sizeClass?: string;
 	textClass?: string;
-}> = ({ name, imageUrl, sizeClass = "w-8 h-8", textClass = "text-xs" }) => (
-	<div className={`relative inline-flex flex-shrink-0 ${sizeClass}`}>
-		<span
-			aria-hidden="true"
-			className="pointer-events-none absolute -inset-[3px] rounded-full opacity-55 blur-md"
-			style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}
-		/>
-		<span
-			className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full font-bold text-white p-[2px]"
-			style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}
-		>
-			{imageUrl ? (
-				<img
-					src={imageUrl}
-					alt={name}
-					loading="lazy"
-					decoding="async"
-					className="h-full w-full rounded-full object-cover"
-				/>
-			) : (
-				<span
-					className={`flex h-full w-full items-center justify-center rounded-full ${textClass} font-bold text-white`}
-					style={{ background: "linear-gradient(135deg, #4f46e5, #06b6d4)" }}
-				>
-					{name.charAt(0).toUpperCase()}
-				</span>
-			)}
-		</span>
-	</div>
-);
+	gradient?: [string, string];
+}> = ({
+	name,
+	imageUrl,
+	sizeClass = "w-8 h-8",
+	textClass = "text-xs",
+	gradient,
+}) => {
+	const [from, to] = gradient ?? ["#3b82f6", "#8b5cf6"];
+	const ringStyle = `linear-gradient(135deg, ${from}, ${to})`;
+	const initialBg = gradient
+		? ringStyle
+		: "linear-gradient(135deg, #4f46e5, #06b6d4)";
+	return (
+		<div className={`relative inline-flex flex-shrink-0 ${sizeClass}`}>
+			<span
+				aria-hidden="true"
+				className="pointer-events-none absolute -inset-[3px] rounded-full opacity-55 blur-md"
+				style={{ background: ringStyle }}
+			/>
+			<span
+				className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full font-bold text-white p-[2px]"
+				style={{ background: ringStyle }}
+			>
+				{imageUrl ? (
+					<img
+						src={imageUrl}
+						alt={name}
+						loading="lazy"
+						decoding="async"
+						className="h-full w-full rounded-full object-cover"
+					/>
+				) : (
+					<span
+						className={`flex h-full w-full items-center justify-center rounded-full ${textClass} font-bold text-white`}
+						style={{ background: initialBg }}
+					>
+						{name.charAt(0).toUpperCase()}
+					</span>
+				)}
+			</span>
+		</div>
+	);
+};
 
 // ─── Podium card (top 3) ───────────────────────────────────────────────────────
 const PodiumCard: React.FC<{
@@ -81,6 +97,12 @@ const PodiumCard: React.FC<{
 		? (entry as FounderEntry).market_cap
 		: (entry as InvestorEntry).total_value;
 	const imageUrl = isFounder ? (entry as FounderEntry).profile_picture_url : undefined;
+	const founderColor = isFounder
+		? (entry as FounderEntry).profile_color ?? null
+		: null;
+	const founderGradient = founderColor
+		? gradientForUser(founderColor, entry.id)
+		: undefined;
 
 	const accent =
 		rank === 1
@@ -100,6 +122,7 @@ const PodiumCard: React.FC<{
 						imageUrl={imageUrl}
 						sizeClass="w-full h-full"
 						textClass={isFirst ? "text-2xl" : "text-xl"}
+						gradient={founderGradient}
 					/>
 				</div>
 				<img
@@ -141,6 +164,12 @@ const RankRow: React.FC<{
 		? (entry as FounderEntry).market_cap
 		: (entry as InvestorEntry).total_value;
 	const imageUrl = isFounder ? (entry as FounderEntry).profile_picture_url : undefined;
+	const founderColor = isFounder
+		? (entry as FounderEntry).profile_color ?? null
+		: null;
+	const founderGradient = founderColor
+		? gradientForUser(founderColor, entry.id)
+		: undefined;
 
 	return (
 		<div
@@ -159,7 +188,13 @@ const RankRow: React.FC<{
 			>
 				{rank}
 			</span>
-			<GlowAvatar name={entry.name} imageUrl={imageUrl} sizeClass="w-8 h-8" textClass="text-xs" />
+			<GlowAvatar
+				name={entry.name}
+				imageUrl={imageUrl}
+				sizeClass="w-8 h-8"
+				textClass="text-xs"
+				gradient={founderGradient}
+			/>
 			<div className="leading-tight min-w-0 flex-1">
 				<div className="text-white text-[12.5px] font-semibold truncate">{entry.name}</div>
 			</div>
@@ -217,6 +252,7 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
 				market_cap: calculateMarketCap(f),
 				price_change_percent: (calculateCurrentPrice(f) / 10 - 1) * 100,
 				profile_picture_url: f.user?.profile_picture_url ?? null,
+				profile_color: f.user?.profile_color ?? null,
 			}))
 			.sort((a, b) => b.market_cap - a.market_cap);
 	}, [foundersProp]);

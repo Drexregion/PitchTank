@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { X, Send, ArrowLeft, ChevronRight } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { gradientForUser } from "./design-system";
 
 interface DMMessage {
 	id: string;
@@ -38,16 +39,40 @@ function avatarGradient(name: string): [string, string] {
 	return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length] as [string, string];
 }
 
-function Avatar({ name, url, size = 28 }: { name: string; url?: string | null; size?: number }) {
-	const [from, to] = avatarGradient(name);
+function Avatar({
+	name,
+	url,
+	size = 28,
+	gradient,
+}: {
+	name: string;
+	url?: string | null;
+	size?: number;
+	gradient?: [string, string];
+}) {
+	const [from, to] = gradient ?? avatarGradient(name);
 	if (url) {
+		const ringWidth = gradient ? 2 : 0;
+		const inner = size - ringWidth * 2;
 		return (
-			<img
-				src={url}
-				alt={name}
-				className="rounded-full object-cover flex-shrink-0"
-				style={{ width: size, height: size }}
-			/>
+			<div
+				className="rounded-full flex-shrink-0"
+				style={{
+					width: size,
+					height: size,
+					padding: ringWidth,
+					background: gradient
+						? `linear-gradient(135deg, ${from}, ${to})`
+						: "transparent",
+				}}
+			>
+				<img
+					src={url}
+					alt={name}
+					className="rounded-full object-cover"
+					style={{ width: inner, height: inner }}
+				/>
+			</div>
 		);
 	}
 	return (
@@ -86,6 +111,10 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 	const [inputText, setInputText] = useState("");
 	const [loading, setLoading] = useState(true);
 	const [peerProfilePic, setPeerProfilePic] = useState<string | null>(null);
+	const [peerProfileColor, setPeerProfileColor] = useState<string | null>(null);
+	const peerGradient = peerProfileColor
+		? gradientForUser(peerProfileColor, peerId)
+		: undefined;
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
 
@@ -133,17 +162,24 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 		};
 	}, [isOpen, userId, peerId]);
 
-	// Fetch peer's profile picture via investors → users join
+	// Fetch peer's profile picture + color via investors → users join
 	useEffect(() => {
-		if (!isOpen || !peerId) { setPeerProfilePic(null); return; }
+		if (!isOpen || !peerId) {
+			setPeerProfilePic(null);
+			setPeerProfileColor(null);
+			return;
+		}
 		supabase
 			.from("investors")
-			.select("users!investors_profile_user_id_fkey(profile_picture_url)")
+			.select(
+				"users!investors_profile_user_id_fkey(profile_picture_url, profile_color)",
+			)
 			.eq("id", peerId)
 			.maybeSingle()
 			.then(({ data }) => {
-				const pic = (data?.users as any)?.profile_picture_url ?? null;
-				setPeerProfilePic(pic);
+				const u = (data?.users as any) ?? null;
+				setPeerProfilePic(u?.profile_picture_url ?? null);
+				setPeerProfileColor(u?.profile_color ?? null);
 			});
 	}, [isOpen, peerId]);
 
@@ -288,7 +324,7 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 									className="group flex-1 min-w-0 flex items-center gap-3 -ml-1 pl-2 pr-2 py-1 rounded-xl text-left transition-all hover:bg-white/[0.04] active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
 									aria-label={`Open ${peerName}'s profile`}
 								>
-									<Avatar name={peerName} url={peerProfilePic} size={30} />
+									<Avatar name={peerName} url={peerProfilePic} size={30} gradient={peerGradient} />
 									<div className="flex-1 min-w-0">
 										<p className="text-white/30 text-[9px] font-semibold uppercase tracking-[0.2em] leading-none mb-1">
 											View profile
@@ -304,7 +340,7 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 								</button>
 							) : (
 								<>
-									<Avatar name={peerName} url={peerProfilePic} size={30} />
+									<Avatar name={peerName} url={peerProfilePic} size={30} gradient={peerGradient} />
 									<div className="flex-1 min-w-0">
 										<p className="text-white/30 text-[9px] font-semibold uppercase tracking-[0.2em] leading-none mb-1">
 											Direct Message
@@ -337,7 +373,7 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 								</div>
 							) : grouped.length === 0 ? (
 								<div className="flex flex-col items-center justify-center h-full gap-3 text-center py-16">
-									<Avatar name={peerName} url={peerProfilePic} size={48} />
+									<Avatar name={peerName} url={peerProfilePic} size={48} gradient={peerGradient} />
 									<p className="text-white/50 font-bold text-sm">{peerName}</p>
 									<p className="text-white/20 text-xs">
 										Send a message to start the conversation
@@ -355,7 +391,7 @@ export const DMPanel: React.FC<DMPanelProps> = ({
 												{/* Avatar spacer for alignment in grouped messages */}
 												{!isMine ? (
 													msg.isFirst ? (
-														<Avatar name={msg.sender_name} size={22} />
+														<Avatar name={msg.sender_name} size={22} gradient={peerGradient} />
 													) : (
 														<div style={{ width: 22 }} className="flex-shrink-0" />
 													)

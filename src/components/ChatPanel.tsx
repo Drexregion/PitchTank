@@ -1,6 +1,29 @@
 import React, { useState, useEffect, useRef } from "react";
-import { HelpCircle, X, Users, Send, ArrowUp } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import {
+	ArrowLeft,
+	ArrowUp,
+	AtSign,
+	ChevronDown,
+	Send,
+	ShieldCheck,
+	Smile,
+	Sparkles,
+	Users,
+	X as XIcon,
+} from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import {
+	Avatar as PtAvatar,
+	GlassCard,
+	IconButton,
+	gradientForUser,
+} from "./design-system";
+
+interface UserProfileLite {
+	picture: string | null;
+	color: string | null;
+}
 
 interface ChatMessage {
 	id: string;
@@ -19,7 +42,6 @@ interface ChatPanelProps {
 	eventId: string;
 	userId: string | null;
 	displayName: string;
-	onStartDM?: (peerId: string, peerName: string) => void;
 }
 
 const USERNAME_COLORS = [
@@ -43,8 +65,7 @@ function usernameColor(name: string): string {
 	return USERNAME_COLORS[Math.abs(h) % USERNAME_COLORS.length];
 }
 
-// Mini avatar circle with initial + deterministic gradient
-const AVATAR_COLORS = [
+const AVATAR_GRADIENTS: [string, string][] = [
 	["#6366f1", "#22d3ee"],
 	["#a855f7", "#ec4899"],
 	["#06b6d4", "#3b82f6"],
@@ -52,28 +73,37 @@ const AVATAR_COLORS = [
 	["#14b8a6", "#22d3ee"],
 	["#e879f9", "#a855f7"],
 ];
-function avatarColors(name: string) {
+function avatarGradient(name: string): [string, string] {
 	let h = 0;
 	for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
-	return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+	return AVATAR_GRADIENTS[Math.abs(h) % AVATAR_GRADIENTS.length];
 }
 
-function Avatar({ name, size = 20 }: { name: string; size?: number }) {
-	const [from, to] = avatarColors(name);
-	return (
-		<div
-			className="rounded-full flex items-center justify-center font-black text-white flex-shrink-0"
-			style={{
-				width: size,
-				height: size,
-				background: `linear-gradient(135deg, ${from}, ${to})`,
-				fontSize: size * 0.45,
-			}}
-		>
-			{name.charAt(0).toUpperCase()}
-		</div>
-	);
-}
+const EMOJIS = [
+	"🔥",
+	"❤️",
+	"😂",
+	"👍",
+	"🎉",
+	"💯",
+	"✨",
+	"🚀",
+	"😢",
+	"😎",
+	"🤔",
+	"🙌",
+	"👀",
+	"🥹",
+	"🙏",
+	"😅",
+	"😍",
+	"👏",
+	"💪",
+	"⚡️",
+];
+
+const formatCount = (n: number) =>
+	n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`;
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({
 	isOpen,
@@ -81,18 +111,23 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 	eventId,
 	userId,
 	displayName,
-	onStartDM,
 }) => {
+	const navigate = useNavigate();
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
 	const [questionsOpen, setQuestionsOpen] = useState(false);
 	const [upvotedIds, setUpvotedIds] = useState<Set<string>>(new Set());
 	const [inputText, setInputText] = useState("");
 	const [loading, setLoading] = useState(true);
 	const [onlineCount, setOnlineCount] = useState(0);
-	const [showAutocomplete, setShowAutocomplete] = useState(false);
+	const [emojiOpen, setEmojiOpen] = useState(false);
+	const [showRules, setShowRules] = useState(false);
+	const [profileLookup, setProfileLookup] = useState<
+		Record<string, UserProfileLite>
+	>({});
 	const guestIdRef = useRef<string>(crypto.randomUUID());
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
+	const emojiRootRef = useRef<HTMLDivElement>(null);
 
 	const effectiveUserId = userId ?? guestIdRef.current;
 
@@ -103,7 +138,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 			setLoading(true);
 			const { data } = await supabase
 				.from("chat_messages")
-				.select("id, event_id, user_id, display_name, text, type, upvotes, created_at")
+				.select(
+					"id, event_id, user_id, display_name, text, type, upvotes, created_at",
+				)
 				.eq("event_id", eventId)
 				.order("created_at", { ascending: true })
 				.limit(100);
@@ -135,7 +172,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 					filter: `event_id=eq.${eventId}`,
 				},
 				(payload) => {
-					console.log("[ChatPanel] realtime INSERT", payload.new);
 					const msg = payload.new as ChatMessage;
 					setMessages((prev) =>
 						prev.find((m) => m.id === msg.id) ? prev : [...prev, msg],
@@ -181,28 +217,80 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 		if (isOpen) setTimeout(() => inputRef.current?.focus(), 320);
 	}, [isOpen]);
 
-	const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		const val = e.target.value;
-		setInputText(val);
-		// Show autocomplete if user typed @ but hasn't completed "@Question "
-		setShowAutocomplete(
-			val.startsWith("@") &&
-				!"@question ".startsWith(val.toLowerCase()) === false &&
-				!val.toLowerCase().startsWith("@question "),
+	useEffect(() => {
+		if (!emojiOpen) return;
+		const onDocPointerDown = (e: MouseEvent) => {
+			if (emojiRootRef.current?.contains(e.target as Node)) return;
+			setEmojiOpen(false);
+		};
+		document.addEventListener("mousedown", onDocPointerDown);
+		return () => document.removeEventListener("mousedown", onDocPointerDown);
+	}, [emojiOpen]);
+
+	// Lazily fetch real profile pictures for message authors. UUIDs only —
+	// guest messages use random IDs that won't match users.auth_user_id.
+	const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+	useEffect(() => {
+		const ids = Array.from(
+			new Set(messages.map((m) => m.user_id).filter((id) => UUID_RE.test(id))),
 		);
+		const missing = ids.filter((id) => !(id in profileLookup));
+		if (missing.length === 0) return;
+		supabase
+			.from("users")
+			.select("auth_user_id, profile_picture_url, profile_color")
+			.in("auth_user_id", missing)
+			.then(({ data }) => {
+				const next: Record<string, UserProfileLite> = {};
+				missing.forEach((id) => {
+					next[id] = { picture: null, color: null };
+				});
+				(data ?? []).forEach(
+					(row: {
+						auth_user_id: string;
+						profile_picture_url: string | null;
+						profile_color: string | null;
+					}) => {
+						if (row.auth_user_id)
+							next[row.auth_user_id] = {
+								picture: row.profile_picture_url ?? null,
+								color: row.profile_color ?? null,
+							};
+					},
+				);
+				setProfileLookup((prev) => ({ ...prev, ...next }));
+			});
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [messages]);
+
+	const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		setInputText(e.target.value);
 	};
 
-	const applyAutocomplete = () => {
-		setInputText("@Question ");
-		setShowAutocomplete(false);
-		inputRef.current?.focus();
+	const insertMention = () => {
+		const next = inputText.toLowerCase().startsWith("@question ")
+			? inputText
+			: `@Question ${inputText}`;
+		setInputText(next);
+		requestAnimationFrame(() => {
+			const el = inputRef.current;
+			if (!el) return;
+			el.focus();
+			const pos = next.length;
+			el.setSelectionRange(pos, pos);
+		});
+	};
+
+	const insertEmoji = (emoji: string) => {
+		setInputText((prev) => prev + emoji);
+		requestAnimationFrame(() => inputRef.current?.focus());
 	};
 
 	const handleSend = async () => {
 		const text = inputText.trim();
 		if (!text) return;
 		setInputText("");
-		setShowAutocomplete(false);
+		setEmojiOpen(false);
 		const isQuestion = /^@question\s/i.test(text);
 		const tempId = crypto.randomUUID();
 		const optimistic: ChatMessage = {
@@ -261,26 +349,18 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 	};
 
 	const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-		if (e.key === "Tab" && showAutocomplete) {
-			e.preventDefault();
-			applyAutocomplete();
-			return;
-		}
-		if (e.key === "Enter" && showAutocomplete) {
-			e.preventDefault();
-			applyAutocomplete();
-			return;
-		}
 		if (e.key === "Enter" && !e.shiftKey) {
 			e.preventDefault();
 			handleSend();
 		}
-		if (e.key === "Escape") setShowAutocomplete(false);
+		if (e.key === "Escape") {
+			setEmojiOpen(false);
+		}
 	};
 
 	const formatTime = (ts: string) =>
 		new Date(ts).toLocaleTimeString(undefined, {
-			hour: "2-digit",
+			hour: "numeric",
 			minute: "2-digit",
 		});
 
@@ -289,6 +369,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 		.filter((m) => m.type === "question")
 		.sort((a, b) => b.upvotes - a.upvotes);
 	const isQuestionMode = inputText.toLowerCase().startsWith("@question");
+	const hasContent = inputText.trim().length > 0;
+	const topQuestionText = questions[0]
+		? questions[0].text.replace(/^@[Qq]uestion\s*/i, "")
+		: null;
 
 	return (
 		<div
@@ -306,506 +390,583 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
 			{/* Centering wrapper — matches the 430px main column */}
 			<div className="absolute inset-0 xl:max-w-[430px] xl:left-1/2 xl:-translate-x-1/2 overflow-hidden">
-
-			{/* Panel column — slides in from right */}
-			<div
-				className="absolute inset-0 flex flex-col overflow-hidden"
-				style={{
-					background: "#080a14",
-					transform: isOpen ? "translateX(0)" : "translateX(100%)",
-					transition: "transform 300ms cubic-bezier(0.22,1,0.36,1)",
-				}}
-			>
-			{/* Ambient glow */}
-			<div className="absolute inset-0 pointer-events-none overflow-hidden">
+				{/* Panel column — slides in from right */}
 				<div
-					className="absolute -top-32 left-1/2 -translate-x-1/2 w-[140vw] h-[55vh] rounded-full opacity-40"
-					style={{ background: "radial-gradient(ellipse at center, #2d1b69 0%, #1a0e4a 35%, transparent 70%)" }}
-				/>
-				<div
-					className="absolute top-1/3 -right-24 w-64 h-64 rounded-full opacity-15"
-					style={{ background: "radial-gradient(circle, #0ea5e9 0%, transparent 70%)", filter: "blur(40px)" }}
-				/>
-			</div>
-
-			<div className="relative z-10 flex flex-col flex-1 min-h-0">
-
-			{/* ── Header ── */}
-			<div
-				className="relative z-20 flex-shrink-0 flex items-center gap-3 px-5 pt-6 pb-4"
-				style={{
-					borderBottom: "1px solid rgba(255,255,255,0.06)",
-					background: "rgba(8,10,20,0.8)",
-					backdropFilter: "blur(24px)",
-				}}
-			>
-				<button
-					onClick={onClose}
-					className="w-8 h-8 rounded-full flex items-center justify-center text-white/40 hover:text-white/80 transition-all active:scale-90 flex-shrink-0"
+					className="absolute inset-0 flex flex-col overflow-hidden"
 					style={{
-						background: "rgba(255,255,255,0.05)",
-						border: "1px solid rgba(255,255,255,0.08)",
+						background: "var(--c-bg-deep)",
+						transform: isOpen ? "translateX(0)" : "translateX(100%)",
+						transition: "transform 300ms cubic-bezier(0.22,1,0.36,1)",
 					}}
 				>
-					<X size={15} />
-				</button>
-
-				<div className="flex-1 min-w-0">
-					<p className="text-white/30 text-[9px] font-semibold uppercase tracking-[0.2em] leading-none mb-1">
-						PitchTank Live
-					</p>
-					<h2 className="text-white font-black text-lg leading-none">
-						Live Chat
-					</h2>
-				</div>
-
-				<div className="flex items-center gap-2">
-					<div
-						className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
-						style={{
-							background: "rgba(34,197,94,0.1)",
-							border: "1px solid rgba(34,197,94,0.25)",
-						}}
-					>
-						<span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-						<span className="text-green-400 text-[10px] font-bold tracking-widest">
-							LIVE
-						</span>
+					{/* Ambient glow */}
+					<div className="absolute inset-0 pointer-events-none overflow-hidden">
+						<div
+							className="absolute -top-32 left-1/2 -translate-x-1/2 w-[140vw] h-[55vh] rounded-full opacity-40"
+							style={{
+								background:
+									"radial-gradient(ellipse at center, #2d1b69 0%, #1a0e4a 35%, transparent 70%)",
+							}}
+						/>
+						<div
+							className="absolute top-1/3 -right-24 w-64 h-64 rounded-full opacity-15"
+							style={{
+								background:
+									"radial-gradient(circle, #0ea5e9 0%, transparent 70%)",
+								filter: "blur(40px)",
+							}}
+						/>
 					</div>
 
-					{onlineCount > 0 && (
-						<div
-							className="flex items-center gap-1 px-2.5 py-1 rounded-full"
-							style={{
-								background: "rgba(255,255,255,0.05)",
-								border: "1px solid rgba(255,255,255,0.08)",
-							}}
-						>
-							<Users size={11} className="text-white/40" />
-							<span className="text-white/50 text-[10px] font-bold tabular-nums">
-								{onlineCount >= 1000
-									? `${(onlineCount / 1000).toFixed(1)}k`
-									: onlineCount}
-							</span>
-						</div>
-					)}
-
-					<button
-						onClick={() => setQuestionsOpen((o) => !o)}
-						className="relative w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-90"
-						style={{
-							background: questionsOpen
-								? "rgba(99,102,241,0.2)"
-								: "rgba(255,255,255,0.05)",
-							border: questionsOpen
-								? "1px solid rgba(99,102,241,0.4)"
-								: "1px solid rgba(255,255,255,0.08)",
-						}}
-					>
-						<HelpCircle
-							size={15}
-							className={questionsOpen ? "text-indigo-300" : "text-white/40"}
-						/>
-						{questions.length > 0 && (
-							<span
-								className="absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full flex items-center justify-center text-white font-black tabular-nums"
-								style={{
-									background: "#ef4444",
-									fontSize: 9,
-									padding: "0 3px",
-									boxShadow: "0 0 8px rgba(239,68,68,0.7)",
-								}}
-							>
-								{questions.length}
-							</span>
-						)}
-					</button>
-				</div>
-			</div>
-
-			{/* ── Chat + questions overlay ── */}
-			<div className="relative flex-1 min-h-0">
-				{/* Messages */}
-				<div className="absolute inset-0 overflow-y-auto px-4 py-3">
-					{loading ? (
-						<div className="flex items-center justify-center h-full">
-							<div className="w-5 h-5 rounded-full border-2 border-white/10 border-t-white/40 animate-spin" />
-						</div>
-					) : chatMessages.length === 0 ? (
-						<div className="flex flex-col items-center justify-center h-full gap-3 text-center py-16">
-							<div
-								className="w-12 h-12 rounded-2xl flex items-center justify-center"
-								style={{
-									background: "rgba(99,102,241,0.08)",
-									border: "1px solid rgba(99,102,241,0.15)",
-								}}
-							>
-								<HelpCircle size={20} className="text-indigo-400/40" />
-							</div>
-							<p className="text-white/25 text-sm">No messages yet</p>
-						</div>
-					) : (
-						<div className="space-y-2.5">
-							{chatMessages.map((msg) => {
-								const nameCol = usernameColor(msg.display_name);
-								const isQ = msg.type === "question";
-								return (
-									<div
-										key={msg.id}
-										className="flex items-start gap-2 leading-snug"
-									>
-										<Avatar name={msg.display_name} size={22} />
-										<p className="flex-1 text-[15px] min-w-0 break-words mt-px">
-											{isQ && (
-												<span
-													className="inline-flex items-center gap-1 mr-1.5 px-1.5 py-0.5 rounded-md text-[10px] font-black"
-													style={{
-														background: "rgba(99,102,241,0.2)",
-														color: "#a5b4fc",
-														border: "1px solid rgba(99,102,241,0.3)",
-														verticalAlign: "middle",
-													}}
-												>
-													<HelpCircle size={9} />Q
-												</span>
-											)}
-											{onStartDM && msg.user_id !== userId ? (
-												<button
-													onClick={() => onStartDM(msg.user_id, msg.display_name)}
-													className="font-bold mr-1 hover:underline active:opacity-70 transition-opacity"
-													style={{ color: nameCol }}
-												>
-													{msg.display_name}:
-												</button>
-											) : (
-												<span
-													className="font-bold mr-1"
-													style={{ color: nameCol }}
-												>
-													{msg.display_name}:
-												</span>
-											)}
-											<span className="text-white/80">
-												{isQ
-													? msg.text.replace(/^@[Qq]uestion\s*/i, "")
-													: msg.text}
+					<div className="relative z-10 flex flex-col flex-1 min-h-0">
+						{/* ── Header ── */}
+						<div className="relative z-20 flex-shrink-0 px-4 pt-4 pb-3 bg-transparent">
+							<div className="flex items-stretch justify-between gap-2">
+								<div className="flex items-center gap-2 flex-1 min-w-0">
+									<IconButton
+										size="sm"
+										aria-label="Close chat"
+										icon={<ArrowLeft size={14} strokeWidth={1.75} />}
+										onClick={onClose}
+										className="shrink-0"
+									/>
+									<img
+										src="/icons/icon-192.png"
+										alt=""
+										aria-hidden
+										className="w-8 h-8 rounded-xl object-cover shrink-0"
+									/>
+									<div className="leading-tight min-w-0 flex-1">
+										<div className="flex items-center gap-1.5">
+											<span className="font-display font-semibold text-white text-[14px] tracking-tight truncate">
+												PitchTank Live
 											</span>
-										</p>
+											<span
+												className="inline-flex items-center px-1.5 h-[16px] rounded-full text-[8.5px] font-display font-semibold tracking-wider uppercase shrink-0"
+												style={{
+													color: "var(--c-purple)",
+													background: "rgba(162,89,255,0.15)",
+													boxShadow:
+														"inset 0 0 0 1px rgba(162,89,255,0.4)",
+												}}
+											>
+												Live
+											</span>
+										</div>
+										<div className="flex items-center gap-1.5 text-[10.5px] text-pt-text-2 mt-0.5">
+											<span className="truncate">Audience chat</span>
+											<span
+												aria-hidden
+												className="inline-flex items-center gap-1 shrink-0"
+											>
+												<span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]" />
+											</span>
+										</div>
 									</div>
-								);
-							})}
-							<div ref={messagesEndRef} />
-						</div>
-					)}
-				</div>
-
-				{/* Dim backdrop */}
-				<div
-					className="absolute inset-0 z-10"
-					style={{
-						background: "rgba(4,5,14,0.82)",
-						backdropFilter: "blur(4px)",
-						opacity: questionsOpen ? 1 : 0,
-						transition: "opacity 260ms ease",
-						pointerEvents: questionsOpen ? "auto" : "none",
-					}}
-					onClick={() => setQuestionsOpen(false)}
-				/>
-
-				{/* Questions drawer */}
-				{questionsOpen && (
-					<div className="absolute left-0 right-0 top-0 z-20">
-						<div
-							className="overflow-y-auto"
-							style={{
-								maxHeight: "72vh",
-								background: "rgba(10,9,26,0.98)",
-								backdropFilter: "blur(28px)",
-								borderBottom: "1px solid rgba(99,102,241,0.18)",
-								boxShadow:
-									"0 20px 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(99,102,241,0.08)",
-							}}
-						>
-							{/* Drawer header */}
-							<div
-								className="sticky top-0 flex items-center justify-between px-5 py-3.5 z-10"
-								style={{
-									background: "rgba(10,9,26,0.99)",
-									backdropFilter: "blur(20px)",
-									borderBottom: "1px solid rgba(99,102,241,0.1)",
-								}}
-							>
-								<div className="flex items-center gap-2.5">
 									<div
-										className="w-6 h-6 rounded-lg flex items-center justify-center"
+										className="inline-flex items-center gap-1 px-2 h-7 rounded-xl shrink-0"
 										style={{
-											background: "linear-gradient(135deg, #6366f1, #22d3ee)",
-											boxShadow: "0 0 12px rgba(99,102,241,0.5)",
+											background: "rgba(255,255,255,0.03)",
+											boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.10)",
 										}}
 									>
-										<HelpCircle size={13} className="text-white" />
+										<Users
+											size={11}
+											strokeWidth={1.75}
+											className="text-pt-text-2"
+										/>
+										<span className="font-display font-semibold text-white text-[11px] num">
+											{formatCount(onlineCount)}
+										</span>
 									</div>
-									<span className="text-white font-black text-sm">
-										Questions
-									</span>
-									<span
-										className="text-[10px] font-black px-1.5 py-0.5 rounded-full"
-										style={{
-											background: "rgba(99,102,241,0.2)",
-											color: "#818cf8",
-											border: "1px solid rgba(99,102,241,0.3)",
-										}}
-									>
-										{questions.length}
-									</span>
 								</div>
 								<button
-									onClick={() => setQuestionsOpen(false)}
-									className="w-7 h-7 rounded-full flex items-center justify-center text-white/30 hover:text-white/70 transition-colors"
-									style={{ background: "rgba(255,255,255,0.05)" }}
+									type="button"
+									aria-label="Open chat room rules"
+									onClick={() => setShowRules(true)}
+									className="shrink-0 self-center w-10 h-10 hover:brightness-125 transition-all"
 								>
-									<X size={14} />
+									<img
+										src="/chat/chat-question.png"
+										alt=""
+										aria-hidden
+										className="w-full h-full object-contain"
+									/>
 								</button>
 							</div>
 
-							{/* Question items */}
-							{questions.length === 0 ? (
-								<div className="px-5 py-10 text-center text-white/20 text-sm">
-									No questions yet
-								</div>
-							) : (
-								questions.map((q, i) => {
-									const questionText = q.text.replace(/^@[Qq]uestion\s*/i, "");
-									const hasUpvoted = upvotedIds.has(q.id);
-									const nameCol = usernameColor(q.display_name);
-									return (
+							{/* Top Questions — single card that expands/collapses */}
+							{questions.length > 0 && (
+								<div className="mt-3">
+									<GlassCard tone="neutral" size="sm">
+										<button
+											type="button"
+											onClick={() => setQuestionsOpen((o) => !o)}
+											aria-label={
+												questionsOpen
+													? "Collapse questions panel"
+													: "Expand questions panel"
+											}
+											aria-expanded={questionsOpen}
+											className="block w-full text-left hover:brightness-110 transition-all"
+										>
+											<div className="flex items-center gap-3">
+												<Sparkles
+													size={18}
+													strokeWidth={1.75}
+													className="text-pt-cyan shrink-0"
+												/>
+												<div className="leading-tight min-w-0 flex-1">
+													<div className="text-[10px] text-pt-text-2 font-display tracking-wider uppercase">
+														Top Questions
+													</div>
+													<div className="font-display text-white text-[13px] font-semibold truncate mt-0.5">
+														<span className="text-pt-cyan num mr-1">
+															[{questions.length}]
+														</span>
+														{questionsOpen
+															? "Sorted by audience upvotes"
+															: topQuestionText}
+													</div>
+												</div>
+												<ChevronDown
+													size={16}
+													strokeWidth={1.75}
+													className="text-pt-text-2 shrink-0 transition-transform duration-300 ease-out"
+													style={{
+														transform: questionsOpen
+															? "rotate(180deg)"
+															: "rotate(0deg)",
+													}}
+												/>
+											</div>
+										</button>
+
+										{/* Animated expandable list */}
 										<div
-											key={q.id}
-											className="flex items-start gap-3 px-5 py-3.5"
+											aria-hidden={!questionsOpen}
+											className="overflow-hidden ease-out"
 											style={{
-												borderTop:
-													i > 0
-														? "1px solid rgba(255,255,255,0.04)"
-														: undefined,
-												background:
-													i === 0 ? "rgba(99,102,241,0.04)" : undefined,
+												maxHeight: questionsOpen ? 600 : 0,
+												opacity: questionsOpen ? 1 : 0,
+												transition:
+													"max-height 320ms ease-out, opacity 220ms ease-out",
 											}}
 										>
-											<div
-												className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black flex-shrink-0 mt-0.5"
-												style={
-													i === 0
-														? {
-																background: "rgba(99,102,241,0.3)",
-																color: "#818cf8",
-																border: "1px solid rgba(99,102,241,0.5)",
-															}
-														: {
-																background: "rgba(255,255,255,0.05)",
-																color: "rgba(255,255,255,0.2)",
-															}
-												}
-											>
-												{i + 1}
-											</div>
-											<div className="flex-1 min-w-0">
-												<p className="text-white/85 text-sm leading-snug">
-													{questionText}
-												</p>
-												<div className="flex items-center gap-1.5 mt-1">
-													<Avatar name={q.display_name} size={14} />
-													<p
-														className="text-[10px] font-semibold"
-														style={{ color: nameCol }}
-													>
-														{q.display_name}
-														<span className="text-white/20 font-normal">
-															{" "}
-															· {formatTime(q.created_at)}
-														</span>
-													</p>
-												</div>
-											</div>
-											<button
-												onClick={() => handleUpvote(q.id)}
-												disabled={hasUpvoted}
-												className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl flex-shrink-0 transition-all active:scale-95"
-												style={
-													hasUpvoted
-														? {
-																background: "rgba(34,211,238,0.12)",
-																border: "1px solid rgba(34,211,238,0.3)",
-																color: "#22d3ee",
-															}
-														: {
-																background: "rgba(255,255,255,0.04)",
-																border: "1px solid rgba(255,255,255,0.08)",
-																color: "rgba(255,255,255,0.25)",
-															}
-												}
-											>
-												<ArrowUp size={12} />
-												<span className="text-[9px] font-black tabular-nums">
-													{q.upvotes}
-												</span>
-											</button>
+											<ul className="mt-3 pt-3 max-h-[42vh] overflow-y-auto divide-y divide-white/5 border-t border-white/5">
+												{questions.map((q) => {
+													const text = q.text.replace(/^@[Qq]uestion\s*/i, "");
+													const active = upvotedIds.has(q.id);
+													return (
+														<li
+															key={q.id}
+															className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
+														>
+															<span className="flex-1 min-w-0 text-white text-[12.5px] leading-snug break-words">
+																{text}
+															</span>
+															<button
+																type="button"
+																onClick={() => handleUpvote(q.id)}
+																disabled={active}
+																aria-label={
+																	active
+																		? "Already upvoted"
+																		: "Upvote question"
+																}
+																aria-pressed={active}
+																className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl shrink-0 transition-all active:scale-95"
+																style={
+																	active
+																		? {
+																				color: "var(--c-cyan)",
+																				background: "rgba(0,229,255,0.12)",
+																				boxShadow:
+																					"inset 0 0 0 1px rgba(0,229,255,0.4), 0 0 10px rgba(0,229,255,0.18)",
+																			}
+																		: {
+																				color: "rgba(255,255,255,0.45)",
+																				background: "rgba(255,255,255,0.04)",
+																				boxShadow:
+																					"inset 0 0 0 1px rgba(255,255,255,0.10)",
+																			}
+																}
+															>
+																<ArrowUp size={12} strokeWidth={2} />
+																<span className="text-[9px] font-display font-semibold num">
+																	{q.upvotes}
+																</span>
+															</button>
+														</li>
+													);
+												})}
+											</ul>
+											<p className="mt-3 text-center text-[10.5px] text-pt-text-3">
+												Type{" "}
+												<span className="font-mono text-pt-purple">
+													@Question your question
+												</span>{" "}
+												in chat
+											</p>
 										</div>
-									);
-								})
+									</GlassCard>
+								</div>
 							)}
+						</div>
 
+						{/* ── Messages ── */}
+						<div className="relative flex-1 min-h-0">
+							<div className="absolute inset-0 overflow-y-auto px-4 pt-3 pb-3">
+								{loading ? (
+									<div className="flex items-center justify-center h-full">
+										<div className="w-5 h-5 rounded-full border-2 border-white/10 border-t-pt-purple animate-spin" />
+									</div>
+								) : chatMessages.length === 0 ? (
+									<div className="flex flex-col items-center justify-center h-full gap-3 text-center py-16">
+										<div
+											className="w-12 h-12 rounded-2xl flex items-center justify-center"
+											style={{
+												background: "rgba(162,89,255,0.08)",
+												boxShadow: "inset 0 0 0 1px rgba(162,89,255,0.18)",
+											}}
+										>
+											<Sparkles size={20} className="text-pt-purple/60" />
+										</div>
+										<p className="text-pt-text-3 text-sm">No messages yet</p>
+									</div>
+								) : (
+									<div className="flex flex-col gap-4">
+										{chatMessages.map((msg) => {
+											const nameCol = usernameColor(msg.display_name);
+											const lookup = profileLookup[msg.user_id];
+											const grad = lookup?.color
+												? gradientForUser(lookup.color, msg.user_id)
+												: avatarGradient(msg.display_name);
+											const userPic = lookup?.picture ?? undefined;
+											const isQ = msg.type === "question";
+											const cleanText = isQ
+												? msg.text.replace(/^@[Qq]uestion\s*/i, "")
+												: msg.text;
+											const isOwnMsg = msg.user_id === userId;
+											const goToProfile = () =>
+												navigate(`/profile/${msg.user_id}`);
+											return (
+												<div
+													key={msg.id}
+													className="flex items-start gap-3"
+												>
+													{isOwnMsg ? (
+														<PtAvatar
+															size="md"
+															name={msg.display_name}
+															gradient={grad}
+															photo={userPic}
+															className="shrink-0"
+														/>
+													) : (
+														<button
+															type="button"
+															onClick={goToProfile}
+															aria-label={`View ${msg.display_name}'s profile`}
+															className="shrink-0 rounded-full transition-transform active:scale-95 hover:brightness-110"
+														>
+															<PtAvatar
+																size="md"
+																name={msg.display_name}
+																gradient={grad}
+																photo={userPic}
+															/>
+														</button>
+													)}
+													<div className="leading-tight min-w-0 flex-1 pt-0.5">
+														<div className="flex items-baseline gap-2 flex-wrap">
+															{!isOwnMsg ? (
+																<button
+																	type="button"
+																	onClick={goToProfile}
+																	aria-label={`View ${msg.display_name}'s profile`}
+																	className="font-display font-semibold text-[13px] hover:underline active:opacity-70 transition-opacity"
+																	style={{ color: nameCol }}
+																>
+																	{msg.display_name}
+																</button>
+															) : (
+																<span
+																	className="font-display font-semibold text-[13px]"
+																	style={{ color: nameCol }}
+																>
+																	{msg.display_name}
+																</span>
+															)}
+															<span className="text-[10px] text-pt-text-3 num">
+																{formatTime(msg.created_at)}
+															</span>
+															{isQ && (
+																<span
+																	className="inline-flex items-center gap-1 px-1.5 h-[16px] rounded-full text-[8.5px] font-display font-semibold tracking-wider uppercase"
+																	style={{
+																		color: "var(--c-cyan)",
+																		background: "rgba(0,229,255,0.12)",
+																		boxShadow:
+																			"inset 0 0 0 1px rgba(0,229,255,0.35)",
+																	}}
+																>
+																	Q
+																</span>
+															)}
+														</div>
+														<p className="mt-0.5 text-[13px] text-white/90 whitespace-pre-line break-words">
+															{cleanText}
+														</p>
+													</div>
+												</div>
+											);
+										})}
+										<div ref={messagesEndRef} />
+									</div>
+								)}
+							</div>
+						</div>
+
+						{/* ── Composer ── */}
+						<div
+							className="relative z-20 flex-shrink-0"
+							style={{
+								background: "rgba(3,4,13,0.85)",
+								backdropFilter: "blur(24px)",
+								WebkitBackdropFilter: "blur(24px)",
+							}}
+						>
 							<div
-								className="px-5 py-3 text-center"
-								style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}
+								aria-hidden
+								className="h-px w-full"
+								style={{
+									background:
+										"linear-gradient(to right, transparent 0%, rgba(0,229,255,0.6) 25%, rgba(162,89,255,0.85) 60%, transparent 100%)",
+								}}
+							/>
+							<div
+								className="px-4 pt-3"
+								style={{
+									paddingBottom:
+										"max(env(safe-area-inset-bottom, 0px) + 12px, 16px)",
+								}}
 							>
-								<p className="text-white/15 text-[10px]">
-									Type{" "}
-									<span className="font-mono text-indigo-400/50">
-										@Question your question
-									</span>{" "}
-									in chat
-								</p>
+								{/* "Ask a question" tag — toggles @Question mode */}
+								<div className="mb-2">
+									<button
+										type="button"
+										onClick={insertMention}
+										aria-pressed={isQuestionMode}
+										aria-label="Ask a question to the founder"
+										className="inline-flex items-center gap-1.5 px-3 h-7 rounded-full font-display font-semibold tracking-[0.14em] uppercase text-[10.5px] transition-all active:scale-95"
+										style={
+											isQuestionMode
+												? {
+														color: "var(--c-purple)",
+														background: "rgba(162,89,255,0.15)",
+														boxShadow:
+															"inset 0 0 0 1px rgba(162,89,255,0.5), 0 0 12px rgba(162,89,255,0.18)",
+													}
+												: {
+														color: "var(--c-text-2)",
+														background: "rgba(255,255,255,0.04)",
+														boxShadow:
+															"inset 0 0 0 1px rgba(255,255,255,0.12)",
+													}
+										}
+									>
+										<AtSign size={11} strokeWidth={2} />
+										Ask a question
+									</button>
+								</div>
+
+								<div className="flex items-center gap-2">
+									<label
+										className="relative flex-1 flex items-center h-10 rounded-xl transition-all"
+										style={{
+											background: "rgba(255,255,255,0.03)",
+											boxShadow: hasContent
+												? `inset 0 0 0 1px ${isQuestionMode ? "rgba(162,89,255,0.7)" : "rgba(79,124,255,0.7)"}, 0 0 14px ${isQuestionMode ? "rgba(162,89,255,0.20)" : "rgba(79,124,255,0.25)"}`
+												: "inset 0 0 0 1px rgba(255,255,255,0.12)",
+											transition: "box-shadow 180ms ease",
+										}}
+									>
+										{isQuestionMode && (
+											<span
+												className="ml-2 inline-flex items-center px-1.5 h-[18px] rounded-full text-[9px] font-display font-semibold tracking-wider uppercase shrink-0"
+												style={{
+													color: "var(--c-purple)",
+													background: "rgba(162,89,255,0.15)",
+													boxShadow:
+														"inset 0 0 0 1px rgba(162,89,255,0.4)",
+												}}
+											>
+												Q
+											</span>
+										)}
+										<input
+											ref={inputRef}
+											type="text"
+											value={inputText}
+											onChange={handleInputChange}
+											onKeyDown={handleKeyDown}
+											placeholder="Message…"
+											aria-label="Message"
+											className="flex-1 bg-transparent border-0 outline-none px-3 text-[16px] text-white placeholder:text-pt-text-3 min-w-0"
+										/>
+										<div ref={emojiRootRef} className="relative shrink-0">
+											<button
+												type="button"
+												aria-label="Open emoji picker"
+												aria-expanded={emojiOpen}
+												aria-haspopup="dialog"
+												onClick={() => setEmojiOpen((v) => !v)}
+												className="px-2.5 h-full flex items-center justify-center text-pt-text-2 hover:text-white transition-all"
+											>
+												<Smile size={20} strokeWidth={1.75} />
+											</button>
+											{emojiOpen && (
+												<div
+													role="dialog"
+													aria-label="Emoji picker"
+													className="absolute bottom-full right-0 mb-3 z-50 w-[232px]"
+												>
+													<GlassCard tone="neutral" size="sm">
+														<div className="grid grid-cols-5 gap-1">
+															{EMOJIS.map((emo) => (
+																<button
+																	key={emo}
+																	type="button"
+																	onClick={() => insertEmoji(emo)}
+																	className="h-9 rounded-xl text-[18px] leading-none hover:bg-white/[0.08] transition-all"
+																>
+																	{emo}
+																</button>
+															))}
+														</div>
+													</GlassCard>
+												</div>
+											)}
+										</div>
+									</label>
+
+									<IconButton
+										type="button"
+										size="md"
+										aria-label="Send message"
+										icon={<Send size={15} strokeWidth={1.75} />}
+										onClick={handleSend}
+										disabled={!hasContent}
+										className="shrink-0"
+										style={
+											hasContent
+												? ({
+														color: "var(--c-cyan)",
+														boxShadow:
+															"inset 0 0 0 1px rgba(0,229,255,0.6), 0 0 14px rgba(0,229,255,0.30)",
+													} as React.CSSProperties)
+												: undefined
+										}
+									/>
+								</div>
+
+								<div className="flex items-center justify-center gap-2 mt-2 text-[10.5px] text-pt-text-2">
+									<ShieldCheck
+										size={11}
+										strokeWidth={1.75}
+										className="text-pt-text-3"
+									/>
+									<span>Be respectful. Keep it constructive.</span>
+								</div>
 							</div>
 						</div>
 					</div>
-				)}
-			</div>
 
-			{/* ── Input ── */}
-			<div
-				className="relative z-20 flex-shrink-0 px-4 pt-3"
-				style={{
-					borderTop: "1px solid rgba(99,102,241,0.15)",
-					background:
-						"linear-gradient(180deg, rgba(13,11,32,0.98) 0%, rgba(8,10,20,0.99) 100%)",
-					backdropFilter: "blur(24px)",
-					boxShadow: "0 -8px 32px rgba(0,0,0,0.4)",
-					paddingBottom: "max(env(safe-area-inset-bottom, 0px) + 16px, 28px)",
-				}}
-			>
-				{/* @Question autocomplete popup */}
-				{showAutocomplete && (
-					<button
-						onMouseDown={(e) => {
-							e.preventDefault();
-							applyAutocomplete();
-						}}
-						className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl mb-2 text-left transition-all"
+					{/* Chat Rules modal */}
+					<div
+						className="absolute inset-0 z-30 flex items-center justify-center px-5"
+						aria-hidden={!showRules}
 						style={{
-							background: "rgba(99,102,241,0.15)",
-							border: "1px solid rgba(99,102,241,0.35)",
-							boxShadow: "0 4px 16px rgba(99,102,241,0.15)",
+							pointerEvents: showRules ? "auto" : "none",
+							opacity: showRules ? 1 : 0,
+							transition: "opacity 200ms ease-out",
 						}}
+						onClick={() => setShowRules(false)}
 					>
+						<div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
 						<div
-							className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
+							className="relative w-full max-w-[360px] max-h-[calc(100%-32px)] overflow-y-auto"
 							style={{
-								background: "linear-gradient(135deg, #6366f1, #22d3ee)",
+								transform: showRules ? "scale(1)" : "scale(0.96)",
+								transition: "transform 240ms cubic-bezier(0.22,1,0.36,1)",
 							}}
+							onClick={(e) => e.stopPropagation()}
 						>
-							<HelpCircle size={13} className="text-white" />
+							<GlassCard tone="neutral" size="lg">
+								<button
+									type="button"
+									onClick={() => setShowRules(false)}
+									aria-label="Close rules"
+									className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center text-pt-text-2 hover:text-white"
+									style={{
+										background: "rgba(255,255,255,0.05)",
+										boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)",
+									}}
+								>
+									<XIcon size={14} />
+								</button>
+								<div className="flex flex-col items-center text-center pt-2">
+									<img
+										src="/chat/chat-rule-top.png"
+										alt=""
+										aria-hidden
+										className="w-20 h-20 object-contain"
+									/>
+									<h2 className="mt-3 font-display font-semibold text-white text-[22px] tracking-tight">
+										Chat Room Rules
+									</h2>
+									<p className="mt-2 text-[13px] text-pt-text-2 leading-snug px-2">
+										Ask smart questions. Vote for the ones you want answered.
+									</p>
+								</div>
+								<ul className="mt-5 flex flex-col gap-3.5">
+									{[
+										{ icon: "/chat/chat-rule-1.png", heading: "Ask with @Question", body: "Use @Question to ask the founder a question." },
+										{ icon: "/chat/chat-rule-2.png", heading: "Upvote questions", body: "Tap the upvote on questions you also want answered." },
+										{ icon: "/chat/chat-rule-3.png", heading: "Top questions go to the MC", body: "The most-upvoted questions may be read live during the event." },
+										{ icon: "/chat/chat-rule-4.png", heading: "Win the audience reward", body: "The most-upvoted question receives the audience prize." },
+									].map((r) => (
+										<li key={r.heading} className="flex items-start gap-3">
+											<img
+												src={r.icon}
+												alt=""
+												aria-hidden
+												className="w-14 h-14 object-contain shrink-0"
+											/>
+											<div className="leading-tight pt-1 min-w-0">
+												<div className="font-display font-semibold text-white text-[14px]">
+													{r.heading}
+												</div>
+												<div className="text-[12px] text-pt-text-2 mt-1">
+													{r.body}
+												</div>
+											</div>
+										</li>
+									))}
+								</ul>
+								<button
+									type="button"
+									onClick={() => setShowRules(false)}
+									className="pt-btn pt-btn-primary pt-btn-lg w-full mt-5"
+								>
+									Got it
+								</button>
+							</GlassCard>
 						</div>
-						<div className="flex-1 min-w-0">
-							<span className="text-indigo-300 font-bold text-sm">
-								@Question
-							</span>
-							<span className="text-white/40 text-sm">
-								{" "}
-								— submit a question
-							</span>
-						</div>
-						<span className="text-white/25 text-[10px] font-mono border border-white/15 rounded px-1.5 py-0.5">
-							Tab
-						</span>
-					</button>
-				)}
-
-				{/* Quick chip row */}
-				<div className="flex items-center gap-2 mb-2.5">
-					<button
-						onClick={() => {
-							setInputText("@Question ");
-							setShowAutocomplete(false);
-							inputRef.current?.focus();
-						}}
-						className="flex items-center gap-1.5 px-2.5 py-1 rounded-full transition-all active:scale-95"
-						style={{
-							background: "rgba(99,102,241,0.1)",
-							border: "1px solid rgba(99,102,241,0.18)",
-						}}
-					>
-						<HelpCircle size={10} className="text-indigo-400/70" />
-						<span className="text-indigo-300/70 text-[10px] font-semibold">
-							Ask a question
-						</span>
-					</button>
-					<span className="text-white/15 text-[10px]">Be respectful</span>
+					</div>
 				</div>
-
-				{/* Input row */}
-				<div
-					className="flex items-center gap-2 rounded-2xl px-3 py-2"
-					style={{
-						background: "rgba(255,255,255,0.05)",
-						border: isQuestionMode
-							? "1px solid rgba(99,102,241,0.4)"
-							: "1px solid rgba(255,255,255,0.08)",
-						boxShadow: isQuestionMode
-							? "0 0 20px rgba(99,102,241,0.12)"
-							: undefined,
-						transition: "border-color 180ms ease, box-shadow 180ms ease",
-					}}
-				>
-					{isQuestionMode && (
-						<div
-							className="flex items-center gap-1 px-2 py-0.5 rounded-lg flex-shrink-0"
-							style={{
-								background: "rgba(99,102,241,0.2)",
-								border: "1px solid rgba(99,102,241,0.3)",
-							}}
-						>
-							<HelpCircle size={10} className="text-indigo-300" />
-							<span className="text-indigo-300 text-[10px] font-black">Q</span>
-						</div>
-					)}
-
-					<input
-						ref={inputRef}
-						type="text"
-						value={inputText}
-						onChange={handleInputChange}
-						onKeyDown={handleKeyDown}
-						onBlur={() => setTimeout(() => setShowAutocomplete(false), 150)}
-						placeholder="Message..."
-						className="flex-1 bg-transparent text-white placeholder-white/20 text-sm outline-none py-1.5 min-w-0"
-					/>
-
-					<button
-						onClick={handleSend}
-						disabled={!inputText.trim()}
-						className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-all active:scale-90"
-						style={
-							inputText.trim()
-								? {
-										background: "linear-gradient(135deg, #22d3ee, #6366f1)",
-										boxShadow: "0 0 14px rgba(34,211,238,0.35)",
-									}
-								: {
-										background: "rgba(255,255,255,0.04)",
-										border: "1px solid rgba(255,255,255,0.07)",
-									}
-						}
-					>
-						<Send
-							size={13}
-							className={inputText.trim() ? "text-white" : "text-white/20"}
-						/>
-					</button>
-				</div>
-			</div>
-			</div>
 			</div>
 		</div>
-	</div>
 	);
 };
