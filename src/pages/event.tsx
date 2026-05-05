@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
-import { Info, CircleHelp, ArrowLeft } from "lucide-react";
+import { Info, CircleHelp, ArrowLeft, Settings, Users } from "lucide-react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { TradeModal } from "../components/TradeModal";
 import { LeaderboardPanel } from "../components/LeaderboardPanel";
@@ -14,6 +14,7 @@ import { ChatPanel } from "../components/ChatPanel";
 import { ConversationsPanel } from "../components/ConversationsPanel";
 import { DMPanel } from "../components/DMPanel";
 import { SchedulePanel } from "../components/SchedulePanel";
+import { PeoplePanel } from "../components/PeoplePanel";
 import { SettingsPanel } from "../components/SettingsPanel";
 import { useAuth } from "../contexts/AuthContext";
 import { usePortfolioHistory } from "../hooks/usePortfolioHistory";
@@ -739,6 +740,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 		: null;
 	const [totalUnreadDMs, setTotalUnreadDMs] = useState(0);
 	const [showSchedule, setShowSchedule] = useState(false);
+	const [showPeople, setShowPeople] = useState(false);
 	const [showSettings, setShowSettings] = useState(false);
 	const [hasOpenedScanner, setHasOpenedScanner] = useState(
 		() => localStorage.getItem("scanner_opened") === "1"
@@ -851,6 +853,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 			showChat ||
 			!!activeDMPeer ||
 			showSchedule ||
+			showPeople ||
 			showSettings ||
 			showQRModal ||
 			showScanner ||
@@ -866,6 +869,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 		showLeaderboard,
 		location.pathname,
 		showSchedule,
+		showPeople,
 		showSettings,
 		showQRModal,
 		showScanner,
@@ -1242,8 +1246,8 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 						</div>
 					) : (
 						<>
-							{/* Top bar with back button */}
-							<div className="px-5 pt-5 pb-0">
+							{/* Top bar with back button + settings */}
+							<div className="px-5 pt-5 pb-0 flex items-center justify-between">
 								<button
 									type="button"
 									onClick={() => navigate("/")}
@@ -1258,6 +1262,18 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 									<span className="text-xs font-semibold tracking-wide">
 										Events
 									</span>
+								</button>
+								<button
+									type="button"
+									onClick={() => setShowSettings(true)}
+									aria-label="Settings"
+									className="w-8 h-8 rounded-full flex items-center justify-center text-white/70 hover:text-white transition-all active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
+									style={{
+										background: "rgba(255,255,255,0.05)",
+										border: "1px solid rgba(255,255,255,0.08)",
+									}}
+								>
+									<Settings className="w-4 h-4" aria-hidden="true" />
 								</button>
 							</div>
 
@@ -2078,29 +2094,11 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 					<span className="text-[9px] font-medium">Schedule</span>
 				</button>
 				<button
-					onClick={() => setShowSettings(true)}
-					className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-full transition-all ${showSettings ? "text-cyan-400" : "text-white/35 hover:text-white/60"}`}
+					onClick={() => setShowPeople(true)}
+					className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-full transition-all ${showPeople ? "text-cyan-400" : "text-white/35 hover:text-white/60"}`}
 				>
-					<svg
-						className="w-5 h-5"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-					>
-						<path
-							strokeLinecap="round"
-							strokeLinejoin="round"
-							strokeWidth={2}
-							d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-						/>
-						<path
-							strokeLinecap="round"
-							strokeLinejoin="round"
-							strokeWidth={2}
-							d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-						/>
-					</svg>
-					<span className="text-[9px] font-medium">Settings</span>
+					<Users className="w-5 h-5" aria-hidden="true" />
+					<span className="text-[9px] font-medium">People</span>
 				</button>
 			</div>
 
@@ -2572,14 +2570,30 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				schedule={event?.schedule ?? []}
 				eventStart={event?.start_time ?? ""}
 				eventEnd={event?.end_time ?? ""}
+			/>
+			<PeoplePanel
+				isOpen={showPeople}
+				onClose={() => setShowPeople(false)}
 				eventId={eventId}
 				currentUserId={profileUserId}
-				onStartDM={user?.id ? (peerId, peerName) => {
-					if (peerId === user.id) return;
-					setShowSchedule(false);
-					navigate(`/events/${eventId}/dm/${peerId}`, { state: { peerName } });
-				} : undefined}
-				/>
+				onStartDM={
+					user?.id
+						? (peerId, peerName) => {
+								if (peerId === user.id) return;
+								setShowPeople(false);
+								navigate(`/events/${eventId}/dm/${peerId}`, { state: { peerName } });
+							}
+						: undefined
+				}
+				onNavigateProfile={(authUserId) => {
+					setShowPeople(false);
+					if (!authUserId || authUserId === user?.id) {
+						navigate("/profile");
+					} else {
+						navigate(`/profile/${authUserId}`);
+					}
+				}}
+			/>
 			<SettingsPanel
 				isOpen={showSettings}
 				onClose={() => setShowSettings(false)}
