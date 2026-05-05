@@ -25,6 +25,13 @@ if (!BACKUP_URL || !BACKUP_KEY || !BACKUP_SR) {
   process.exit(1);
 }
 
+// Primary client — used to get a primary-issued JWT to test cross-project token acceptance
+const PRIMARY_URL = process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL;
+const PRIMARY_KEY = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY;
+const primary = PRIMARY_URL && PRIMARY_KEY
+  ? createClient(PRIMARY_URL, PRIMARY_KEY, { auth: { persistSession: false } })
+  : null;
+
 const anon    = createClient(BACKUP_URL, BACKUP_KEY, { auth: { persistSession: false } });
 const service = createClient(BACKUP_URL, BACKUP_SR,  { auth: { autoRefreshToken: false, persistSession: false } });
 
@@ -68,18 +75,44 @@ async function testHealth() {
   }
 }
 
+// Sign into PRIMARY, then verify the same JWT is accepted by backup.
+// This works because both projects share the same JWT secret.
 async function testAuth() {
   if (!TEST_EMAIL || !TEST_PASS) {
-    return { name: "auth sign-in", ok: null, detail: "SKIPPED — set BACKUP_TEST_EMAIL and BACKUP_TEST_PASSWORD" };
+    return [{ name: "auth: sign in to primary", ok: null, detail: "SKIPPED — set BACKUP_TEST_EMAIL and BACKUP_TEST_PASSWORD" }];
   }
-  try {
-    const { data, error } = await anon.auth.signInWithPassword({ email: TEST_EMAIL, password: TEST_PASS });
-    if (error) return fail("auth sign-in", error.message);
-    if (!data.session?.access_token) return fail("auth sign-in", "no access token");
-    return pass("auth sign-in", `user ${data.user.id}`);
-  } catch (e) {
-    return fail("auth sign-in", e.message);
+  const results = [];
+  let primaryToken = null;
+
+  // Step 1: sign in on primary
+  if (!primary) {
+    results.push(fail("auth: sign in to primary", "VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY not set"));
+  } else {
+    try {
+      const { data, error } = await primary.auth.signInWithPassword({ email: TEST_EMAIL, password: TEST_PASS });
+      if (error) results.push(fail("auth: sign in to primary", error.message));
+      else if (!data.session?.access_token) results.push(fail("auth: sign in to primary", "no access token"));
+      else {
+        primaryToken = data.session.access_token;
+        results.push(pass("auth: sign in to primary", `user ${data.user.id}`));
+      }
+    } catch (e) { results.push(fail("auth: sign in to primary", e.message)); }
   }
+
+  // Step 2: use primary JWT against backup's getUser — same secret means it should be accepted
+  if (primaryToken) {
+    try {
+      const backupWithToken = createClient(BACKUP_URL, BACKUP_KEY, {
+        auth: { persistSession: false },
+        global: { headers: { Authorization: `Bearer ${primaryToken}` } },
+      });
+      const { data, error } = await backupWithToken.auth.getUser(primaryToken);
+      if (error) results.push(fail("auth: primary JWT accepted by backup", error.message));
+      else results.push(pass("auth: primary JWT accepted by backup", `user ${data.user.id}`));
+    } catch (e) { results.push(fail("auth: primary JWT accepted by backup", e.message)); }
+  }
+
+  return results;
 }
 
 async function testTables() {
@@ -164,12 +197,15 @@ async function main() {
   // Health
   allResults.push(await testHealth());
 
-  // Auth
-  const authResult = await testAuth();
-  allResults.push(authResult);
-  const authToken = authResult.ok
-    ? (await anon.auth.getSession()).data.session?.access_token
-    : null;
+  // Auth — signs into primary, verifies primary JWT accepted by backup
+  const authResults = await testAuth();
+  allResults.push(...authResults);
+  // Extract the primary token from the sign-in result for edge function tests
+  let authToken = null;
+  if (TEST_EMAIL && TEST_PASS && primary) {
+    const { data } = await primary.auth.getSession();
+    authToken = data.session?.access_token ?? null;
+  }
 
   // Tables
   allResults.push(...await testTables());
