@@ -23,6 +23,7 @@
 		"admin:backup-schema": "node internal/admin/backupSchema.js"
 	},
 	"dependencies": {
+		"@fontsource/tomorrow": "^5.2.8",
 		"@supabase/supabase-js": "^2.32.0",
 		"canvas": "^3.2.3",
 		"gif-encoder-2": "^1.0.5",

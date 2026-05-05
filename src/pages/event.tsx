@@ -1,20 +1,32 @@
 import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
-import { Info, CircleHelp } from "lucide-react";
+import { Info, Clock, ArrowUp, ChevronDown } from "lucide-react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { TradeModal } from "../components/TradeModal";
 import { LeaderboardPanel } from "../components/LeaderboardPanel";
 import { QRShareModal } from "../components/QRShareModal";
 import { ScannerModal } from "../components/ScannerModal";
-import { FounderPriceChart } from "../components/FounderPriceChart";
 import { FounderMarketCapChart } from "../components/FounderMarketCapChart";
-import { SparklineWithButton } from "../components/SparklineChart";
-import { PortfolioChart } from "../components/PortfolioChart";
 import { ChatPanel } from "../components/ChatPanel";
 import { ConversationsPanel } from "../components/ConversationsPanel";
 import { DMPanel } from "../components/DMPanel";
 import { SchedulePanel } from "../components/SchedulePanel";
 import { SettingsPanel } from "../components/SettingsPanel";
+import {
+	Avatar,
+	Button as PtButton,
+	GlassCard,
+	IconButton,
+	IridescentArc,
+	Money,
+	Tabs as PtTabs,
+	Timer as PtTimer,
+	TrendValue,
+	EventChart,
+	Sparkline,
+	ExpandedSparkline,
+	gradientForId,
+} from "../components/design-system";
 import { useAuth } from "../contexts/AuthContext";
 import { usePortfolioHistory } from "../hooks/usePortfolioHistory";
 import { Event, Judge, Sponsor } from "../types/Event";
@@ -699,6 +711,7 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 		allInvestors,
 		portfolioValue,
 		roiPercent,
+		priceHistoryMap,
 		isLoading,
 		error,
 		closingAt,
@@ -1020,7 +1033,6 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 				? "Good Afternoon,"
 				: "Good Evening,";
 
-	const isDemo = pitches.length === 0;
 
 	const demoPitches: PitchWithPriceAndUser[] = [
 		{
@@ -1242,251 +1254,283 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 						</div>
 					) : (
 						<>
-							{/* Hero greeting */}
-							<div className="px-5 pt-6 pb-2 flex items-center justify-between">
-								<div className="flex items-center gap-3">
-									<button
-										onClick={() =>
-											navigate(
-												user
-													? "/profile"
-													: `/login?redirect=/events/${eventId}`,
-											)
+							{/* Hero greeting (design system Header) */}
+							<div className="px-5 flex items-center justify-between pt-6 pb-4">
+								<button
+									type="button"
+									onClick={() =>
+										navigate(
+											user
+												? "/profile"
+												: `/login?redirect=/events/${eventId}`,
+										)
+									}
+									className="flex items-center gap-3 transition-all active:scale-95"
+								>
+									<Avatar
+										size="md"
+										name={displayName ?? "Guest"}
+										photo={
+											(user && (investor as any)?.profile_picture_url) ||
+											undefined
 										}
-										className="w-12 h-12 rounded-full overflow-hidden border-2 border-white/20 flex-shrink-0 shadow-lg shadow-purple-500/30 transition-all active:scale-90 hover:border-white/40"
-									>
-										{user ? (
-											<div className="w-full h-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white font-bold text-lg">
-												{(displayName ?? "G").charAt(0).toUpperCase()}
-											</div>
-										) : (
-											<div className="w-full h-full bg-white/10 flex items-center justify-center">
-												<svg
-													className="w-6 h-6 text-white/40"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														strokeLinecap="round"
-														strokeLinejoin="round"
-														strokeWidth={2}
-														d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-													/>
-												</svg>
-											</div>
-										)}
-									</button>
-									<div>
-										<p className="text-white/50 text-xs font-medium">
+									/>
+									<div className="leading-tight text-left">
+										<div className="text-[11px] text-pt-text-2">
 											{greeting}
-										</p>
-										<p className="text-white text-xl font-bold leading-tight">
+										</div>
+										<div className="font-display font-semibold text-white text-[15px] tracking-tight">
 											{displayName ?? "Guest"}
-										</p>
+										</div>
 									</div>
-								</div>
-								<div className="flex items-center gap-1">
-									<button
+								</button>
+								<div className="flex items-center gap-2">
+									<IconButton
+										size="md"
+										aria-label="Event info"
 										onClick={() => setShowEventInfoModal(true)}
-										className="flex items-center justify-center transition-all active:scale-90"
-									>
-										<Info className="w-6 h-6 text-white/50" />
-									</button>
+										icon={<Info size={16} strokeWidth={1.5} />}
+									/>
 									<button
+										type="button"
+										aria-label="Help"
 										onClick={() => setShowHelpModal(true)}
-										className="flex items-center justify-center transition-all active:scale-90"
+										className="shrink-0 w-10 h-10 hover:brightness-125 transition-all"
 									>
-										<CircleHelp className="w-6 h-6 text-white/50" />
+										<img
+											src="/chat/chat-question.png"
+											alt=""
+											aria-hidden
+											className="w-full h-full object-contain"
+										/>
 									</button>
 								</div>
 							</div>
 
-							{/* Balance block */}
-							{user && investor && (
-								<div className="px-5 mt-5">
-									<p className="text-white/40 text-[10px] font-semibold uppercase tracking-widest mb-1">
-										Your Balance
-									</p>
-									<div className="flex items-start justify-between gap-3">
-										<div>
-											<p className="text-white text-5xl font-black tabular-nums leading-none">
-												{formatCurrency(investor.current_balance)}
-											</p>
-											<div className="flex items-center gap-2 mt-2">
-												{!simpleMode && (
-													<>
-														<span
-															className={`text-sm font-semibold flex items-center gap-1 ${roiPercent >= 0 ? "text-cyan-400" : "text-red-400"}`}
-														>
-															{roiPercent >= 0 ? (
-																<svg
-																	className="w-3.5 h-3.5"
-																	fill="none"
-																	stroke="currentColor"
-																	viewBox="0 0 24 24"
-																>
-																	<path
-																		strokeLinecap="round"
-																		strokeLinejoin="round"
-																		strokeWidth={2.5}
-																		d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-																	/>
-																</svg>
-															) : (
-																<svg
-																	className="w-3.5 h-3.5"
-																	fill="none"
-																	stroke="currentColor"
-																	viewBox="0 0 24 24"
-																>
-																	<path
-																		strokeLinecap="round"
-																		strokeLinejoin="round"
-																		strokeWidth={2.5}
-																		d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"
-																	/>
-																</svg>
-															)}
-															<span
-																className={
-																	roiPercent >= 0
-																		? "text-cyan-400"
-																		: "text-red-400"
-																}
-															>
-																{roiPercent >= 0 ? "+" : ""}
-																{roiPercent.toFixed(1)}%
-															</span>
+							{/* Top region: Balance + Portfolio Performance + Your Holdings
+								share a single nebula gradient that tapers along the same
+								curve as the iridescent arc — replicates the design's
+								TradeTopCard. */}
+							<div className="relative isolate mt-2 mb-2">
+								<div
+									aria-hidden
+									className="absolute z-0 pointer-events-none"
+									style={{
+										left: "-28px",
+										right: "-28px",
+										top: "-56px",
+										bottom: "0px",
+										background:
+											// Each radial sits at one of the arc-gradient color stops along
+											// the bottom edge (12% / 35% / 55% / 78%), fading upward.
+											"radial-gradient(60% 115% at 12% 100%, rgba(162,89,255,0.34) 0%, rgba(162,89,255,0.12) 38%, transparent 75%), " +
+											"radial-gradient(60% 115% at 35% 100%, rgba(79,124,255,0.36) 0%, rgba(79,124,255,0.14) 38%, transparent 75%), " +
+											"radial-gradient(60% 115% at 55% 100%, rgba(162,89,255,0.34) 0%, rgba(162,89,255,0.12) 38%, transparent 75%), " +
+											"radial-gradient(60% 115% at 78% 100%, rgba(255,138,0,0.30) 0%, rgba(255,138,0,0.10) 38%, transparent 75%)",
+										// SVG mask whose bottom edge mirrors the iridescent-arc curve,
+										// so the nebula tapers along the same arc shape.
+										WebkitMaskImage:
+											"url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 600' preserveAspectRatio='none'><path d='M 0 0 H 800 V 558 Q 400 606 0 558 Z' fill='black'/></svg>\")",
+										maskImage:
+											"url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 600' preserveAspectRatio='none'><path d='M 0 0 H 800 V 558 Q 400 606 0 558 Z' fill='black'/></svg>\")",
+										WebkitMaskSize: "100% 100%",
+										maskSize: "100% 100%",
+										WebkitMaskRepeat: "no-repeat",
+										maskRepeat: "no-repeat",
+									}}
+								/>
+								<div className="relative flex flex-col gap-6">
+									{/* Balance block (design system BalanceRow) */}
+									{user && investor && (
+										<div className="px-5 mt-3">
+											<div className="flex items-start justify-between gap-3">
+												<div>
+													<div className="text-[11px] uppercase tracking-[0.14em] text-pt-text-2">
+														Your Balance
+													</div>
+													<div className="font-display font-semibold text-white text-[44px] leading-[1.05] num tracking-tight mt-0.5">
+														{formatCurrency(investor.current_balance)}
+													</div>
+													<div className="flex items-center gap-1.5 mt-1.5 text-[12px] num">
+														{!simpleMode && (
+															<>
+																<TrendValue value={roiPercent} decimals={1} />
+																<span className="text-pt-text-2">·</span>
+															</>
+														)}
+														<span className="text-pt-text-2 num">
+															{new Date().toLocaleTimeString(undefined, {
+																hour: "2-digit",
+																minute: "2-digit",
+															})}
 														</span>
-														<span className="text-white/30 text-xs">·</span>
-													</>
+													</div>
+												</div>
+												{showClosingCountdown && closingSecondsLeft > 0 && (
+													<button
+														type="button"
+														onClick={() => setShowClosingCountdown(false)}
+														className="mt-1 flex-shrink-0"
+														aria-label="Dismiss closing countdown"
+													>
+														<GlassCard
+															tone="featured"
+															size="sm"
+															className="!rounded-full inline-flex items-center gap-1.5 !h-9 !px-3.5 !py-0 text-[12px]"
+														>
+															<Clock size={14} color="#FFC896" strokeWidth={1.5} />
+															<span className="featured-timer-text num">
+																Trading closes in{" "}
+																<PtTimer seconds={closingSecondsLeft} />
+															</span>
+														</GlassCard>
+													</button>
 												)}
-												<span className="text-white/30 text-xs">
-													{new Date().toLocaleTimeString(undefined, {
-														hour: "2-digit",
-														minute: "2-digit",
-													})}
-												</span>
 											</div>
-										</div>
-										{showClosingCountdown && closingSecondsLeft > 0 && (
-											<button
-												onClick={() => setShowClosingCountdown(false)}
-												className="mt-1 px-3 py-2 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-semibold flex-shrink-0 tabular-nums flex items-center gap-1.5 hover:bg-amber-500/25 transition-colors"
-											>
-												<svg
-													className="w-3 h-3"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														strokeLinecap="round"
-														strokeLinejoin="round"
-														strokeWidth={2}
-														d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-													/>
-												</svg>
-												Trading closes in {Math.floor(closingSecondsLeft / 60)}:
-												{String(closingSecondsLeft % 60).padStart(2, "0")}
-											</button>
-										)}
-									</div>
-								</div>
-							)}
-
-							{/* Portfolio Performance chart */}
-							{!simpleMode && (
-								<div className="mt-5">
-									<p className="text-white/40 text-[10px] font-semibold uppercase tracking-widest mb-2 px-5">
-										Event Performance
-									</p>
-									<div
-										className="relative pt-2 pb-1"
-										style={{
-											borderTop: "1px solid rgba(255,255,255,0.05)",
-											overflow: "visible",
-										}}
-									>
-										<PortfolioChart
-											points={portfolioPoints}
-											height={190}
-											initialBalance={investor?.initial_balance ?? 1000000}
-										/>
-									</div>
-								</div>
-							)}
-
-							<div
-								style={{
-									background: "rgba(255,255,255,0.03)",
-									borderTop: "1px solid rgba(255,255,255,0.06)",
-									paddingBottom: "120px",
-									minHeight: "100vh",
-								}}
-							>
-								{/* Your Holdings */}
-								{user &&
-									investor &&
-									top5Holdings.filter((h) => h.shares > 0).length > 0 && (
-										<div className="px-5 mt-6">
-											<div className="flex items-center justify-between mb-3">
-												<p className="text-white/40 text-[10px] font-semibold uppercase tracking-widest">
-													Your Holdings
-												</p>
-												<p className="text-white font-bold text-base tabular-nums">
-													{formatCurrency(portfolioValue)}
-												</p>
-											</div>
-											{(() => {
-												const activeHoldings = top5Holdings.filter((h) => h.shares > 0);
-												const totalValue = activeHoldings.reduce((s, h) => s + h.current_value, 0);
-												const segColors = ["bg-[#2a4fd6]", "bg-[#1a9e8f]", "bg-[#7c3dce]", "bg-[#b8326a]", "bg-[#c87a1a]"];
-												const avatarBorders = ["border-[#2a4fd6]", "border-[#1a9e8f]", "border-[#7c3dce]", "border-[#b8326a]", "border-[#c87a1a]"];
-												return (
-													<>
-														<div className="flex gap-1 h-12 overflow-hidden rounded-xl">
-															{activeHoldings.map((h, i) => {
-																const pct = totalValue > 0 ? (h.current_value / totalValue) * 100 : 0;
-																return (
-																	<div
-																		key={h.pitch_id}
-																		className={`${segColors[i % segColors.length]} flex items-center justify-center text-white font-bold text-xs`}
-																		style={{ width: `${pct}%`, minWidth: pct < 8 ? "1.5rem" : undefined }}
-																	>
-																		{pct >= 10 ? `${Math.round(pct)}%` : ""}
-																	</div>
-																);
-															})}
-														</div>
-														<div className="flex mt-3 gap-3">
-															{activeHoldings.map((h, i) => {
-																const pitch = pitches.find((f) => f.id === h.pitch_id);
-																return (
-																	<div key={h.pitch_id} className="flex flex-col items-center gap-1 flex-1 min-w-0">
-																		<button
-																			onClick={(e) => pitch && handleFounderProfileClick(pitch, e)}
-																			className={`w-11 h-11 rounded-full overflow-hidden border-2 ${avatarBorders[i % avatarBorders.length]} flex-shrink-0`}
-																		>
-																			{pitch?.user?.profile_picture_url ? (
-																				<img src={pitch.user.profile_picture_url} alt={pitch.name} className="w-full h-full object-cover" />
-																			) : (
-																				<div className="w-full h-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
-																					{pitch?.name.charAt(0) ?? "?"}
-																				</div>
-																			)}
-																		</button>
-																	</div>
-																);
-															})}
-														</div>
-													</>
-												);
-											})()}
 										</div>
 									)}
 
+									{/* Portfolio Performance chart (design system EventChart) */}
+									{!simpleMode && (
+										<div className="px-5">
+											<div className="event-performance-glow">
+												<div className="mb-1.5 px-1">
+													<span className="text-[11px] uppercase tracking-[0.14em] text-pt-text-2">
+														Portfolio Performance
+													</span>
+												</div>
+												<EventChart
+													series={portfolioPoints.map((p) => p.value)}
+													anchor={investor?.initial_balance ?? 1000000}
+													height={190}
+												/>
+											</div>
+										</div>
+									)}
+
+									{/* Your Holdings (design system YourHoldings) */}
+									{user &&
+										investor &&
+										top5Holdings.filter((h) => h.shares > 0).length > 0 && (
+											<div className="px-5">
+												<div className="flex items-end justify-between mb-3">
+													<span className="text-[11px] uppercase tracking-[0.14em] text-pt-text-2">
+														Your Holdings
+													</span>
+													<span className="font-display font-normal text-white text-[20px] num tracking-tight">
+														{formatCurrency(portfolioValue)}
+													</span>
+												</div>
+												{(() => {
+													const MIN_DISPLAY_PCT = 11;
+													const activeHoldings = top5Holdings.filter((h) => h.shares > 0);
+													const totalValue = activeHoldings.reduce(
+														(s, h) => s + h.current_value,
+														0,
+													);
+													const reserved = MIN_DISPLAY_PCT * activeHoldings.length;
+													const remaining = Math.max(0, 100 - reserved);
+													const alpha = (hex: string, a: number) =>
+														hex +
+														Math.round(a * 255)
+															.toString(16)
+															.padStart(2, "0");
+													const enriched = activeHoldings.map((h) => {
+														const pitch = pitches.find((f) => f.id === h.pitch_id);
+														const pct =
+															totalValue > 0
+																? (h.current_value / totalValue) * 100
+																: 0;
+														const displayPct =
+															MIN_DISPLAY_PCT + (pct / 100) * remaining;
+														const [c1, c2] = gradientForId(h.pitch_id);
+														return { h, pitch, pct, displayPct, c1, c2 };
+													});
+													return (
+														<>
+															<div className="flex gap-[3px] h-[52px]">
+																{enriched.map(({ h, pitch, pct, displayPct, c1, c2 }) => (
+																	<button
+																		type="button"
+																		key={h.pitch_id}
+																		onClick={() => {
+																			if (pitch) handleBuyClick(pitch);
+																		}}
+																		className="holding-bar group relative rounded-[12px] flex items-center justify-end overflow-hidden min-w-0 cursor-pointer"
+																		style={
+																			{
+																				width: `${displayPct}%`,
+																				background: `linear-gradient(135deg, ${alpha(c1, 0.22)}, ${alpha(c2, 0.32)})`,
+																				boxShadow: `inset 0 1px 0 ${alpha(c1, 0.45)}, 0 0 14px ${alpha(c1, 0.18)}`,
+																				["--seg-c1" as any]: c1,
+																				["--seg-c2" as any]: c2,
+																			} as React.CSSProperties
+																		}
+																		aria-label={`Trade ${pitch?.name ?? "holding"} (${Math.round(pct)}%)`}
+																	>
+																		<span className="font-display font-normal text-white text-[14px] num leading-none whitespace-nowrap pr-2.5 drop-shadow-[0_1px_1px_rgba(0,0,0,0.4)]">
+																			{Math.round(pct)}%
+																		</span>
+																	</button>
+																))}
+															</div>
+															<div className="flex gap-[3px] mt-1.5">
+																{enriched.map(({ h, pitch, displayPct, c1, c2 }) => (
+																	<div
+																		key={h.pitch_id}
+																		className="flex flex-col items-start min-w-0"
+																		style={{ width: `${displayPct}%` }}
+																	>
+																		<div
+																			className="w-px border-l border-dashed ml-1 h-3"
+																			style={{ borderColor: "rgba(255,255,255,0.28)" }}
+																		/>
+																		<button
+																			type="button"
+																			onClick={(e) =>
+																				pitch && handleFounderProfileClick(pitch, e)
+																			}
+																			className="holding-avatar -ml-1 mt-0.5 cursor-pointer transition-transform duration-200 hover:scale-110 focus:scale-110 focus:outline-none"
+																			style={
+																				{
+																					["--seg-c1" as any]: c1,
+																					["--seg-c2" as any]: c2,
+																				} as React.CSSProperties
+																			}
+																			aria-label={`Trade ${pitch?.name ?? ""}`}
+																		>
+																			<Avatar
+																				size="sm"
+																				name={pitch?.name ?? "?"}
+																				photo={pitch?.user?.profile_picture_url ?? undefined}
+																				gradient={[c1, c2]}
+																			/>
+																		</button>
+																	</div>
+																))}
+															</div>
+														</>
+													);
+												})()}
+											</div>
+										)}
+
+									{/* Iridescent arc — sits at the bottom of the nebula
+										container so its curve aligns pixel-for-pixel with
+										the gradient mask above it. */}
+									<IridescentArc
+										className="-mx-7"
+										style={{ marginTop: -4, marginBottom: -8 }}
+									/>
+								</div>
+							</div>
+
+							<div
+								style={{
+									paddingBottom: "120px",
+									minHeight: "60vh",
+								}}
+							>
 								{/* Sign in CTA */}
 								{!user && (
 									<div
@@ -1569,66 +1613,43 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 								{/* Trade tab */}
 								{activeTab === "trade" && (
 									<div className="mt-6 px-4">
-										<div className="flex items-end justify-between mb-5">
-											<div>
-												<p
-													className="font-black leading-none tracking-tight"
-													style={{
-														fontSize: "clamp(2.5rem, 10vw, 3.5rem)",
-														background:
-															"linear-gradient(180deg, #ffffff 0%, #a78bfa 40%, #7c3aed 70%, #4f46e5 100%)",
-														WebkitBackgroundClip: "text",
-														WebkitTextFillColor: "transparent",
-														backgroundClip: "text",
-														filter:
-															"drop-shadow(0 0 20px rgba(139,92,246,0.6))",
-														textShadow: "none",
-													}}
-												>
-													TRADING
-												</p>
-												<p
-													className="font-black leading-none tracking-tight"
-													style={{
-														fontSize: "clamp(2.5rem, 10vw, 3.5rem)",
-														background:
-															"linear-gradient(180deg, #ffffff 0%, #a78bfa 40%, #7c3aed 70%, #4f46e5 100%)",
-														WebkitBackgroundClip: "text",
-														WebkitTextFillColor: "transparent",
-														backgroundClip: "text",
-														filter:
-															"drop-shadow(0 0 20px rgba(139,92,246,0.6))",
-														textShadow: "none",
-													}}
-												>
-													MARKET
-												</p>
-											</div>
+										<div className="relative flex items-start justify-between mb-4 px-0.5">
+											<img
+												src="/trading-market-logo.png"
+												alt="Trading Market"
+												width={327}
+												height={163}
+												draggable={false}
+												className="block w-[170px] h-auto select-none"
+												style={{
+													filter:
+														"drop-shadow(0 0 14px rgba(184,212,255,0.30)) drop-shadow(0 0 28px rgba(162,89,255,0.18))",
+												}}
+											/>
 											{!simpleMode && (
-												<div className="flex flex-col items-end gap-1.5 pb-1">
-													<span className="text-white/30 text-[10px] uppercase tracking-widest">
+												<div className="flex flex-col items-start gap-1 pt-1">
+													<span className="text-[11px] text-pt-text-2 leading-none pl-2.5">
 														sort by
 													</span>
-													<div className="flex gap-2">
-														<button
-															onClick={() => {
-																setSortBy("price");
-																setShowSortOptions(false);
-															}}
-															className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all border ${sortBy === "price" ? "bg-[#7c3aed] border-[#7c3aed] text-white shadow-[0_0_12px_rgba(124,58,237,0.5)]" : "bg-transparent border-white/20 text-white/60 hover:border-white/40"}`}
-														>
-															PRICE {sortBy === "price" ? "↑" : ""}
-														</button>
-														<button
-															onClick={() => {
-																setSortBy("alphabetical");
-																setShowSortOptions(false);
-															}}
-															className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all border ${sortBy === "alphabetical" ? "bg-[#7c3aed] border-[#7c3aed] text-white shadow-[0_0_12px_rgba(124,58,237,0.5)]" : "bg-transparent border-white/20 text-white/60 hover:border-white/40"}`}
-														>
-															A-Z
-														</button>
-													</div>
+													<PtTabs<"price" | "alphabetical">
+														value={sortBy}
+														onChange={(v) => {
+															setSortBy(v);
+															setShowSortOptions(false);
+														}}
+														options={[
+															{
+																value: "price",
+																label: (
+																	<span className="inline-flex items-center gap-0.5">
+																		Price
+																		<ArrowUp size={10} strokeWidth={2} />
+																	</span>
+																),
+															},
+															{ value: "alphabetical", label: "A-Z" },
+														]}
+													/>
 												</div>
 											)}
 										</div>
@@ -1638,197 +1659,271 @@ const EventPageInner: React.FC<{ eventId: string }> = ({ eventId }) => {
 												No pitches available for this event.
 											</div>
 										) : (
-											<div className="space-y-3">
+											<div className="relative">
 												{sortedPitches.map((pitch) => {
 													const isExpanded = expandedPitchId === pitch.id;
 													const ownedShares = getOwnedShares(pitch.id);
 													const ownedValue = ownedShares * pitch.current_price;
+													const points = priceHistoryMap.get(pitch.id) ?? [];
+													const realSeries = points.map((p) => p.price);
+													const hasSeries = realSeries.length >= 2;
+													// Fallback to a flat synthetic series so every founder
+													// shows a sparkline preview even before live history loads.
+													const sparkSeries = hasSeries
+														? realSeries
+														: [pitch.current_price, pitch.current_price];
+													// Color reflects the most recent tick: green if the last
+													// price moved up vs the previous price, red if it moved
+													// down. Mirrors how trading apps show "last move" coloring.
+													const isUp = hasSeries
+														? realSeries[realSeries.length - 1] >=
+															realSeries[realSeries.length - 2]
+														: true;
+													// % change since IPO ($10 baseline) — matches the leaderboard,
+													// so the same founder shows the same number in both views.
+													const change = ((pitch.current_price - 10) / 10) * 100;
+													const sparkColor = isUp ? "#40F3C5" : "#FF4757";
+													const [c1, c2] = gradientForId(pitch.id);
 
+													const expandedActive = isExpanded && !simpleMode;
 													return (
-														<div
+														<GlassCard
 															key={pitch.id}
-															className="rounded-2xl overflow-hidden"
-															style={{
-																background:
-																	"linear-gradient(135deg, rgba(20,15,50,0.9) 0%, rgba(15,10,40,0.95) 100%)",
-																border: isExpanded
-																	? "1px solid rgba(124,58,237,0.4)"
-																	: "1px solid rgba(255,255,255,0.07)",
-																boxShadow: isExpanded
-																	? "0 0 30px rgba(124,58,237,0.15), inset 0 1px 0 rgba(255,255,255,0.05)"
-																	: "0 2px 8px rgba(0,0,0,0.3)",
-															}}
+															tone={expandedActive ? "purple" : "frame"}
+															active={expandedActive}
+															size="sm"
+															className="mb-3 hover:brightness-110 pt-card-pop-in"
 														>
-															<div
-																className={`flex items-center gap-3 px-4 py-3.5 ${!simpleMode ? "cursor-pointer" : ""}`}
-																onClick={() => {
-																	if (!simpleMode)
-																		setExpandedPitchId(
-																			isExpanded ? null : pitch.id,
-																		);
-																}}
-															>
+															{/* Header — always visible. Layout stays stable so
+																the body below is the only thing that animates. */}
+															<div className="flex items-center gap-2">
 																<button
+																	type="button"
 																	onClick={(e) =>
 																		handleFounderProfileClick(pitch, e)
 																	}
-																	className="w-12 h-12 rounded-full overflow-hidden border-2 border-white/15 hover:border-violet-400/60 transition-all flex-shrink-0 shadow-md"
+																	className="shrink-0"
+																	aria-label={`View ${pitch.name} profile`}
 																>
-																	{pitch.user?.profile_picture_url ? (
-																		<img
-																			src={pitch.user.profile_picture_url}
-																			alt={pitch.name}
-																			className="w-full h-full object-cover"
-																		/>
-																	) : (
-																		<div className="w-full h-full bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white font-bold text-lg">
-																			{pitch.name.charAt(0)}
+																	<Avatar
+																		size="sm"
+																		name={pitch.name}
+																		photo={
+																			pitch.user?.profile_picture_url ?? undefined
+																		}
+																		gradient={[c1, c2]}
+																	/>
+																</button>
+																<button
+																	type="button"
+																	onClick={() => {
+																		if (!simpleMode)
+																			setExpandedPitchId(
+																				isExpanded ? null : pitch.id,
+																			);
+																	}}
+																	className="flex items-center gap-2 flex-1 min-w-0 text-left"
+																	aria-label={
+																		isExpanded
+																			? `Collapse ${pitch.name}`
+																			: `Expand ${pitch.name}`
+																	}
+																>
+																	<div className="leading-tight min-w-0 flex-1">
+																		<div className="font-display text-white text-[12.5px] font-semibold truncate">
+																			{pitch.name}
+																		</div>
+																		{pitch.pitch_summary && (
+																			<div className="text-[10.5px] text-pt-text-2 truncate">
+																				{pitch.pitch_summary}
+																			</div>
+																		)}
+																	</div>
+																	{!simpleMode && (
+																		<div className="flex items-center gap-2 shrink-0">
+																			<Sparkline
+																				width={42}
+																				height={22}
+																				series={sparkSeries}
+																				color={sparkColor}
+																				live={hasSeries}
+																			/>
+																			{hasSeries ? (
+																				<TrendValue
+																					value={change}
+																					className="text-[10.5px]"
+																				/>
+																			) : ownedShares > 0 ? (
+																				<div className="text-[10.5px] text-pt-text-2 num">
+																					{ownedShares.toLocaleString()} sh
+																				</div>
+																			) : null}
 																		</div>
 																	)}
 																</button>
-																<div className="flex-1 min-w-0">
-																	<p className="text-white font-bold text-base truncate">
-																		{pitch.name}
-																	</p>
-																	{pitch.pitch_summary && (
-																		<p className="text-white/40 text-xs truncate mt-0.5">
-																			{pitch.pitch_summary}
-																		</p>
-																	)}
-																</div>
-																<div className="flex items-center gap-2.5 flex-shrink-0">
-																	{!simpleMode && !isExpanded && (
-																		<div className="flex flex-col items-end gap-0.5">
-																			{ownedShares > 0 && (
-																				<p className="text-white/50 text-[10px] tabular-nums">
-																					{ownedShares.toLocaleString()} shares
-																				</p>
-																			)}
-																			<SparklineWithButton
-																				founderId={isDemo ? "" : pitch.id}
-																				price={pitch.current_price}
-																				canTrade={canTrade}
-																				onTrade={() => handleBuyClick(pitch)}
-																				formatCurrency={formatCurrency}
-																			/>
-																		</div>
-																	)}
-																	{simpleMode && (
-																		<div className="flex gap-1.5">
-																			<button
-																				onClick={(e) => {
-																					e.stopPropagation();
-																					handleBuyClick(pitch);
-																				}}
-																				disabled={!canTrade}
-																				className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${!canTrade ? "bg-white/5 text-white/20 cursor-not-allowed" : "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30"}`}
-																			>
-																				Buy
-																			</button>
-																			<button
-																				onClick={(e) => {
-																					e.stopPropagation();
-																					handleSellClick(pitch);
-																				}}
-																				disabled={
-																					!canTrade || ownedShares === 0
-																				}
-																				className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${!canTrade || ownedShares === 0 ? "bg-white/5 text-white/20 cursor-not-allowed" : "bg-orange-500/20 text-orange-300 border border-orange-500/30 hover:bg-orange-500/30"}`}
-																			>
-																				Sell
-																			</button>
-																		</div>
-																	)}
-																</div>
-															</div>
-
-															{!simpleMode && isExpanded && (
-																<div className="px-4 pb-5 border-t border-white/5">
-																	{!isDemo && (
-																		<div className="mt-3 -mx-1">
-																			<FounderPriceChart
-																				founderId={pitch.id}
-																				height={160}
-																				maxPoints={60}
-																				showGrid={false}
-																			/>
-																		</div>
-																	)}
-																	<div className="grid grid-cols-3 gap-2 mt-4 py-3 border-t border-b border-white/5">
-																		<div className="text-center">
-																			<p className="text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-1">
-																				Market Cap.
-																			</p>
-																			<p className="text-white font-bold text-sm tabular-nums">
-																				{formatCurrency(pitch.market_cap)}
-																			</p>
-																		</div>
-																		<div className="text-center border-x border-white/5">
-																			<p className="text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-1">
-																				Your Shares
-																			</p>
-																			<p className="text-white font-bold text-sm tabular-nums">
-																				{user
-																					? ownedShares.toLocaleString()
-																					: "—"}
-																			</p>
-																		</div>
-																		<div className="text-center">
-																			<p className="text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-1">
-																				Your Value
-																			</p>
-																			<p className="text-white font-bold text-sm tabular-nums">
-																				{user && ownedShares > 0
-																					? formatCurrency(ownedValue)
-																					: "—"}
-																			</p>
-																		</div>
-																	</div>
-																	<div className="flex gap-3 mt-4">
-																		<button
+																{simpleMode ? (
+																	<div className="flex gap-1.5 shrink-0">
+																		<PtButton
+																			variant="buy"
+																			size="sm"
+																			className="!h-7 !px-2.5 !text-[10px]"
+																			disabled={!canTrade}
 																			onClick={(e) => {
 																				e.stopPropagation();
 																				handleBuyClick(pitch);
 																			}}
-																			disabled={!canTrade}
-																			className={`flex-1 py-4 rounded-2xl font-bold text-base transition-all ${!canTrade ? "bg-white/5 text-white/20 cursor-not-allowed" : "text-white"}`}
-																			style={
-																				canTrade
-																					? {
-																							background:
-																								"linear-gradient(135deg, #06b6d4, #3b82f6)",
-																							boxShadow:
-																								"0 0 20px rgba(6,182,212,0.3)",
-																						}
-																					: {}
-																			}
 																		>
-																			BUY
-																		</button>
-																		<button
+																			Buy
+																		</PtButton>
+																		<PtButton
+																			variant="sell"
+																			size="sm"
+																			className="!h-7 !px-2.5 !text-[10px]"
+																			disabled={!canTrade || ownedShares === 0}
 																			onClick={(e) => {
 																				e.stopPropagation();
 																				handleSellClick(pitch);
 																			}}
-																			disabled={!canTrade || ownedShares === 0}
-																			className={`flex-1 py-4 rounded-2xl font-bold text-base transition-all ${!canTrade || ownedShares === 0 ? "bg-white/5 text-white/20 cursor-not-allowed" : "text-white"}`}
-																			style={
-																				canTrade && ownedShares > 0
-																					? {
-																							background:
-																								"linear-gradient(135deg, #f97316, #ef4444)",
-																							boxShadow:
-																								"0 0 20px rgba(249,115,22,0.3)",
-																						}
-																					: {}
-																			}
 																		>
-																			SELL
+																			Sell
+																		</PtButton>
+																	</div>
+																) : (
+																	<>
+																		<PtButton
+																			variant="primary"
+																			size="sm"
+																			className="!h-7 !px-2.5 !text-[10.5px] shrink-0 num"
+																			disabled={!canTrade}
+																			onClick={(e) => {
+																				e.stopPropagation();
+																				handleBuyClick(pitch);
+																			}}
+																			aria-label={`Trade ${pitch.name}`}
+																		>
+																			<Money value={pitch.current_price} />
+																		</PtButton>
+																		<button
+																			type="button"
+																			onClick={() =>
+																				setExpandedPitchId(
+																					isExpanded ? null : pitch.id,
+																				)
+																			}
+																			aria-label={
+																				isExpanded
+																					? `Hide details for ${pitch.name}`
+																					: `Show details for ${pitch.name}`
+																			}
+																			className="shrink-0 -ml-1 -mr-2 p-1 hover:brightness-125 transition-transform duration-200"
+																			style={{
+																				transform: isExpanded
+																					? "rotate(180deg)"
+																					: "rotate(0deg)",
+																			}}
+																		>
+																			<ChevronDown
+																				size={13}
+																				color="#7C8AA6"
+																				strokeWidth={1.5}
+																			/>
 																		</button>
+																	</>
+																)}
+															</div>
+
+															{/* Animated expanded body — max-height + opacity
+																transition gives a smooth bidirectional open/close. */}
+															{!simpleMode && (
+																<div
+																	className="overflow-hidden"
+																	style={{
+																		maxHeight: isExpanded ? "420px" : "0px",
+																		opacity: isExpanded ? 1 : 0,
+																		marginTop: isExpanded ? 12 : 0,
+																		transition:
+																			"max-height 320ms cubic-bezier(0.4, 0, 0.2, 1), " +
+																			"opacity 240ms ease-out, " +
+																			"margin-top 320ms cubic-bezier(0.4, 0, 0.2, 1)",
+																	}}
+																	aria-hidden={!isExpanded}
+																>
+																	{/* Sparkline strip */}
+																	<div className="mb-3 -mx-1 overflow-hidden">
+																		<ExpandedSparkline
+																			width={358}
+																			height={74}
+																			series={sparkSeries}
+																			color={sparkColor}
+																			live={hasSeries}
+																		/>
+																	</div>
+
+																	{/* Stats row */}
+																	<div
+																		className="rounded-[14px] grid grid-cols-3 mb-3.5 overflow-hidden"
+																		style={{
+																			background: "rgba(255,255,255,0.03)",
+																			boxShadow:
+																				"inset 0 0 0 1px rgba(255,255,255,0.06)",
+																		}}
+																	>
+																		<div className="px-3 py-2.5 text-center border-r border-white/5">
+																			<div className="text-[10px] uppercase tracking-wider text-pt-text-2">
+																				Market Cap.
+																			</div>
+																			<div className="font-display text-[14px] mt-0.5 text-white">
+																				<Money value={pitch.market_cap} />
+																			</div>
+																		</div>
+																		<div className="px-3 py-2.5 text-center border-r border-white/5">
+																			<div className="text-[10px] uppercase tracking-wider text-pt-text-2">
+																				Your Shares
+																			</div>
+																			<div className="font-display num text-white text-[15px] mt-0.5">
+																				{user ? ownedShares.toLocaleString() : "—"}
+																			</div>
+																		</div>
+																		<div className="px-3 py-2.5 text-center">
+																			<div className="text-[10px] uppercase tracking-wider text-pt-text-2">
+																				Your Value
+																			</div>
+																			<div className="font-display num text-white text-[15px] mt-0.5">
+																				{user && ownedShares > 0
+																					? formatCurrency(ownedValue)
+																					: "—"}
+																			</div>
+																		</div>
+																	</div>
+
+																	{/* Buy / Sell */}
+																	<div className="grid grid-cols-2 gap-3">
+																		<PtButton
+																			variant="buy"
+																			size="md"
+																			disabled={!canTrade || !isExpanded}
+																			tabIndex={isExpanded ? 0 : -1}
+																			onClick={() => handleBuyClick(pitch)}
+																		>
+																			Buy
+																		</PtButton>
+																		<PtButton
+																			variant="sell"
+																			size="md"
+																			disabled={
+																				!canTrade ||
+																				ownedShares === 0 ||
+																				!isExpanded
+																			}
+																			tabIndex={isExpanded ? 0 : -1}
+																			onClick={() => handleSellClick(pitch)}
+																		>
+																			Sell
+																		</PtButton>
 																	</div>
 																</div>
 															)}
-														</div>
+														</GlassCard>
 													);
 												})}
 											</div>
